@@ -31,6 +31,7 @@ export const api = {
   assignDriver: (rideId, driverId) => request(`/rides/${rideId}/assign`, { method: "POST", body: { driverId } }),
   broadcastRide: (rideId) => request(`/rides/${rideId}/broadcast`, { method: "POST" }),
   listDrivers: () => request("/drivers"),
+  createDriver: (payload) => request("/drivers", { method: "POST", body: payload }),
   weeklyReport: () => request("/reports/weekly"),
   generateWeeklyReport: (range) => request("/reports/generate", { method: "POST", body: range || {} }),
   downloadReport: async (format, range) => {

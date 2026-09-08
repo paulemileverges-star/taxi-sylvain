@@ -1,10 +1,15 @@
 import React, { useEffect, useRef, useState } from "react";
 import { api, assetUrl } from "../lib/api.js";
 
+const EMPTY_FORM = { name: "", email: "", phone: "", password: "", carModel: "", plate: "" };
+
 export default function Drivers() {
   const [drivers, setDrivers] = useState([]);
   const photoInputs = useRef({});
   const carPhotoInputs = useRef({});
+  const [showAdd, setShowAdd] = useState(false);
+  const [form, setForm] = useState(EMPTY_FORM);
+  const [error, setError] = useState("");
 
   const load = () => api.listDrivers().then(setDrivers);
   useEffect(() => { load(); }, []);
@@ -21,9 +26,24 @@ export default function Drivers() {
     load();
   };
 
+  const createDriver = async () => {
+    setError("");
+    try {
+      await api.createDriver(form);
+      setForm(EMPTY_FORM);
+      setShowAdd(false);
+      load();
+    } catch (e) {
+      setError(e.message);
+    }
+  };
+
   return (
     <div>
-      <h1>Chauffeurs</h1>
+      <div className="row">
+        <h1>Chauffeurs</h1>
+        <button className="btn" onClick={() => setShowAdd(true)}>Nouveau chauffeur</button>
+      </div>
       {drivers.map((d) => (
         <div key={d.id} className="card row">
           <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
@@ -52,6 +72,29 @@ export default function Drivers() {
           </div>
         </div>
       ))}
+      {drivers.length === 0 && <div style={{ color: "#8b99b5", fontSize: 14 }}>Aucun chauffeur pour l'instant.</div>}
+
+      {showAdd && (
+        <div className="modal-backdrop">
+          <div className="modal">
+            <div className="row"><h3>Nouveau chauffeur</h3><button onClick={() => setShowAdd(false)}>✕</button></div>
+            <label>Nom complet</label>
+            <input className="input" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
+            <label style={{ display: "block", marginTop: 8 }}>Courriel</label>
+            <input className="input" type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
+            <label style={{ display: "block", marginTop: 8 }}>Téléphone</label>
+            <input className="input" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} placeholder="+15145551234" />
+            <label style={{ display: "block", marginTop: 8 }}>Mot de passe temporaire</label>
+            <input className="input" type="password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} />
+            <label style={{ display: "block", marginTop: 8 }}>Modèle du véhicule</label>
+            <input className="input" value={form.carModel} onChange={(e) => setForm({ ...form, carModel: e.target.value })} placeholder="ex. Toyota Camry 2021" />
+            <label style={{ display: "block", marginTop: 8 }}>Plaque d'immatriculation</label>
+            <input className="input" value={form.plate} onChange={(e) => setForm({ ...form, plate: e.target.value })} />
+            {error && <div style={{ color: "#e85d4c", fontSize: 13, marginTop: 8 }}>{error}</div>}
+            <button className="btn" style={{ marginTop: 14, width: "100%" }} onClick={createDriver}>Créer le compte chauffeur</button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

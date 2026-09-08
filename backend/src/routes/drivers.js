@@ -1,4 +1,5 @@
 import { Router } from "express";
+import bcrypt from "bcryptjs";
 import multer from "multer";
 import path from "path";
 import { fileURLToPath } from "url";
@@ -29,6 +30,24 @@ router.get("/", requireRole("DISPATCH"), async (req, res) => {
     select: { id: true, name: true, carModel: true, plate: true, ratingAvg: true, photoUrl: true, carPhotoUrl: true },
   });
   res.json(drivers);
+});
+
+// Créer un compte chauffeur depuis la console Dispatch
+router.post("/", requireRole("DISPATCH"), async (req, res) => {
+  const { name, email, phone, password, carModel, plate } = req.body;
+  if (!name || !email || !phone || !password) {
+    return res.status(400).json({ error: "Nom, courriel, téléphone et mot de passe sont requis." });
+  }
+
+  const existing = await prisma.user.findUnique({ where: { email } });
+  if (existing) return res.status(409).json({ error: "Ce courriel est déjà utilisé." });
+
+  const passwordHash = await bcrypt.hash(password, 10);
+  const driver = await prisma.user.create({
+    data: { role: "DRIVER", name, email, phone, passwordHash, carModel, plate },
+    select: { id: true, name: true, carModel: true, plate: true, ratingAvg: true, photoUrl: true, carPhotoUrl: true },
+  });
+  res.status(201).json(driver);
 });
 
 // Recherche dans les bases clients / chauffeurs / courses (besoin #14)
