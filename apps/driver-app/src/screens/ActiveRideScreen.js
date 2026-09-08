@@ -2,9 +2,11 @@ import React, { useEffect, useState } from "react";
 import { View, Text, TouchableOpacity, StyleSheet, Linking, Alert } from "react-native";
 import { api } from "../lib/api";
 import { playSound } from "../lib/sound";
+import { startTrackingLocation, stopTrackingLocation } from "../lib/locationTracker";
 
 const NEXT_STATUS = { ACCEPTED: "EN_ROUTE", EN_ROUTE: "STARTED", STARTED: "COMPLETED" };
 const LABEL = { ACCEPTED: "En route pour la course", EN_ROUTE: "Démarrer la course", STARTED: "Terminer la course" };
+const TRACKED_STATUSES = ["EN_ROUTE", "STARTED"];
 
 export default function ActiveRideScreen({ rideId, onDone, onOpenChat }) {
   const [ride, setRide] = useState(null);
@@ -15,6 +17,17 @@ export default function ActiveRideScreen({ rideId, onDone, onOpenChat }) {
   };
 
   useEffect(() => { load(); }, [rideId]);
+
+  // Diffuse la position GPS tant que la course est en route vers le client ou vers la
+  // destination ; s'arrête automatiquement en dehors de ces statuts ou en quittant l'écran.
+  useEffect(() => {
+    if (ride && TRACKED_STATUSES.includes(ride.status)) {
+      startTrackingLocation(rideId, ride.status);
+    } else {
+      stopTrackingLocation();
+    }
+    return () => stopTrackingLocation();
+  }, [ride?.status, rideId]);
 
   const advance = async () => {
     if (!ride) return;

@@ -27,5 +27,15 @@ export function registerSocketHandlers(io) {
 
     socket.on("ride:watch", (rideId) => socket.join(`ride:${rideId}`));
     socket.on("ride:unwatch", (rideId) => socket.leave(`ride:${rideId}`));
+
+    // Position GPS d'un chauffeur en route (besoin: suivi en direct sur carte pour le Dispatch,
+    // et pour le client pendant sa propre course — voir besoin #13). Relais uniquement, pas de
+    // persistance : la position n'a de sens qu'en direct pendant une course active.
+    socket.on("driver:location", ({ rideId, status, lat, lng }) => {
+      if (role !== "DRIVER" || typeof lat !== "number" || typeof lng !== "number") return;
+      const payload = { driverId: id, name: socket.user.name, rideId: rideId || null, status, lat, lng, at: Date.now() };
+      io.to("dispatch").emit("driver:location", payload);
+      if (rideId) io.to(`ride:${rideId}`).emit("driver:location", payload);
+    });
   });
 }

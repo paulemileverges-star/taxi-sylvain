@@ -10,9 +10,11 @@ import Schedule from "./pages/Schedule.jsx";
 import Drivers from "./pages/Drivers.jsx";
 import Reports from "./pages/Reports.jsx";
 import Messages from "./pages/Messages.jsx";
+import LiveMap from "./pages/LiveMap.jsx";
 
 const NAV = [
   { key: "dashboard", label: "Tableau de bord" },
+  { key: "map", label: "Carte" },
   { key: "courses", label: "Courses" },
   { key: "schedule", label: "Cédule" },
   { key: "drivers", label: "Chauffeurs" },
@@ -74,6 +76,7 @@ export default function App() {
       </div>
       <div className="content">
         {screen === "dashboard" && <Dashboard notifs={notifs} />}
+        {screen === "map" && <LiveMap />}
         {screen === "courses" && <Courses />}
         {screen === "schedule" && <Schedule />}
         {screen === "drivers" && <Drivers />}

@@ -20,6 +20,14 @@
     "ios": {
       "bundleIdentifier": "com.taxisylvain.driver"
     },
+    "plugins": [
+      [
+        "expo-location",
+        {
+          "locationForegroundPermission": "Taxi Sylvain a besoin de votre position pour que le Dispatch et le client puissent suivre votre déplacement pendant une course."
+        }
+      ]
+    ],
     "extra": {
       "eas": {
         "projectId": "5c05096e-2808-4476-b146-f59e579ba07a"
