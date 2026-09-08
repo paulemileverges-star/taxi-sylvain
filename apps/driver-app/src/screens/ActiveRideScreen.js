@@ -1,0 +1,88 @@
+import React, { useEffect, useState } from "react";
+import { View, Text, TouchableOpacity, StyleSheet, Linking, Alert } from "react-native";
+import { api } from "../lib/api";
+
+const NEXT_STATUS = { ACCEPTED: "EN_ROUTE", EN_ROUTE: "STARTED", STARTED: "COMPLETED" };
+const LABEL = { ACCEPTED: "En route pour la course", EN_ROUTE: "Démarrer la course", STARTED: "Terminer la course" };
+
+export default function ActiveRideScreen({ rideId, onDone, onOpenChat }) {
+  const [ride, setRide] = useState(null);
+
+  const load = async () => {
+    const rides = await api.myRides();
+    setRide(rides.find((r) => r.id === rideId));
+  };
+
+  useEffect(() => { load(); }, [rideId]);
+
+  const advance = async () => {
+    if (!ride) return;
+    const next = NEXT_STATUS[ride.status];
+    if (!next) return;
+    const updated = await api.setRideStatus(ride.id, next);
+    setRide(updated);
+    if (next === "COMPLETED") {
+      Alert.alert("Course terminée", "Merci de noter le client dans l'écran suivant (à brancher sur RatingScreen).", [
+        { text: "OK", onPress: onDone },
+      ]);
+    }
+  };
+
+  const openWaze = () => {
+    if (!ride) return;
+    Linking.openURL(`https://waze.com/ul?navigate=yes&q=${encodeURIComponent(ride.destAddress)}`);
+  };
+  const openGoogleMaps = () => {
+    if (!ride) return;
+    Linking.openURL(`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(ride.destAddress)}`);
+  };
+
+  const callMasked = async () => {
+    try {
+      const { proxyNumber } = await api.callMasked(ride.id);
+      Linking.openURL(`tel:${proxyNumber}`);
+    } catch (e) {
+      Alert.alert("Appel indisponible", e.message);
+    }
+  };
+
+  if (!ride) return <View style={{ flex: 1, padding: 16 }}><Text style={{ color: "#8b99b5" }}>Chargement…</Text></View>;
+
+  return (
+    <View style={{ flex: 1, padding: 16 }}>
+      <Text style={styles.title}>Course en cours</Text>
+      <View style={styles.card}>
+        <Text style={styles.addr}>Départ : {ride.pickupAddress}</Text>
+        <Text style={styles.addr}>Arrivée : {ride.destAddress}</Text>
+        <Text style={styles.fare}>{ride.fare} $</Text>
+      </View>
+      <View style={styles.rowBetween}>
+        <TouchableOpacity style={styles.outlineBtn} onPress={openWaze}><Text style={styles.outlineBtnText}>Waze</Text></TouchableOpacity>
+        <TouchableOpacity style={styles.outlineBtn} onPress={openGoogleMaps}><Text style={styles.outlineBtnText}>Google Maps</Text></TouchableOpacity>
+      </View>
+      <View style={styles.rowBetween}>
+        <TouchableOpacity style={styles.outlineBtn} onPress={() => onOpenChat(ride.id)}>
+          <Text style={styles.outlineBtnText}>Message</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.outlineBtn} onPress={callMasked}>
+          <Text style={styles.outlineBtnText}>Appeler (masqué)</Text>
+        </TouchableOpacity>
+      </View>
+      <TouchableOpacity style={styles.primaryBtn} onPress={advance}>
+        <Text style={styles.primaryBtnText}>{LABEL[ride.status] || "Course terminée"}</Text>
+      </TouchableOpacity>
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  title: { color: "#edeff3", fontSize: 22, fontWeight: "700", marginBottom: 12 },
+  card: { backgroundColor: "#16233a", borderRadius: 14, padding: 14, marginBottom: 14, borderWidth: 1, borderColor: "#28395a" },
+  addr: { color: "#edeff3", marginBottom: 6 },
+  fare: { color: "#f5a623", fontWeight: "700", marginTop: 6 },
+  rowBetween: { flexDirection: "row", gap: 8, marginBottom: 14 },
+  outlineBtn: { flex: 1, borderWidth: 1, borderColor: "#28395a", borderRadius: 10, padding: 10, alignItems: "center" },
+  outlineBtnText: { color: "#edeff3" },
+  primaryBtn: { backgroundColor: "#f5a623", borderRadius: 12, padding: 14, alignItems: "center" },
+  primaryBtnText: { color: "#1a1200", fontWeight: "700" },
+});

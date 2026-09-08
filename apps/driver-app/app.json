@@ -1,0 +1,21 @@
+{
+  "expo": {
+    "name": "Taxi Sylvain Chauffeur",
+    "slug": "taxi-sylvain-chauffeur",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "android": {
+      "package": "com.taxisylvain.driver"
+    },
+    "ios": {
+      "bundleIdentifier": "com.taxisylvain.driver"
+    },
+    "extra": {
+      "eas": {
+        "projectId": "5c05096e-2808-4476-b146-f59e579ba07a"
+      }
+    },
+    "owner": "taxisylvains-team"
+  }
+}

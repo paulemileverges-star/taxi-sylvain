@@ -1,0 +1,10 @@
+node_modules/
+dist/
+.expo/
+.env
+.env.local
+backend/uploads/*
+!backend/uploads/.gitkeep
+*.log
+.DS_Store
+.vercel

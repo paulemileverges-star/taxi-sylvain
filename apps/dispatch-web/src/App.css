@@ -1,0 +1,20 @@
+:root {
+  --bg: #0f1b2d; --surface: #16233a; --border: #28395a;
+  --text: #edeff3; --muted: #8b99b5; --amber: #f5a623;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--text); font-family: Inter, system-ui, sans-serif; }
+.layout { display: flex; min-height: 100vh; }
+.sidebar { width: 220px; background: #0a1120; border-right: 1px solid var(--border); padding: 20px 0; }
+.brand { padding: 0 20px 20px; color: var(--amber); font-size: 22px; font-weight: 700; }
+.nav-item { display: block; width: 100%; text-align: left; padding: 10px 20px; background: none; border: none; color: var(--muted); cursor: pointer; font-size: 14px; }
+.nav-item.active { color: var(--amber); background: rgba(245,166,35,0.08); }
+.content { flex: 1; padding: 28px; overflow-y: auto; }
+.card { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 16px; margin-bottom: 10px; }
+.btn { background: var(--amber); color: #1a1200; border: none; border-radius: 10px; padding: 8px 14px; font-weight: 600; cursor: pointer; }
+.btn.outline { background: transparent; color: var(--text); border: 1px solid var(--border); }
+.input, select, textarea { width: 100%; background: #1d2c46; color: var(--text); border: 1px solid var(--border); border-radius: 10px; padding: 8px 10px; margin-top: 4px; }
+.row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.chip { font-size: 12px; padding: 3px 8px; border-radius: 999px; background: #1d2c46; color: var(--muted); }
+.modal-backdrop { position: fixed; inset: 0; background: rgba(5,10,20,0.6); display: flex; align-items: center; justify-content: center; }
+.modal { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 20px; width: 420px; }
