@@ -30,7 +30,14 @@ export const api = {
   sendMessage: (rideId, text) => request(`/messages/${rideId}`, { method: "POST", body: { text } }),
   callMasked: (rideId) => request(`/rides/${rideId}/call`, { method: "POST" }),
   rate: (rideId, toUserId, stars, comment) => request(`/ratings/${rideId}`, { method: "POST", body: { toUserId, stars, comment } }),
+  listConversations: () => request("/conversations"),
+  conversationMessages: (id) => request(`/conversations/${id}/messages`),
+  sendConversationMessage: (id, text) => request(`/conversations/${id}/messages`, { method: "POST", body: { text } }),
 };
 
 // Endpoints spécifiques à l'app Client
 api.bookRide = (payload) => request("/rides", { method: "POST", body: payload });
+
+export async function logout() {
+  await AsyncStorage.multiRemove(["ts_token", "ts_user"]);
+}

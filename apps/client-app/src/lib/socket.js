@@ -10,3 +10,12 @@ export async function getSocket() {
   }
   return socket;
 }
+
+// À appeler à la déconnexion : sans ça, le socket restait connecté avec le jeton du compte
+// précédent et un nouveau compte se retrouvait à recevoir/envoyer sous la mauvaise identité.
+export function resetSocket() {
+  if (socket) {
+    socket.disconnect();
+    socket = undefined;
+  }
+}

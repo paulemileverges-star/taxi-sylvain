@@ -32,6 +32,10 @@ export const api = {
   broadcastRide: (rideId) => request(`/rides/${rideId}/broadcast`, { method: "POST" }),
   listDrivers: () => request("/drivers"),
   createDriver: (payload) => request("/drivers", { method: "POST", body: payload }),
+  deleteDriver: (id) => request(`/drivers/${id}`, { method: "DELETE" }),
+  listClients: () => request("/clients"),
+  deleteClient: (id) => request(`/clients/${id}`, { method: "DELETE" }),
+  deleteRide: (id) => request(`/rides/${id}`, { method: "DELETE" }),
   weeklyReport: () => request("/reports/weekly"),
   generateWeeklyReport: (range) => request("/reports/generate", { method: "POST", body: range || {} }),
   downloadReport: async (format, range) => {
@@ -55,6 +59,10 @@ export const api = {
   deleteScheduleEntry: (id) => request(`/schedule/${id}`, { method: "DELETE" }),
   listDirectMessages: (driverId) => request(`/messages/direct/${driverId}`),
   sendDirectMessage: (driverId, text) => request(`/messages/direct/${driverId}`, { method: "POST", body: { text } }),
+  listConversations: () => request("/conversations"),
+  createConversation: (payload) => request("/conversations", { method: "POST", body: payload }),
+  listConversationMessages: (id) => request(`/conversations/${id}/messages`),
+  sendConversationMessage: (id, text) => request(`/conversations/${id}/messages`, { method: "POST", body: { text } }),
   uploadDriverPhotos: async (driverId, { photo, carPhoto }) => {
     const form = new FormData();
     if (photo) form.append("photo", photo);
@@ -69,4 +77,8 @@ export const api = {
     return data;
   },
   setToken: (t) => localStorage.setItem("ts_token", t),
+  logout: () => {
+    localStorage.removeItem("ts_token");
+    localStorage.removeItem("ts_user");
+  },
 };

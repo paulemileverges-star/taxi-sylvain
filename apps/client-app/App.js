@@ -6,7 +6,9 @@ import BookScreen from "./src/screens/BookScreen";
 import TrackingScreen from "./src/screens/TrackingScreen";
 import RateScreen from "./src/screens/RateScreen";
 import ChatScreen from "./src/screens/ChatScreen";
-import { getSocket } from "./src/lib/socket";
+import GroupsScreen from "./src/screens/GroupsScreen";
+import { getSocket, resetSocket } from "./src/lib/socket";
+import { logout as clearSession } from "./src/lib/api";
 import { playSound } from "./src/lib/sound";
 
 export default function App() {
@@ -35,6 +37,24 @@ export default function App() {
     return () => sock?.off("ride:status");
   }, [activeRideId]);
 
+  useEffect(() => {
+    if (!user) return;
+    let sock;
+    getSocket().then((s) => {
+      sock = s;
+      s.on("message:group", ({ message }) => { if (message.sender.id !== user.id) playSound("notify"); });
+    });
+    return () => sock?.off("message:group");
+  }, [user]);
+
+  const logout = async () => {
+    resetSocket();
+    await clearSession();
+    setUser(null);
+    setScreen("book");
+    setActiveRideId(null);
+  };
+
   if (!user) {
     return (
       <SafeAreaView style={{ flex: 1, backgroundColor: "#0f1b2d" }}>
@@ -48,10 +68,15 @@ export default function App() {
     <SafeAreaView style={{ flex: 1, backgroundColor: "#0f1b2d" }}>
       <StatusBar barStyle="light-content" />
       {screen === "book" && (
-        <BookScreen onBooked={(rideId) => { setActiveRideId(rideId); setScreen("tracking"); }} />
+        <BookScreen
+          user={user}
+          onBooked={(rideId) => { setActiveRideId(rideId); setScreen("tracking"); }}
+          onOpenGroups={() => setScreen("groups")}
+          onLogout={logout}
+        />
       )}
       {screen === "tracking" && activeRideId && (
-        <TrackingScreen rideId={activeRideId} onOpenChat={() => setScreen("chat")} />
+        <TrackingScreen rideId={activeRideId} onOpenChat={() => setScreen("chat")} onBack={() => setScreen("book")} />
       )}
       {screen === "chat" && activeRideId && (
         <ChatScreen rideId={activeRideId} onBack={() => setScreen("tracking")} />
@@ -59,6 +84,7 @@ export default function App() {
       {screen === "rate" && activeRideId && (
         <RateScreen rideId={activeRideId} onDone={() => { setActiveRideId(null); setScreen("book"); }} />
       )}
+      {screen === "groups" && <GroupsScreen user={user} onBack={() => setScreen("book")} />}
     </SafeAreaView>
   );
 }

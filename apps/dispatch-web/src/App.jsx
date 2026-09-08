@@ -1,15 +1,17 @@
 import React, { useEffect, useState } from "react";
 import "./App.css";
 import { api } from "./lib/api.js";
-import { getSocket } from "./lib/socket.js";
+import { getSocket, resetSocket } from "./lib/socket.js";
 import { playSound } from "./lib/sound.js";
 import Login from "./pages/Login.jsx";
 import Dashboard from "./pages/Dashboard.jsx";
 import Courses from "./pages/Courses.jsx";
 import Schedule from "./pages/Schedule.jsx";
 import Drivers from "./pages/Drivers.jsx";
+import Clients from "./pages/Clients.jsx";
 import Reports from "./pages/Reports.jsx";
 import Messages from "./pages/Messages.jsx";
+import Groups from "./pages/Groups.jsx";
 import LiveMap from "./pages/LiveMap.jsx";
 
 const NAV = [
@@ -18,8 +20,10 @@ const NAV = [
   { key: "courses", label: "Courses" },
   { key: "schedule", label: "Cédule" },
   { key: "drivers", label: "Chauffeurs" },
+  { key: "clients", label: "Clients" },
   { key: "reports", label: "Rapports" },
   { key: "messages", label: "Messagerie" },
+  { key: "groups", label: "Groupes" },
 ];
 
 export default function App() {
@@ -38,14 +42,22 @@ export default function App() {
     socket.on("ride:refused", () => playSound("notify"));
     socket.on("report:generated", () => playSound("notify"));
     socket.on("message:direct", (m) => { if (m.sender.role !== "DISPATCH") playSound("notify"); });
+    socket.on("message:group", ({ message }) => { if (message.sender.id !== user.id) playSound("notify"); });
     return () => {
       socket.off("ride:notification");
       socket.off("ride:created");
       socket.off("ride:refused");
       socket.off("report:generated");
       socket.off("message:direct");
+      socket.off("message:group");
     };
   }, [user]);
+
+  const logout = () => {
+    resetSocket();
+    api.logout();
+    setUser(null);
+  };
 
   if (!user) {
     return (
@@ -64,15 +76,21 @@ export default function App() {
     <div className="layout">
       <div className="sidebar">
         <div className="brand">TAXI SYLVAIN</div>
-        {NAV.map((n) => (
-          <button
-            key={n.key}
-            className={`nav-item ${screen === n.key ? "active" : ""}`}
-            onClick={() => setScreen(n.key)}
-          >
-            {n.label}
-          </button>
-        ))}
+        <div style={{ flex: 1 }}>
+          {NAV.map((n) => (
+            <button
+              key={n.key}
+              className={`nav-item ${screen === n.key ? "active" : ""}`}
+              onClick={() => setScreen(n.key)}
+            >
+              {n.label}
+            </button>
+          ))}
+        </div>
+        <div style={{ padding: "12px 20px", borderTop: "1px solid var(--border)" }}>
+          <div style={{ fontSize: 13, color: "var(--muted)", marginBottom: 8 }}>{user.name}</div>
+          <button className="btn outline" style={{ width: "100%" }} onClick={logout}>Se déconnecter</button>
+        </div>
       </div>
       <div className="content">
         {screen === "dashboard" && <Dashboard notifs={notifs} />}
@@ -80,8 +98,10 @@ export default function App() {
         {screen === "courses" && <Courses />}
         {screen === "schedule" && <Schedule />}
         {screen === "drivers" && <Drivers />}
+        {screen === "clients" && <Clients />}
         {screen === "reports" && <Reports />}
         {screen === "messages" && <Messages />}
+        {screen === "groups" && <Groups />}
       </div>
     </div>
   );

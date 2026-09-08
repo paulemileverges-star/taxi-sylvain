@@ -31,7 +31,13 @@ export default function Schedule() {
   const create = async () => {
     setError("");
     try {
-      await api.createScheduleEntry(form);
+      // form.startsAt vient d'un <input type="datetime-local"> : une chaîne SANS fuseau horaire
+      // (ex. "2026-09-10T14:00"). Si on l'envoyait telle quelle, le serveur (dont l'horloge n'est
+      // pas forcément dans le même fuseau que le navigateur) la réinterpréterait dans SON propre
+      // fuseau, décalant l'heure affichée ensuite. En construisant le Date ICI, c'est le fuseau du
+      // navigateur (donc celui de la personne qui saisit l'heure) qui fait foi ; on envoie un
+      // instant UTC non ambigu (.toISOString()) que le serveur n'a plus besoin d'interpréter.
+      await api.createScheduleEntry({ ...form, startsAt: new Date(form.startsAt).toISOString() });
       setForm({ driverId: "", label: "", startsAt: "" });
       setShowAdd(false);
       playSound("action");
@@ -79,7 +85,13 @@ export default function Schedule() {
                 <div key={entry.id} style={{ background: "#1d2c46", borderRadius: 8, padding: "6px 8px", marginBottom: 6, fontSize: 12 }}>
                   <div className="row">
                     <strong>{new Date(entry.startsAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</strong>
-                    <button onClick={() => remove(entry.id)} style={{ background: "none", border: "none", color: "#e85d4c", cursor: "pointer" }}>✕</button>
+                    <button
+                      onClick={() => remove(entry.id)}
+                      title="Supprimer ce créneau"
+                      style={{ background: "rgba(232,93,76,0.12)", border: "1px solid #e85d4c", borderRadius: 6, color: "#e85d4c", cursor: "pointer", width: 20, height: 20, lineHeight: 1, fontSize: 12 }}
+                    >
+                      ✕
+                    </button>
                   </div>
                   <div>{entry.driver.name}</div>
                   <div style={{ color: "#8b99b5" }}>{entry.label}</div>

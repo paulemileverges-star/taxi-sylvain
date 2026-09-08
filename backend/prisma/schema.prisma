@@ -14,12 +14,12 @@ enum Role {
 }
 
 enum RideStatus {
-  REQUESTED   // demandée par le client ou créée par le dispatch, pas encore affectée
-  BROADCAST   // envoyée à tous les chauffeurs (course de dernière minute)
-  ACCEPTED    // affectée / acceptée par un chauffeur
-  EN_ROUTE    // chauffeur en route pour la prise en charge
-  STARTED     // course démarrée vers la destination
-  COMPLETED   // course terminée
+  REQUESTED // demandée par le client ou créée par le dispatch, pas encore affectée
+  BROADCAST // envoyée à tous les chauffeurs (course de dernière minute)
+  ACCEPTED // affectée / acceptée par un chauffeur
+  EN_ROUTE // chauffeur en route pour la prise en charge
+  STARTED // course démarrée vers la destination
+  COMPLETED // course terminée
   CANCELLED
   REFUSED
 }
@@ -34,45 +34,50 @@ model User {
   createdAt    DateTime @default(now())
 
   // Champs spécifiques chauffeur
-  carModel     String?
-  plate        String?
-  ratingAvg    Float?   @default(5.0)
-  photoUrl     String?  // photo du chauffeur (besoin #13)
-  carPhotoUrl  String?  // photo du véhicule (besoin #13)
+  carModel    String?
+  plate       String?
+  ratingAvg   Float?  @default(5.0)
+  photoUrl    String? // photo du chauffeur (besoin #13)
+  carPhotoUrl String? // photo du véhicule (besoin #13)
 
-  ridesAsClient   Ride[]   @relation("ClientRides")
-  ridesAsDriver   Ride[]   @relation("DriverRides")
-  messagesSent    Message[] @relation("MessageSender")
-  directMessages  Message[] @relation("DirectMessages")
-  ratingsGiven    Rating[]  @relation("RatingFrom")
-  ratingsReceived Rating[]  @relation("RatingTo")
+  ridesAsClient   Ride[]         @relation("ClientRides")
+  ridesAsDriver   Ride[]         @relation("DriverRides")
+  messagesSent    Message[]      @relation("MessageSender")
+  directMessages  Message[]      @relation("DirectMessages")
+  ratingsGiven    Rating[]       @relation("RatingFrom")
+  ratingsReceived Rating[]       @relation("RatingTo")
   scheduleEntries Schedule[]
   weeklyReports   WeeklyReport[]
+
+  conversationsCreated Conversation[]            @relation("ConversationCreator")
+  conversationsIn      ConversationParticipant[]
+  groupMessagesSent    GroupMessage[]            @relation("GroupMessageSender")
 }
 
 model Ride {
-  id              String     @id @default(cuid())
-  status          RideStatus @default(REQUESTED)
-  pickupAddress   String
-  destAddress     String
-  pickupLat       Float?
-  pickupLng       Float?
-  destLat         Float?
-  destLng         Float?
-  distanceKm      Float?
-  fare            Float
-  royaltyRate     Float      @default(0.10) // 10% versé à Taxi Sylvain
-  scheduledFor    DateTime?
-  createdAt       DateTime   @default(now())
-  acceptedAt      DateTime?
-  enRouteAt       DateTime?
-  startedAt       DateTime?
-  completedAt     DateTime?
+  id            String     @id @default(cuid())
+  status        RideStatus @default(REQUESTED)
+  pickupAddress String
+  destAddress   String
+  pickupLat     Float?
+  pickupLng     Float?
+  destLat       Float?
+  destLng       Float?
+  distanceKm    Float?
+  fare          Float
+  royaltyRate   Float      @default(0.10) // 10% versé à Taxi Sylvain
+  flightNumber  String?
+  scheduledFor  DateTime?
+  createdAt     DateTime   @default(now())
+  acceptedAt    DateTime?
+  enRouteAt     DateTime?
+  startedAt     DateTime?
+  completedAt   DateTime?
 
-  clientId  String?
-  client    User?    @relation("ClientRides", fields: [clientId], references: [id])
-  driverId  String?
-  driver    User?    @relation("DriverRides", fields: [driverId], references: [id])
+  clientId String?
+  client   User?   @relation("ClientRides", fields: [clientId], references: [id])
+  driverId String?
+  driver   User?   @relation("DriverRides", fields: [driverId], references: [id])
 
   messages Message[]
   ratings  Rating[]
@@ -94,39 +99,72 @@ model Message {
 }
 
 model Rating {
-  id        String   @id @default(cuid())
-  rideId    String
-  ride      Ride     @relation(fields: [rideId], references: [id])
+  id         String   @id @default(cuid())
+  rideId     String
+  ride       Ride     @relation(fields: [rideId], references: [id])
   fromUserId String
-  fromUser   User    @relation("RatingFrom", fields: [fromUserId], references: [id])
+  fromUser   User     @relation("RatingFrom", fields: [fromUserId], references: [id])
   toUserId   String
-  toUser     User    @relation("RatingTo", fields: [toUserId], references: [id])
-  stars     Int
-  comment   String?
-  createdAt DateTime @default(now())
+  toUser     User     @relation("RatingTo", fields: [toUserId], references: [id])
+  stars      Int
+  comment    String?
+  createdAt  DateTime @default(now())
 }
 
 model Schedule {
   id        String   @id @default(cuid())
   driverId  String
   driver    User     @relation(fields: [driverId], references: [id])
-  label     String   // ex. "Lun 09h00 · Aéroport → Centre-ville"
+  label     String // ex. "Lun 09h00 · Aéroport → Centre-ville"
   startsAt  DateTime
   createdAt DateTime @default(now())
+}
+
+// Groupe de discussion créé par le Dispatch, avec les correspondants de son choix
+// (un ou plusieurs chauffeurs et/ou clients).
+model Conversation {
+  id          String   @id @default(cuid())
+  name        String?
+  createdById String
+  createdBy   User     @relation("ConversationCreator", fields: [createdById], references: [id])
+  createdAt   DateTime @default(now())
+
+  participants ConversationParticipant[]
+  messages     GroupMessage[]
+}
+
+model ConversationParticipant {
+  id             String       @id @default(cuid())
+  conversationId String
+  conversation   Conversation @relation(fields: [conversationId], references: [id])
+  userId         String
+  user           User         @relation(fields: [userId], references: [id])
+
+  @@unique([conversationId, userId])
+}
+
+model GroupMessage {
+  id             String       @id @default(cuid())
+  conversationId String
+  conversation   Conversation @relation(fields: [conversationId], references: [id])
+  senderId       String
+  sender         User         @relation("GroupMessageSender", fields: [senderId], references: [id])
+  text           String
+  createdAt      DateTime     @default(now())
 }
 
 // Récap hebdomadaire figé par chauffeur (besoin #14) — généré automatiquement chaque semaine
 // (voir src/jobs/weeklyReport.js), consultable dans l'app et exportable en PDF/Excel.
 model WeeklyReport {
-  id          String   @id @default(cuid())
-  driverId    String
-  driver      User     @relation(fields: [driverId], references: [id])
-  weekStart   DateTime
-  weekEnd     DateTime
-  rideCount   Int
-  totalFare   Float
-  royaltyDue  Float
-  createdAt   DateTime @default(now())
+  id         String   @id @default(cuid())
+  driverId   String
+  driver     User     @relation(fields: [driverId], references: [id])
+  weekStart  DateTime
+  weekEnd    DateTime
+  rideCount  Int
+  totalFare  Float
+  royaltyDue Float
+  createdAt  DateTime @default(now())
 
   @@unique([driverId, weekStart])
 }

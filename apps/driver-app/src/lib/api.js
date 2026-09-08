@@ -36,4 +36,11 @@ export const api = {
   sendDispatchMessage: (driverId, text) => request(`/messages/direct/${driverId}`, { method: "POST", body: { text } }),
   myReports: () => request("/reports/mine"),
   rate: (rideId, toUserId, stars, comment) => request(`/ratings/${rideId}`, { method: "POST", body: { toUserId, stars, comment } }),
+  listConversations: () => request("/conversations"),
+  conversationMessages: (id) => request(`/conversations/${id}/messages`),
+  sendConversationMessage: (id, text) => request(`/conversations/${id}/messages`, { method: "POST", body: { text } }),
 };
+
+export async function logout() {
+  await AsyncStorage.multiRemove(["ts_token", "ts_user"]);
+}

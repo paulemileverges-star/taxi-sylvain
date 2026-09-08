@@ -3,9 +3,10 @@ import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, Linking } f
 import { api } from "../lib/api";
 import { playSound } from "../lib/sound";
 
-export default function BookScreen({ onBooked }) {
+export default function BookScreen({ user, onBooked, onOpenGroups, onLogout }) {
   const [pickupAddress, setPickup] = useState("");
   const [destAddress, setDest] = useState("");
+  const [flightNumber, setFlightNumber] = useState("");
 
   const book = async () => {
     if (!pickupAddress.trim() || !destAddress.trim()) {
@@ -14,7 +15,7 @@ export default function BookScreen({ onBooked }) {
     }
     try {
       // fare estimée ici de façon simplifiée — à remplacer par un vrai calcul (distance x tarif/km)
-      const ride = await api.bookRide({ pickupAddress, destAddress, fare: 20 });
+      const ride = await api.bookRide({ pickupAddress, destAddress, fare: 20, flightNumber: flightNumber || undefined });
       playSound("action");
       onBooked(ride.id);
     } catch (e) {
@@ -24,9 +25,17 @@ export default function BookScreen({ onBooked }) {
 
   return (
     <View style={{ flex: 1, padding: 16 }}>
-      <Text style={styles.title}>Où allez-vous ?</Text>
+      <View style={styles.headerRow}>
+        <Text style={styles.title}>Bonjour {user?.name || ""}</Text>
+        <TouchableOpacity onPress={onLogout}><Text style={styles.logoutLink}>Se déconnecter</Text></TouchableOpacity>
+      </View>
+      <TouchableOpacity onPress={onOpenGroups} style={{ marginBottom: 16 }}>
+        <Text style={styles.link}>Groupes</Text>
+      </TouchableOpacity>
+      <Text style={styles.subtitle}>Où allez-vous ?</Text>
       <TextInput style={styles.input} placeholder="Adresse de prise en charge" placeholderTextColor="#8b99b5" value={pickupAddress} onChangeText={setPickup} />
       <TextInput style={styles.input} placeholder="Destination" placeholderTextColor="#8b99b5" value={destAddress} onChangeText={setDest} />
+      <TextInput style={styles.input} placeholder="Numéro de vol (optionnel)" placeholderTextColor="#8b99b5" value={flightNumber} onChangeText={setFlightNumber} />
       <TouchableOpacity style={styles.primaryBtn} onPress={book}>
         <Text style={styles.primaryBtnText}>Réserver dans l'app</Text>
       </TouchableOpacity>
@@ -38,7 +47,11 @@ export default function BookScreen({ onBooked }) {
 }
 
 const styles = StyleSheet.create({
-  title: { color: "#edeff3", fontSize: 24, fontWeight: "700", marginBottom: 16 },
+  headerRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 12 },
+  title: { color: "#edeff3", fontSize: 22, fontWeight: "700" },
+  logoutLink: { color: "#e85d4c", fontWeight: "600" },
+  link: { color: "#f5a623" },
+  subtitle: { color: "#edeff3", fontSize: 18, fontWeight: "700", marginBottom: 16 },
   input: { backgroundColor: "#16233a", color: "#edeff3", borderRadius: 12, padding: 12, marginBottom: 10, borderWidth: 1, borderColor: "#28395a" },
   primaryBtn: { backgroundColor: "#f5a623", borderRadius: 12, padding: 14, alignItems: "center", marginTop: 10 },
   primaryBtnText: { color: "#1a1200", fontWeight: "700" },

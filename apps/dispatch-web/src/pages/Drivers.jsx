@@ -29,6 +29,13 @@ export default function Drivers() {
     load();
   };
 
+  const remove = async (driver) => {
+    if (!window.confirm(`Supprimer le compte de ${driver.name} ? Cette action est définitive.`)) return;
+    await api.deleteDriver(driver.id);
+    playSound("action");
+    load();
+  };
+
   const createDriver = async () => {
     setError("");
     try {
@@ -73,6 +80,7 @@ export default function Drivers() {
               ref={(el) => (carPhotoInputs.current[d.id] = el)}
               onChange={(e) => uploadCarPhoto(d.id, e.target.files[0])}
             />
+            <button className="btn red" onClick={() => remove(d)}>Supprimer</button>
           </div>
         </div>
       ))}

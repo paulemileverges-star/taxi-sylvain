@@ -14,6 +14,8 @@ import ratingRoutes from "./routes/ratings.js";
 import driverRoutes from "./routes/drivers.js";
 import reportRoutes from "./routes/reports.js";
 import scheduleRoutes from "./routes/schedule.js";
+import clientRoutes from "./routes/clients.js";
+import conversationRoutes from "./routes/conversations.js";
 import { registerSocketHandlers } from "./sockets/index.js";
 import { generateWeeklyReports } from "./jobs/weeklyReport.js";
 
@@ -32,6 +34,8 @@ app.use("/api/ratings", ratingRoutes);
 app.use("/api/drivers", driverRoutes);
 app.use("/api/reports", reportRoutes);
 app.use("/api/schedule", scheduleRoutes);
+app.use("/api/clients", clientRoutes);
+app.use("/api/conversations", conversationRoutes);
 
 const server = http.createServer(app);
 const io = new Server(server, { cors: { origin: process.env.CORS_ORIGIN || "*" } });

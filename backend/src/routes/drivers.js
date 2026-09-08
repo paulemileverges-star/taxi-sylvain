@@ -5,6 +5,7 @@ import path from "path";
 import { fileURLToPath } from "url";
 import { prisma } from "../lib/prisma.js";
 import { requireAuth, requireRole } from "../middleware/auth.js";
+import { deleteUserCascade } from "../lib/deleteUser.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const uploadsDir = path.join(__dirname, "..", "..", "uploads");
@@ -51,8 +52,12 @@ router.post("/", requireRole("DISPATCH"), async (req, res) => {
 });
 
 router.delete("/:id", requireRole("DISPATCH"), async (req, res) => {
-  await prisma.user.delete({ where: { id: req.params.id } });
-  res.status(204).end();
+  try {
+    await deleteUserCascade(req.params.id);
+    res.status(204).end();
+  } catch (e) {
+    res.status(404).json({ error: "Chauffeur introuvable." });
+  }
 });
 
 // Recherche dans les bases clients / chauffeurs / courses (besoin #14)

@@ -8,7 +8,24 @@ const NEXT_STATUS = { ACCEPTED: "EN_ROUTE", EN_ROUTE: "STARTED", STARTED: "COMPL
 const LABEL = { ACCEPTED: "En route pour la course", EN_ROUTE: "Démarrer la course", STARTED: "Terminer la course" };
 const TRACKED_STATUSES = ["EN_ROUTE", "STARTED"];
 
-export default function ActiveRideScreen({ rideId, onDone, onOpenChat }) {
+function fmtDate(d) {
+  return d ? new Date(d).toLocaleDateString("fr-CA") : "—";
+}
+function fmtTime(d) {
+  return d ? new Date(d).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "—";
+}
+
+function Field({ label, value }) {
+  if (!value) return null;
+  return (
+    <View style={styles.fieldRow}>
+      <Text style={styles.fieldLabel}>{label} :</Text>
+      <Text style={styles.fieldValue}>{value}</Text>
+    </View>
+  );
+}
+
+export default function ActiveRideScreen({ rideId, onDone, onOpenChat, onOpenMessages, onBack }) {
   const [ride, setRide] = useState(null);
 
   const load = async () => {
@@ -66,11 +83,18 @@ export default function ActiveRideScreen({ rideId, onDone, onOpenChat }) {
 
   return (
     <View style={{ flex: 1, padding: 16 }}>
-      <Text style={styles.title}>Course en cours</Text>
+      <View style={styles.headerRow}>
+        {onBack && <TouchableOpacity onPress={onBack}><Text style={styles.link}>← Retour</Text></TouchableOpacity>}
+        <Text style={styles.title}>Course en cours</Text>
+      </View>
       <View style={styles.card}>
-        <Text style={styles.addr}>Départ : {ride.pickupAddress}</Text>
-        <Text style={styles.addr}>Arrivée : {ride.destAddress}</Text>
-        <Text style={styles.fare}>{ride.fare} $</Text>
+        <Field label="Date de la course" value={fmtDate(ride.scheduledFor || ride.createdAt)} />
+        <Field label="Heure de la course" value={fmtTime(ride.scheduledFor || ride.createdAt)} />
+        <Field label="Nom du client" value={ride.client?.name} />
+        <Field label="Adresse de départ" value={ride.pickupAddress} />
+        <Field label="Destination" value={ride.destAddress} />
+        <Field label="Numéro de vol" value={ride.flightNumber} />
+        <Field label="Montant prévu de la course" value={ride.fare != null ? `${ride.fare} $` : null} />
       </View>
       <View style={styles.rowBetween}>
         <TouchableOpacity style={styles.outlineBtn} onPress={openWaze}><Text style={styles.outlineBtnText}>Waze</Text></TouchableOpacity>
@@ -84,6 +108,13 @@ export default function ActiveRideScreen({ rideId, onDone, onOpenChat }) {
           <Text style={styles.outlineBtnText}>Appeler (masqué)</Text>
         </TouchableOpacity>
       </View>
+      {onOpenMessages && (
+        <View style={styles.rowBetween}>
+          <TouchableOpacity style={[styles.outlineBtn, { flex: 1 }]} onPress={onOpenMessages}>
+            <Text style={styles.outlineBtnText}>Écrire à Taxi Sylvain à propos de cette course</Text>
+          </TouchableOpacity>
+        </View>
+      )}
       <TouchableOpacity style={styles.primaryBtn} onPress={advance}>
         <Text style={styles.primaryBtnText}>{LABEL[ride.status] || "Course terminée"}</Text>
       </TouchableOpacity>
@@ -92,8 +123,13 @@ export default function ActiveRideScreen({ rideId, onDone, onOpenChat }) {
 }
 
 const styles = StyleSheet.create({
-  title: { color: "#edeff3", fontSize: 22, fontWeight: "700", marginBottom: 12 },
+  headerRow: { flexDirection: "row", alignItems: "center", gap: 12, marginBottom: 12 },
+  link: { color: "#f5a623" },
+  title: { color: "#edeff3", fontSize: 22, fontWeight: "700" },
   card: { backgroundColor: "#16233a", borderRadius: 14, padding: 14, marginBottom: 14, borderWidth: 1, borderColor: "#28395a" },
+  fieldRow: { flexDirection: "row", justifyContent: "space-between", marginBottom: 6 },
+  fieldLabel: { color: "#8b99b5", fontSize: 12 },
+  fieldValue: { color: "#edeff3", fontSize: 13, fontWeight: "600", flexShrink: 1, textAlign: "right" },
   addr: { color: "#edeff3", marginBottom: 6 },
   fare: { color: "#f5a623", fontWeight: "700", marginTop: 6 },
   rowBetween: { flexDirection: "row", gap: 8, marginBottom: 14 },

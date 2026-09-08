@@ -12,7 +12,24 @@ const STATUS_LABEL = {
   COMPLETED: "Course terminée",
 };
 
-export default function TrackingScreen({ rideId, onOpenChat }) {
+function fmtDate(d) {
+  return d ? new Date(d).toLocaleDateString("fr-CA") : "—";
+}
+function fmtTime(d) {
+  return d ? new Date(d).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "—";
+}
+
+function Field({ label, value }) {
+  if (!value) return null;
+  return (
+    <View style={styles.fieldRow}>
+      <Text style={styles.fieldLabel}>{label} :</Text>
+      <Text style={styles.fieldValue}>{value}</Text>
+    </View>
+  );
+}
+
+export default function TrackingScreen({ rideId, onOpenChat, onBack }) {
   const [ride, setRide] = useState(null);
 
   useEffect(() => {
@@ -37,8 +54,21 @@ export default function TrackingScreen({ rideId, onOpenChat }) {
 
   return (
     <View style={{ flex: 1, padding: 16 }}>
-      <Text style={styles.title}>{ride ? STATUS_LABEL[ride.status] : "Chargement…"}</Text>
+      <View style={styles.headerRow}>
+        {onBack && <TouchableOpacity onPress={onBack}><Text style={styles.link}>← Retour</Text></TouchableOpacity>}
+        <Text style={styles.title}>{ride ? STATUS_LABEL[ride.status] : "Chargement…"}</Text>
+      </View>
       <View style={styles.mapPlaceholder}><Text style={{ color: "#8b99b5" }}>Suivi en temps réel</Text></View>
+      {ride && (
+        <View style={styles.card}>
+          <Field label="Date de la course" value={fmtDate(ride.scheduledFor || ride.createdAt)} />
+          <Field label="Heure de la course" value={fmtTime(ride.scheduledFor || ride.createdAt)} />
+          <Field label="Adresse de départ" value={ride.pickupAddress} />
+          <Field label="Destination" value={ride.destAddress} />
+          <Field label="Numéro de vol" value={ride.flightNumber} />
+          <Field label="Montant prévu de la course" value={ride.fare != null ? `${ride.fare} $` : null} />
+        </View>
+      )}
       {ride?.driver && (
         <View style={styles.card}>
           <View style={styles.driverRow}>
@@ -73,9 +103,14 @@ export default function TrackingScreen({ rideId, onOpenChat }) {
 }
 
 const styles = StyleSheet.create({
-  title: { color: "#edeff3", fontSize: 20, fontWeight: "700", marginBottom: 12 },
+  headerRow: { flexDirection: "row", alignItems: "center", gap: 12, marginBottom: 12 },
+  link: { color: "#f5a623" },
+  title: { color: "#edeff3", fontSize: 20, fontWeight: "700" },
   mapPlaceholder: { height: 180, backgroundColor: "#1d2c46", borderRadius: 14, alignItems: "center", justifyContent: "center", marginBottom: 14 },
-  card: { backgroundColor: "#16233a", borderRadius: 14, padding: 14, borderWidth: 1, borderColor: "#28395a" },
+  fieldRow: { flexDirection: "row", justifyContent: "space-between", marginBottom: 6 },
+  fieldLabel: { color: "#8b99b5", fontSize: 12 },
+  fieldValue: { color: "#edeff3", fontSize: 13, fontWeight: "600", flexShrink: 1, textAlign: "right" },
+  card: { backgroundColor: "#16233a", borderRadius: 14, padding: 14, borderWidth: 1, borderColor: "#28395a", marginBottom: 14 },
   driverRow: { flexDirection: "row", alignItems: "center", gap: 12 },
   avatar: { width: 52, height: 52, borderRadius: 26, backgroundColor: "#1d2c46", alignItems: "center", justifyContent: "center", overflow: "hidden" },
   avatarImg: { width: "100%", height: "100%" },

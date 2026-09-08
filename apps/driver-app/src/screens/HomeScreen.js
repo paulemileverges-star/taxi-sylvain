@@ -3,7 +3,24 @@ import { View, Text, FlatList, TouchableOpacity, StyleSheet, RefreshControl, Ale
 import { api } from "../lib/api";
 import { playSound } from "../lib/sound";
 
-export default function HomeScreen({ onOpenRide, onOpenEarnings, onOpenMessages, onOpenReports, hasNewReport }) {
+function fmtDate(d) {
+  return d ? new Date(d).toLocaleDateString("fr-CA") : "—";
+}
+function fmtTime(d) {
+  return d ? new Date(d).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "—";
+}
+
+function Field({ label, value }) {
+  if (!value) return null;
+  return (
+    <View style={styles.fieldRow}>
+      <Text style={styles.fieldLabel}>{label} :</Text>
+      <Text style={styles.fieldValue}>{value}</Text>
+    </View>
+  );
+}
+
+export default function HomeScreen({ user, onOpenRide, onOpenEarnings, onOpenMessages, onOpenReports, onOpenGroups, onLogout, hasNewReport }) {
   const [rides, setRides] = useState([]);
   const [schedule, setSchedule] = useState([]);
   const [refreshing, setRefreshing] = useState(false);
@@ -43,9 +60,13 @@ export default function HomeScreen({ onOpenRide, onOpenEarnings, onOpenMessages,
   return (
     <View style={{ flex: 1, padding: 16 }}>
       <View style={styles.headerRow}>
-        <Text style={styles.title}>Bonjour</Text>
-        <View style={{ flexDirection: "row", gap: 16 }}>
+        <Text style={styles.title}>Bonjour {user?.name || ""}</Text>
+        <TouchableOpacity onPress={onLogout}><Text style={styles.logoutLink}>Se déconnecter</Text></TouchableOpacity>
+      </View>
+      <View style={[styles.headerRow, { marginBottom: 16 }]}>
+        <View style={{ flexDirection: "row", gap: 16, flexWrap: "wrap" }}>
           <TouchableOpacity onPress={onOpenMessages}><Text style={styles.link}>Messagerie</Text></TouchableOpacity>
+          <TouchableOpacity onPress={onOpenGroups}><Text style={styles.link}>Groupes</Text></TouchableOpacity>
           <TouchableOpacity onPress={onOpenReports}>
             <Text style={styles.link}>Mes rapports{hasNewReport ? " 🔴" : ""}</Text>
           </TouchableOpacity>
@@ -72,10 +93,14 @@ export default function HomeScreen({ onOpenRide, onOpenEarnings, onOpenMessages,
         ) : null}
         renderItem={({ item }) => (
           <View style={styles.card}>
-            <Text style={styles.addr}>{item.pickupAddress}</Text>
-            <Text style={styles.addr}>{item.destAddress}</Text>
+            <Field label="Date de la course" value={fmtDate(item.scheduledFor || item.createdAt)} />
+            <Field label="Heure de la course" value={fmtTime(item.scheduledFor || item.createdAt)} />
+            <Field label="Nom du client" value={item.client?.name} />
+            <Field label="Adresse de départ" value={item.pickupAddress} />
+            <Field label="Destination" value={item.destAddress} />
+            <Field label="Numéro de vol" value={item.flightNumber} />
+            <Field label="Montant prévu" value={item.fare != null ? `${item.fare} $` : null} />
             <View style={styles.rowBetween}>
-              <Text style={styles.fare}>{item.fare} $</Text>
               <Text style={styles.status}>{item.status}</Text>
             </View>
             {(item.status === "BROADCAST" || item.status === "REQUESTED") && (
@@ -105,6 +130,10 @@ const styles = StyleSheet.create({
   headerRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 12 },
   title: { color: "#edeff3", fontSize: 24, fontWeight: "700" },
   link: { color: "#f5a623" },
+  logoutLink: { color: "#e85d4c", fontWeight: "600" },
+  fieldRow: { flexDirection: "row", justifyContent: "space-between", marginBottom: 4 },
+  fieldLabel: { color: "#8b99b5", fontSize: 12 },
+  fieldValue: { color: "#edeff3", fontSize: 13, fontWeight: "600", flexShrink: 1, textAlign: "right" },
   card: { backgroundColor: "#16233a", borderRadius: 14, padding: 14, marginBottom: 10, borderWidth: 1, borderColor: "#28395a" },
   sectionLabel: { color: "#8b99b5", fontSize: 12, textTransform: "uppercase", marginBottom: 8 },
   scheduleCard: { backgroundColor: "#16233a", borderRadius: 12, padding: 12, marginBottom: 8, borderWidth: 1, borderColor: "#28395a" },

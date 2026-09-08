@@ -33,7 +33,7 @@ router.get("/:id", async (req, res) => {
 
 // Créer une course (Dispatch ou Client)
 router.post("/", requireRole("DISPATCH", "CLIENT"), async (req, res) => {
-  const { pickupAddress, destAddress, distanceKm, fare, driverId, scheduledFor } = req.body;
+  const { pickupAddress, destAddress, distanceKm, fare, driverId, scheduledFor, flightNumber } = req.body;
   if (!pickupAddress || !destAddress || !fare) {
     return res.status(400).json({ error: "Adresse de prise en charge, destination et montant requis." });
   }
@@ -44,11 +44,13 @@ router.post("/", requireRole("DISPATCH", "CLIENT"), async (req, res) => {
       destAddress,
       distanceKm,
       fare,
+      flightNumber: flightNumber || null,
       scheduledFor: scheduledFor ? new Date(scheduledFor) : null,
       clientId: req.user.role === "CLIENT" ? req.user.id : req.body.clientId ?? null,
       driverId: driverId ?? null,
       status: driverId ? "ACCEPTED" : "REQUESTED",
     },
+    include: { client: { select: { id: true, name: true } } },
   });
 
   broadcast(req, "dispatch", "ride:created", ride);
@@ -158,6 +160,19 @@ router.post("/:id/call", async (req, res) => {
   } catch (err) {
     console.error("Erreur Twilio Proxy:", err.message);
     res.status(502).json({ error: "Impossible de créer l'appel masqué pour le moment." });
+  }
+});
+
+// Supprimer une course erronée (Dispatch)
+router.delete("/:id", requireRole("DISPATCH"), async (req, res) => {
+  try {
+    await prisma.$transaction(async (tx) => {
+      await tx.rating.deleteMany({ where: { rideId: req.params.id } });
+      await tx.ride.delete({ where: { id: req.params.id } });
+    });
+    res.status(204).end();
+  } catch (e) {
+    res.status(404).json({ error: "Course introuvable." });
   }
 });
 

@@ -4,6 +4,7 @@ import jwt from "jsonwebtoken";
 // les événements qui le concernent :
 // - DISPATCH rejoint "dispatch"
 // - DRIVER rejoint "drivers" (diffusion générale) + "driver:{id}" (personnel)
+// - CLIENT rejoint "client:{id}" (personnel — messages directs, groupes de discussion)
 // - Tout le monde peut rejoindre "ride:{id}" quand une course est ouverte à l'écran
 export function registerSocketHandlers(io) {
   io.use((socket, next) => {
@@ -24,6 +25,7 @@ export function registerSocketHandlers(io) {
       socket.join("drivers");
       socket.join(`driver:${id}`);
     }
+    if (role === "CLIENT") socket.join(`client:${id}`);
 
     socket.on("ride:watch", (rideId) => socket.join(`ride:${rideId}`));
     socket.on("ride:unwatch", (rideId) => socket.leave(`ride:${rideId}`));
