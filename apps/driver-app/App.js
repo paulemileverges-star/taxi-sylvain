@@ -9,6 +9,7 @@ import MessagesScreen from "./src/screens/MessagesScreen";
 import ReportsScreen from "./src/screens/ReportsScreen";
 import RideChatScreen from "./src/screens/RideChatScreen";
 import { getSocket } from "./src/lib/socket";
+import { playSound } from "./src/lib/sound";
 
 export default function App() {
   const [user, setUser] = useState(null);
@@ -29,9 +30,9 @@ export default function App() {
     getSocket().then((s) => {
       sock = s;
       // Reçoit les diffusions de courses de dernière minute et les affectations directes
-      s.on("ride:broadcast", () => {});
-      s.on("ride:assigned", (ride) => { setActiveRideId(ride.id); setScreen("active"); });
-      s.on("report:ready", () => setNewReport(true));
+      s.on("ride:broadcast", () => playSound("alert"));
+      s.on("ride:assigned", (ride) => { playSound("alert"); setActiveRideId(ride.id); setScreen("active"); });
+      s.on("report:ready", () => { setNewReport(true); playSound("notify"); });
     });
     return () => {
       sock?.off("ride:broadcast");

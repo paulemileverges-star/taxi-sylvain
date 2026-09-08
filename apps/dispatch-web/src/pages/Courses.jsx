@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { api } from "../lib/api.js";
+import { playSound } from "../lib/sound.js";
 
 export default function Courses() {
   const [rides, setRides] = useState([]);
@@ -27,6 +28,7 @@ export default function Courses() {
       });
       setForm({ pickupAddress: "", destAddress: "", fare: "", driverId: "" });
       setShowCreate(false);
+      playSound("action");
       load();
     } catch (e) {
       setError(e.message);
@@ -35,11 +37,13 @@ export default function Courses() {
 
   const assign = async (rideId, driverId) => {
     await api.assignDriver(rideId, driverId || null);
+    playSound("action");
     load();
   };
 
   const broadcastToAll = async (rideId) => {
     await api.broadcastRide(rideId);
+    playSound("action");
     load();
   };
 

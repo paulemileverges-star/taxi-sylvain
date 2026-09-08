@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, Linking } from "react-native";
 import { api } from "../lib/api";
+import { playSound } from "../lib/sound";
 
 export default function BookScreen({ onBooked }) {
   const [pickupAddress, setPickup] = useState("");
@@ -14,6 +15,7 @@ export default function BookScreen({ onBooked }) {
     try {
       // fare estimée ici de façon simplifiée — à remplacer par un vrai calcul (distance x tarif/km)
       const ride = await api.bookRide({ pickupAddress, destAddress, fare: 20 });
+      playSound("action");
       onBooked(ride.id);
     } catch (e) {
       Alert.alert("Erreur", e.message);

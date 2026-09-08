@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useState } from "react";
 import { View, Text, FlatList, TouchableOpacity, StyleSheet, RefreshControl, Alert } from "react-native";
 import { api } from "../lib/api";
+import { playSound } from "../lib/sound";
 
 export default function HomeScreen({ onOpenRide, onOpenEarnings, onOpenMessages, onOpenReports, hasNewReport }) {
   const [rides, setRides] = useState([]);
@@ -25,6 +26,7 @@ export default function HomeScreen({ onOpenRide, onOpenEarnings, onOpenMessages,
   const accept = async (id) => {
     try {
       await api.acceptRide(id);
+      playSound("action");
       onOpenRide(id);
     } catch (e) {
       Alert.alert("Course déjà prise", e.message);
@@ -34,6 +36,7 @@ export default function HomeScreen({ onOpenRide, onOpenEarnings, onOpenMessages,
 
   const refuse = async (id) => {
     await api.refuseRide(id);
+    playSound("action");
     load();
   };
 

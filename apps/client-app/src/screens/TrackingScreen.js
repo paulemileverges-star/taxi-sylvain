@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { View, Text, Image, TouchableOpacity, Linking, Alert, StyleSheet } from "react-native";
 import { api, assetUrl } from "../lib/api";
+import { playSound } from "../lib/sound";
 
 const STATUS_LABEL = {
   REQUESTED: "Recherche d'un chauffeur…",
@@ -27,6 +28,7 @@ export default function TrackingScreen({ rideId, onOpenChat }) {
   const callMasked = async () => {
     try {
       const { proxyNumber } = await api.callMasked(rideId);
+      playSound("action");
       Linking.openURL(`tel:${proxyNumber}`);
     } catch (e) {
       Alert.alert("Appel indisponible", e.message);

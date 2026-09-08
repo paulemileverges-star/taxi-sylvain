@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { View, Text, TextInput, TouchableOpacity, StyleSheet } from "react-native";
 import { api } from "../lib/api";
+import { playSound } from "../lib/sound";
 
 export default function RateScreen({ rideId, onDone }) {
   const [stars, setStars] = useState(5);
@@ -11,6 +12,7 @@ export default function RateScreen({ rideId, onDone }) {
       // toUserId (le chauffeur) doit être récupéré depuis la course — simplifié ici
       await api.rate(rideId, "DRIVER_ID_TO_FILL", stars, comment);
     } finally {
+      playSound("action");
       onDone();
     }
   };

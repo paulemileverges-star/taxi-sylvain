@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { View, Text, TouchableOpacity, StyleSheet, Linking, Alert } from "react-native";
 import { api } from "../lib/api";
+import { playSound } from "../lib/sound";
 
 const NEXT_STATUS = { ACCEPTED: "EN_ROUTE", EN_ROUTE: "STARTED", STARTED: "COMPLETED" };
 const LABEL = { ACCEPTED: "En route pour la course", EN_ROUTE: "Démarrer la course", STARTED: "Terminer la course" };
@@ -21,6 +22,7 @@ export default function ActiveRideScreen({ rideId, onDone, onOpenChat }) {
     if (!next) return;
     const updated = await api.setRideStatus(ride.id, next);
     setRide(updated);
+    playSound("action");
     if (next === "COMPLETED") {
       Alert.alert("Course terminée", "Merci de noter le client dans l'écran suivant (à brancher sur RatingScreen).", [
         { text: "OK", onPress: onDone },
@@ -40,6 +42,7 @@ export default function ActiveRideScreen({ rideId, onDone, onOpenChat }) {
   const callMasked = async () => {
     try {
       const { proxyNumber } = await api.callMasked(ride.id);
+      playSound("action");
       Linking.openURL(`tel:${proxyNumber}`);
     } catch (e) {
       Alert.alert("Appel indisponible", e.message);

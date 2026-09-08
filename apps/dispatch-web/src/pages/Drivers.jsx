@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import { api, assetUrl } from "../lib/api.js";
+import { playSound } from "../lib/sound.js";
 
 const EMPTY_FORM = { name: "", email: "", phone: "", password: "", carModel: "", plate: "" };
 
@@ -17,12 +18,14 @@ export default function Drivers() {
   const uploadPhoto = async (driverId, file) => {
     if (!file) return;
     await api.uploadDriverPhotos(driverId, { photo: file });
+    playSound("action");
     load();
   };
 
   const uploadCarPhoto = async (driverId, file) => {
     if (!file) return;
     await api.uploadDriverPhotos(driverId, { carPhoto: file });
+    playSound("action");
     load();
   };
 
@@ -32,6 +35,7 @@ export default function Drivers() {
       await api.createDriver(form);
       setForm(EMPTY_FORM);
       setShowAdd(false);
+      playSound("action");
       load();
     } catch (e) {
       setError(e.message);

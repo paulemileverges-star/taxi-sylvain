@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from "react";
 import { View, Text, TextInput, TouchableOpacity, ScrollView, StyleSheet } from "react-native";
 import { api } from "../lib/api";
 import { getSocket } from "../lib/socket";
+import { playSound } from "../lib/sound";
 
 export default function MessagesScreen({ user, onBack }) {
   const [messages, setMessages] = useState([]);
@@ -14,7 +15,9 @@ export default function MessagesScreen({ user, onBack }) {
     getSocket().then((s) => {
       sock = s;
       s.on("message:direct", (m) => {
-        if (m.driverId === user.id) setMessages((prev) => [...prev, m]);
+        if (m.driverId !== user.id) return;
+        setMessages((prev) => [...prev, m]);
+        if (m.sender.role !== "DRIVER") playSound("notify");
       });
     });
     return () => sock?.off("message:direct");
@@ -24,6 +27,7 @@ export default function MessagesScreen({ user, onBack }) {
     if (!draft.trim()) return;
     await api.sendDispatchMessage(user.id, draft);
     setDraft("");
+    playSound("action");
   };
 
   return (

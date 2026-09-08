@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from "react";
 import { View, Text, TextInput, TouchableOpacity, ScrollView, StyleSheet } from "react-native";
 import { api } from "../lib/api";
 import { getSocket } from "../lib/socket";
+import { playSound } from "../lib/sound";
 
 export default function ChatScreen({ rideId, onBack }) {
   const [messages, setMessages] = useState([]);
@@ -15,7 +16,9 @@ export default function ChatScreen({ rideId, onBack }) {
       sock = s;
       s.emit("ride:watch", rideId);
       s.on("message:new", (m) => {
-        if (m.rideId === rideId) setMessages((prev) => [...prev, m]);
+        if (m.rideId !== rideId) return;
+        setMessages((prev) => [...prev, m]);
+        if (m.sender.role !== "CLIENT") playSound("notify");
       });
     });
     return () => sock?.off("message:new");
@@ -25,6 +28,7 @@ export default function ChatScreen({ rideId, onBack }) {
     if (!draft.trim()) return;
     await api.sendMessage(rideId, draft);
     setDraft("");
+    playSound("action");
   };
 
   return (

@@ -65,6 +65,7 @@ router.post("/:id/assign", requireRole("DISPATCH"), async (req, res) => {
   });
   if (driverId) broadcast(req, `driver:${driverId}`, "ride:assigned", ride);
   broadcast(req, "dispatch", "ride:updated", ride);
+  broadcast(req, `ride:${ride.id}`, "ride:status", ride);
   res.json(ride);
 });
 
@@ -100,6 +101,7 @@ router.post("/:id/accept", requireRole("DRIVER"), async (req, res) => {
 
   broadcast(req, "dispatch", "ride:updated", result);
   broadcast(req, "drivers", "ride:taken", { id: result.id }); // pour retirer la course chez les autres chauffeurs
+  broadcast(req, `ride:${result.id}`, "ride:status", result);
   res.json(result);
 });
 

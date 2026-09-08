@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import "./App.css";
 import { api } from "./lib/api.js";
 import { getSocket } from "./lib/socket.js";
+import { playSound } from "./lib/sound.js";
 import Login from "./pages/Login.jsx";
 import Dashboard from "./pages/Dashboard.jsx";
 import Courses from "./pages/Courses.jsx";
@@ -30,11 +31,17 @@ export default function App() {
   useEffect(() => {
     if (!user) return;
     const socket = getSocket();
-    socket.on("ride:notification", (n) => setNotifs((prev) => [n.text, ...prev]));
-    socket.on("ride:created", () => setNotifs((prev) => ["Nouvelle course créée.", ...prev]));
+    socket.on("ride:notification", (n) => { setNotifs((prev) => [n.text, ...prev]); playSound("notify"); });
+    socket.on("ride:created", () => { setNotifs((prev) => ["Nouvelle course créée.", ...prev]); playSound("notify"); });
+    socket.on("ride:refused", () => playSound("notify"));
+    socket.on("report:generated", () => playSound("notify"));
+    socket.on("message:direct", (m) => { if (m.sender.role !== "DISPATCH") playSound("notify"); });
     return () => {
       socket.off("ride:notification");
       socket.off("ride:created");
+      socket.off("ride:refused");
+      socket.off("report:generated");
+      socket.off("message:direct");
     };
   }, [user]);
 

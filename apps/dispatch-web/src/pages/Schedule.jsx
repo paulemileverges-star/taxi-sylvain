@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { api } from "../lib/api.js";
+import { playSound } from "../lib/sound.js";
 
 const DAYS = ["Lun", "Mar", "Mer", "Jeu", "Ven", "Sam", "Dim"];
 
@@ -33,6 +34,7 @@ export default function Schedule() {
       await api.createScheduleEntry(form);
       setForm({ driverId: "", label: "", startsAt: "" });
       setShowAdd(false);
+      playSound("action");
       load();
     } catch (e) {
       setError(e.message);
@@ -41,6 +43,7 @@ export default function Schedule() {
 
   const remove = async (id) => {
     await api.deleteScheduleEntry(id);
+    playSound("action");
     load();
   };
 

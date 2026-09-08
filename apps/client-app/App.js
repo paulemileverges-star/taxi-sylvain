@@ -7,6 +7,7 @@ import TrackingScreen from "./src/screens/TrackingScreen";
 import RateScreen from "./src/screens/RateScreen";
 import ChatScreen from "./src/screens/ChatScreen";
 import { getSocket } from "./src/lib/socket";
+import { playSound } from "./src/lib/sound";
 
 export default function App() {
   const [user, setUser] = useState(null);
@@ -27,6 +28,7 @@ export default function App() {
       sock = s;
       s.emit("ride:watch", activeRideId);
       s.on("ride:status", (ride) => {
+        playSound("notify");
         if (ride.status === "COMPLETED") setScreen("rate");
       });
     });

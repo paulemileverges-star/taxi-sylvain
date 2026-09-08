@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { api } from "../lib/api.js";
+import { playSound } from "../lib/sound.js";
 
 export default function Reports() {
   const [report, setReport] = useState(null);
@@ -15,6 +16,7 @@ export default function Reports() {
     try {
       const r = await api.generateWeeklyReport();
       setMessage(`Récap généré pour ${r.count} chauffeur(s) — disponible dans l'app Chauffeur.`);
+      playSound("action");
       load();
     } catch (e) {
       setMessage(e.message);

@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { api } from "../lib/api.js";
 import { getSocket } from "../lib/socket.js";
+import { playSound } from "../lib/sound.js";
 
 export default function Messages() {
   const [drivers, setDrivers] = useState([]);
@@ -38,6 +39,7 @@ export default function Messages() {
     if (!draft.trim() || !activeDriverId) return;
     await api.sendDirectMessage(activeDriverId, draft);
     setDraft("");
+    playSound("action");
   };
 
   const activeDriver = drivers.find((d) => d.id === activeDriverId);
