@@ -50,6 +50,11 @@ router.post("/", requireRole("DISPATCH"), async (req, res) => {
   res.status(201).json(driver);
 });
 
+router.delete("/:id", requireRole("DISPATCH"), async (req, res) => {
+  await prisma.user.delete({ where: { id: req.params.id } });
+  res.status(204).end();
+});
+
 // Recherche dans les bases clients / chauffeurs / courses (besoin #14)
 router.get("/search", requireRole("DISPATCH"), async (req, res) => {
   const q = String(req.query.q || "");
