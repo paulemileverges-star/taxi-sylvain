@@ -1,12 +1,8 @@
-import React, { useEffect, useRef } from "react";
-import { WebView } from "react-native-webview";
-
 const MONTREAL_CENTER = [45.5019, -73.5674];
 
-// Carte Leaflet + OpenStreetMap embarquée dans une WebView (aucune clé API requise,
-// cohérent avec la carte du Dispatch). La position se met à jour via injectJavaScript
-// plutôt que postMessage pour éviter les différences de bridge Android/iOS.
-const HTML = `
+// Carte Leaflet + OpenStreetMap (aucune clé API requise), partagée entre la variante
+// WebView (mobile) et la variante iframe (web) de DriverMap.
+export const MAP_HTML = `
 <!DOCTYPE html>
 <html>
 <head>
@@ -39,27 +35,3 @@ const HTML = `
 </body>
 </html>
 `;
-
-export default function DriverMap({ lat, lng }) {
-  const webviewRef = useRef(null);
-  const ready = useRef(false);
-
-  useEffect(() => {
-    if (lat == null || lng == null || !ready.current) return;
-    webviewRef.current?.injectJavaScript(`window.updatePosition(${lat}, ${lng}); true;`);
-  }, [lat, lng]);
-
-  return (
-    <WebView
-      ref={webviewRef}
-      source={{ html: HTML }}
-      style={{ flex: 1, alignSelf: "stretch", backgroundColor: "#1d2c46" }}
-      onLoadEnd={() => {
-        ready.current = true;
-        if (lat != null && lng != null) {
-          webviewRef.current?.injectJavaScript(`window.updatePosition(${lat}, ${lng}); true;`);
-        }
-      }}
-    />
-  );
-}
