@@ -2,7 +2,7 @@ import { Router } from "express";
 import jwt from "jsonwebtoken";
 import { prisma } from "../lib/prisma.js";
 import { requireAuth, requireRole } from "../middleware/auth.js";
-import { generateWeeklyReports, previousWeekRange } from "../jobs/weeklyReport.js";
+import { generateWeeklyReports, previousWeekRange, mondayOf } from "../jobs/weeklyReport.js";
 import { streamReportPdf, streamReportXlsx } from "../lib/exportReport.js";
 
 const router = Router();
@@ -46,6 +46,19 @@ router.get("/weekly", requireRole("DISPATCH"), async (req, res) => {
   }
 
   res.json({ range, byDriver: Object.values(byDriver) });
+});
+
+// Revenus de la semaine en cours pour le chauffeur connecté — "Mes revenus". Calculé en direct
+// (contrairement à /mine, qui liste les récaps hebdomadaires figés des semaines précédentes),
+// pour qu'un chauffeur qui vient de se créer un compte voie bien 0 $ tant qu'il n'a rien fait.
+router.get("/my-earnings", requireRole("DRIVER"), async (req, res) => {
+  const weekStart = mondayOf(new Date());
+  const rides = await prisma.ride.findMany({
+    where: { driverId: req.user.id, status: "COMPLETED", completedAt: { gte: weekStart } },
+  });
+  const totalFare = rides.reduce((sum, r) => sum + r.fare, 0);
+  const royaltyDue = rides.reduce((sum, r) => sum + r.fare * r.royaltyRate, 0);
+  res.json({ weekStart, rideCount: rides.length, totalFare, royaltyDue });
 });
 
 // Historique des récaps hebdomadaires figés du chauffeur connecté — "Mes rapports" (besoin #14)

@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { api, assetUrl } from "../lib/api.js";
 import { playSound } from "../lib/sound.js";
+import { getSocket } from "../lib/socket.js";
 
 const EMPTY_FORM = { name: "", email: "", phone: "", password: "", carModel: "", plate: "" };
 
@@ -14,6 +15,20 @@ export default function Drivers() {
 
   const load = () => api.listDrivers().then(setDrivers);
   useEffect(() => { load(); }, []);
+
+  useEffect(() => {
+    const socket = getSocket();
+    const setOnline = (driverId, online) =>
+      setDrivers((prev) => prev.map((d) => (d.id === driverId ? { ...d, online } : d)));
+    const onOnline = ({ driverId }) => setOnline(driverId, true);
+    const onOffline = ({ driverId }) => setOnline(driverId, false);
+    socket.on("driver:online", onOnline);
+    socket.on("driver:offline", onOffline);
+    return () => {
+      socket.off("driver:online", onOnline);
+      socket.off("driver:offline", onOffline);
+    };
+  }, []);
 
   const uploadPhoto = async (driverId, file) => {
     if (!file) return;
@@ -64,6 +79,13 @@ export default function Drivers() {
             <div style={{ width: 44, height: 44, borderRadius: 8, overflow: "hidden", background: "#1d2c46", flexShrink: 0 }}>
               {d.carPhotoUrl && <img src={assetUrl(d.carPhotoUrl)} alt="véhicule" style={{ width: "100%", height: "100%", objectFit: "cover" }} />}
             </div>
+            <span
+              title={d.online ? "En ligne" : "Hors ligne"}
+              style={{
+                width: 10, height: 10, borderRadius: "50%", flexShrink: 0,
+                background: d.online ? "#3fa796" : "#e85d4c",
+              }}
+            />
             <span>{d.name} — {d.carModel} · {d.plate}</span>
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>

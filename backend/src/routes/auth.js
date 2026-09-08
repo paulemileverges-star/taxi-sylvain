@@ -2,6 +2,7 @@ import { Router } from "express";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import { prisma } from "../lib/prisma.js";
+import { requireAuth } from "../middleware/auth.js";
 
 const router = Router();
 
@@ -33,6 +34,25 @@ router.post("/login", async (req, res) => {
 
   const token = signToken(user);
   res.json({ token, user: publicUser(user) });
+});
+
+// Changement de mot de passe (besoin #6) — pour chauffeur, client ou dispatch, depuis l'app.
+router.post("/change-password", requireAuth, async (req, res) => {
+  const { currentPassword, newPassword } = req.body;
+  if (!currentPassword || !newPassword) {
+    return res.status(400).json({ error: "Mot de passe actuel et nouveau mot de passe requis." });
+  }
+  if (newPassword.length < 6) {
+    return res.status(400).json({ error: "Le nouveau mot de passe doit contenir au moins 6 caractères." });
+  }
+
+  const user = await prisma.user.findUnique({ where: { id: req.user.id } });
+  const valid = await bcrypt.compare(currentPassword, user.passwordHash);
+  if (!valid) return res.status(401).json({ error: "Mot de passe actuel incorrect." });
+
+  const passwordHash = await bcrypt.hash(newPassword, 10);
+  await prisma.user.update({ where: { id: user.id }, data: { passwordHash } });
+  res.json({ ok: true });
 });
 
 function signToken(user) {

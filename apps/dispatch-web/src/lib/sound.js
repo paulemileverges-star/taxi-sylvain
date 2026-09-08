@@ -25,16 +25,16 @@ function tone(audioCtx, freq, startTime, duration, gainValue) {
 
 const PATTERNS = {
   notify: (audioCtx, t) => {
-    tone(audioCtx, 880, t, 0.11, 0.18);
-    tone(audioCtx, 1175, t + 0.13, 0.15, 0.18);
+    tone(audioCtx, 880, t, 0.11, 0.45);
+    tone(audioCtx, 1175, t + 0.13, 0.15, 0.45);
   },
   action: (audioCtx, t) => {
-    tone(audioCtx, 660, t, 0.07, 0.14);
+    tone(audioCtx, 660, t, 0.07, 0.35);
   },
   alert: (audioCtx, t) => {
-    tone(audioCtx, 988, t, 0.09, 0.2);
-    tone(audioCtx, 988, t + 0.15, 0.09, 0.2);
-    tone(audioCtx, 988, t + 0.3, 0.13, 0.2);
+    tone(audioCtx, 988, t, 0.09, 0.5);
+    tone(audioCtx, 988, t + 0.15, 0.09, 0.5);
+    tone(audioCtx, 988, t + 0.3, 0.13, 0.5);
   },
 };
 

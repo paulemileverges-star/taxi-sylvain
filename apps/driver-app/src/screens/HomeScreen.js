@@ -20,7 +20,7 @@ function Field({ label, value }) {
   );
 }
 
-export default function HomeScreen({ user, onOpenRide, onOpenEarnings, onOpenMessages, onOpenReports, onOpenGroups, onLogout, hasNewReport }) {
+export default function HomeScreen({ user, onOpenRide, onOpenEarnings, onOpenMessages, onOpenReports, onOpenGroups, onOpenChangePassword, onLogout, hasNewReport }) {
   const [rides, setRides] = useState([]);
   const [schedule, setSchedule] = useState([]);
   const [refreshing, setRefreshing] = useState(false);
@@ -67,6 +67,7 @@ export default function HomeScreen({ user, onOpenRide, onOpenEarnings, onOpenMes
         <View style={{ flexDirection: "row", gap: 16, flexWrap: "wrap" }}>
           <TouchableOpacity onPress={onOpenMessages}><Text style={styles.link}>Messagerie</Text></TouchableOpacity>
           <TouchableOpacity onPress={onOpenGroups}><Text style={styles.link}>Groupes</Text></TouchableOpacity>
+          <TouchableOpacity onPress={onOpenChangePassword}><Text style={styles.link}>Mot de passe</Text></TouchableOpacity>
           <TouchableOpacity onPress={onOpenReports}>
             <Text style={styles.link}>Mes rapports{hasNewReport ? " 🔴" : ""}</Text>
           </TouchableOpacity>

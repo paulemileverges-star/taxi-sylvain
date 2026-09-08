@@ -1,7 +1,23 @@
 import { Router } from "express";
+import bcrypt from "bcryptjs";
+import crypto from "crypto";
 import { prisma } from "../lib/prisma.js";
 import { requireAuth, requireRole } from "../middleware/auth.js";
 import { isConfigured as isCallMaskingConfigured, getOrCreateCallSession } from "../lib/twilioProxy.js";
+
+// Réservation par téléphone (besoin #5) : le Dispatch peut créer une course pour un client sans
+// compte — on retrouve son compte existant par téléphone, ou on lui en crée un à la volée.
+async function findOrCreateClientByPhone(name, phone) {
+  const existing = await prisma.user.findFirst({ where: { role: "CLIENT", phone } });
+  if (existing) return existing.id;
+
+  const passwordHash = await bcrypt.hash(crypto.randomBytes(16).toString("hex"), 10);
+  const email = `client-${crypto.randomBytes(6).toString("hex")}@reservation.taxisylvain.local`;
+  const created = await prisma.user.create({
+    data: { role: "CLIENT", name, phone, email, passwordHash },
+  });
+  return created.id;
+}
 
 const router = Router();
 router.use(requireAuth);
@@ -33,9 +49,14 @@ router.get("/:id", async (req, res) => {
 
 // Créer une course (Dispatch ou Client)
 router.post("/", requireRole("DISPATCH", "CLIENT"), async (req, res) => {
-  const { pickupAddress, destAddress, distanceKm, fare, driverId, scheduledFor, flightNumber } = req.body;
+  const { pickupAddress, destAddress, distanceKm, fare, driverId, scheduledFor, flightNumber, clientName, clientPhone } = req.body;
   if (!pickupAddress || !destAddress || !fare) {
     return res.status(400).json({ error: "Adresse de prise en charge, destination et montant requis." });
+  }
+
+  let clientId = req.user.role === "CLIENT" ? req.user.id : req.body.clientId ?? null;
+  if (!clientId && req.user.role === "DISPATCH" && clientName && clientPhone) {
+    clientId = await findOrCreateClientByPhone(clientName, clientPhone);
   }
 
   const ride = await prisma.ride.create({
@@ -46,7 +67,7 @@ router.post("/", requireRole("DISPATCH", "CLIENT"), async (req, res) => {
       fare,
       flightNumber: flightNumber || null,
       scheduledFor: scheduledFor ? new Date(scheduledFor) : null,
-      clientId: req.user.role === "CLIENT" ? req.user.id : req.body.clientId ?? null,
+      clientId,
       driverId: driverId ?? null,
       status: driverId ? "ACCEPTED" : "REQUESTED",
     },

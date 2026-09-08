@@ -3,7 +3,7 @@ import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, Linking } f
 import { api } from "../lib/api";
 import { playSound } from "../lib/sound";
 
-export default function BookScreen({ user, onBooked, onOpenGroups, onLogout }) {
+export default function BookScreen({ user, onBooked, onOpenGroups, onOpenChangePassword, onLogout }) {
   const [pickupAddress, setPickup] = useState("");
   const [destAddress, setDest] = useState("");
   const [flightNumber, setFlightNumber] = useState("");
@@ -29,9 +29,10 @@ export default function BookScreen({ user, onBooked, onOpenGroups, onLogout }) {
         <Text style={styles.title}>Bonjour {user?.name || ""}</Text>
         <TouchableOpacity onPress={onLogout}><Text style={styles.logoutLink}>Se déconnecter</Text></TouchableOpacity>
       </View>
-      <TouchableOpacity onPress={onOpenGroups} style={{ marginBottom: 16 }}>
-        <Text style={styles.link}>Groupes</Text>
-      </TouchableOpacity>
+      <View style={{ flexDirection: "row", gap: 16, marginBottom: 16 }}>
+        <TouchableOpacity onPress={onOpenGroups}><Text style={styles.link}>Groupes</Text></TouchableOpacity>
+        <TouchableOpacity onPress={onOpenChangePassword}><Text style={styles.link}>Mot de passe</Text></TouchableOpacity>
+      </View>
       <Text style={styles.subtitle}>Où allez-vous ?</Text>
       <TextInput style={styles.input} placeholder="Adresse de prise en charge" placeholderTextColor="#8b99b5" value={pickupAddress} onChangeText={setPickup} />
       <TextInput style={styles.input} placeholder="Destination" placeholderTextColor="#8b99b5" value={destAddress} onChangeText={setDest} />

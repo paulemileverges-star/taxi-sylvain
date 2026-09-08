@@ -34,7 +34,8 @@ export default function Courses() {
   const [drivers, setDrivers] = useState([]);
   const [clients, setClients] = useState([]);
   const [showCreate, setShowCreate] = useState(false);
-  const [form, setForm] = useState({ pickupAddress: "", destAddress: "", fare: "", driverId: "", clientId: "", flightNumber: "" });
+  const EMPTY_FORM = { pickupAddress: "", destAddress: "", fare: "", driverId: "", clientId: "", flightNumber: "", clientName: "", clientPhone: "" };
+  const [form, setForm] = useState(EMPTY_FORM);
   const [error, setError] = useState("");
 
   const load = async () => {
@@ -54,10 +55,12 @@ export default function Courses() {
         destAddress: form.destAddress,
         fare: Number(form.fare),
         driverId: form.driverId || undefined,
-        clientId: form.clientId || undefined,
+        clientId: form.clientId && form.clientId !== "__new__" ? form.clientId : undefined,
+        clientName: form.clientId === "__new__" ? form.clientName : undefined,
+        clientPhone: form.clientId === "__new__" ? form.clientPhone : undefined,
         flightNumber: form.flightNumber || undefined,
       });
-      setForm({ pickupAddress: "", destAddress: "", fare: "", driverId: "", clientId: "", flightNumber: "" });
+      setForm(EMPTY_FORM);
       setShowCreate(false);
       playSound("action");
       load();
@@ -138,9 +141,21 @@ export default function Courses() {
             <input className="input" value={form.fare} onChange={(e) => setForm({ ...form, fare: e.target.value })} />
             <label style={{ display: "block", marginTop: 8 }}>Client (optionnel)</label>
             <select className="input" value={form.clientId} onChange={(e) => setForm({ ...form, clientId: e.target.value })}>
-              <option value="">Non spécifié (réservation par téléphone)</option>
+              <option value="">Non spécifié</option>
               {clients.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+              <option value="__new__">+ Nouveau client…</option>
             </select>
+            {form.clientId === "__new__" && (
+              <>
+                <label style={{ display: "block", marginTop: 8 }}>Nom du nouveau client</label>
+                <input className="input" value={form.clientName} onChange={(e) => setForm({ ...form, clientName: e.target.value })} />
+                <label style={{ display: "block", marginTop: 8 }}>Téléphone du nouveau client</label>
+                <input className="input" value={form.clientPhone} onChange={(e) => setForm({ ...form, clientPhone: e.target.value })} placeholder="+15145551234" />
+                <div style={{ color: "var(--muted)", fontSize: 12, marginTop: 4 }}>
+                  Un compte client sera créé automatiquement (ou réutilisé si ce numéro existe déjà).
+                </div>
+              </>
+            )}
             <label style={{ display: "block", marginTop: 8 }}>Affecter à un chauffeur</label>
             <select className="input" value={form.driverId} onChange={(e) => setForm({ ...form, driverId: e.target.value })}>
               <option value="">Non assigné</option>

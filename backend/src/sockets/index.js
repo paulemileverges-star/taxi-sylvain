@@ -1,4 +1,5 @@
 import jwt from "jsonwebtoken";
+import { markDriverOnline, markDriverOffline } from "../lib/onlineDrivers.js";
 
 // Chaque utilisateur rejoint des "rooms" selon son rôle, pour recevoir uniquement
 // les événements qui le concernent :
@@ -26,6 +27,14 @@ export function registerSocketHandlers(io) {
       socket.join(`driver:${id}`);
     }
     if (role === "CLIENT") socket.join(`client:${id}`);
+
+    // Statut en ligne/hors ligne des chauffeurs, affiché au Dispatch (point vert/rouge).
+    if (role === "DRIVER") {
+      if (markDriverOnline(id)) io.to("dispatch").emit("driver:online", { driverId: id });
+      socket.on("disconnect", () => {
+        if (markDriverOffline(id)) io.to("dispatch").emit("driver:offline", { driverId: id });
+      });
+    }
 
     socket.on("ride:watch", (rideId) => socket.join(`ride:${rideId}`));
     socket.on("ride:unwatch", (rideId) => socket.leave(`ride:${rideId}`));

@@ -9,11 +9,11 @@ let trackedKey = null;
 // (et le client, sur sa propre course) puissent le suivre en direct sur la carte.
 export async function startTrackingLocation(rideId, rideStatus) {
   const key = `${rideId}:${rideStatus}`;
-  if (trackedKey === key && watcher) return;
+  if (trackedKey === key && watcher) return true;
   await stopTrackingLocation();
 
   const { status: permission } = await Location.requestForegroundPermissionsAsync();
-  if (permission !== "granted") return;
+  if (permission !== "granted") return false;
 
   trackedKey = key;
   watcher = await Location.watchPositionAsync(
@@ -32,6 +32,7 @@ export async function startTrackingLocation(rideId, rideStatus) {
       }
     }
   );
+  return true;
 }
 
 export async function stopTrackingLocation() {

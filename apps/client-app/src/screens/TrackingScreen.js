@@ -2,6 +2,8 @@ import React, { useEffect, useState } from "react";
 import { View, Text, Image, TouchableOpacity, Linking, Alert, StyleSheet } from "react-native";
 import { api, assetUrl } from "../lib/api";
 import { playSound } from "../lib/sound";
+import { getSocket } from "../lib/socket";
+import DriverMap from "../components/DriverMap";
 
 const STATUS_LABEL = {
   REQUESTED: "Recherche d'un chauffeur…",
@@ -31,6 +33,7 @@ function Field({ label, value }) {
 
 export default function TrackingScreen({ rideId, onOpenChat, onBack }) {
   const [ride, setRide] = useState(null);
+  const [driverPos, setDriverPos] = useState(null);
 
   useEffect(() => {
     const load = async () => {
@@ -40,6 +43,19 @@ export default function TrackingScreen({ rideId, onOpenChat, onBack }) {
     load();
     const interval = setInterval(load, 4000); // repli simple si le socket n'est pas branché
     return () => clearInterval(interval);
+  }, [rideId]);
+
+  // Position GPS du chauffeur en direct pendant qu'il est en route ou en course
+  // (le room ride:{id} est déjà rejoint côté App.js via ride:watch).
+  useEffect(() => {
+    let sock;
+    getSocket().then((s) => {
+      sock = s;
+      s.on("driver:location", (p) => {
+        if (p.rideId === rideId) setDriverPos({ lat: p.lat, lng: p.lng });
+      });
+    });
+    return () => sock?.off("driver:location");
   }, [rideId]);
 
   const callMasked = async () => {
@@ -58,7 +74,13 @@ export default function TrackingScreen({ rideId, onOpenChat, onBack }) {
         {onBack && <TouchableOpacity onPress={onBack}><Text style={styles.link}>← Retour</Text></TouchableOpacity>}
         <Text style={styles.title}>{ride ? STATUS_LABEL[ride.status] : "Chargement…"}</Text>
       </View>
-      <View style={styles.mapPlaceholder}><Text style={{ color: "#8b99b5" }}>Suivi en temps réel</Text></View>
+      <View style={styles.mapPlaceholder}>
+        {driverPos ? (
+          <DriverMap lat={driverPos.lat} lng={driverPos.lng} />
+        ) : (
+          <Text style={{ color: "#8b99b5" }}>En attente de la position du chauffeur…</Text>
+        )}
+      </View>
       {ride && (
         <View style={styles.card}>
           <Field label="Date de la course" value={fmtDate(ride.scheduledFor || ride.createdAt)} />
@@ -106,7 +128,7 @@ const styles = StyleSheet.create({
   headerRow: { flexDirection: "row", alignItems: "center", gap: 12, marginBottom: 12 },
   link: { color: "#f5a623" },
   title: { color: "#edeff3", fontSize: 20, fontWeight: "700" },
-  mapPlaceholder: { height: 180, backgroundColor: "#1d2c46", borderRadius: 14, alignItems: "center", justifyContent: "center", marginBottom: 14 },
+  mapPlaceholder: { height: 180, backgroundColor: "#1d2c46", borderRadius: 14, alignItems: "center", justifyContent: "center", marginBottom: 14, overflow: "hidden" },
   fieldRow: { flexDirection: "row", justifyContent: "space-between", marginBottom: 6 },
   fieldLabel: { color: "#8b99b5", fontSize: 12 },
   fieldValue: { color: "#edeff3", fontSize: 13, fontWeight: "600", flexShrink: 1, textAlign: "right" },

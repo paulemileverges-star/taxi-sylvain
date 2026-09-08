@@ -39,7 +39,14 @@ export default function ActiveRideScreen({ rideId, onDone, onOpenChat, onOpenMes
   // destination ; s'arrête automatiquement en dehors de ces statuts ou en quittant l'écran.
   useEffect(() => {
     if (ride && TRACKED_STATUSES.includes(ride.status)) {
-      startTrackingLocation(rideId, ride.status);
+      startTrackingLocation(rideId, ride.status).then((granted) => {
+        if (!granted) {
+          Alert.alert(
+            "Position désactivée",
+            "Le Dispatch et le client ne peuvent pas suivre votre déplacement sans l'accès à votre position. Activez la localisation pour Taxi Sylvain dans les réglages de votre téléphone."
+          );
+        }
+      });
     } else {
       stopTrackingLocation();
     }

@@ -13,6 +13,7 @@ import Reports from "./pages/Reports.jsx";
 import Messages from "./pages/Messages.jsx";
 import Groups from "./pages/Groups.jsx";
 import LiveMap from "./pages/LiveMap.jsx";
+import ChangePasswordModal from "./components/ChangePasswordModal.jsx";
 
 const NAV = [
   { key: "dashboard", label: "Tableau de bord" },
@@ -33,6 +34,7 @@ export default function App() {
   });
   const [screen, setScreen] = useState("dashboard");
   const [notifs, setNotifs] = useState([]);
+  const [showChangePassword, setShowChangePassword] = useState(false);
 
   useEffect(() => {
     if (!user) return;
@@ -89,6 +91,7 @@ export default function App() {
         </div>
         <div style={{ padding: "12px 20px", borderTop: "1px solid var(--border)" }}>
           <div style={{ fontSize: 13, color: "var(--muted)", marginBottom: 8 }}>{user.name}</div>
+          <button className="btn outline" style={{ width: "100%", marginBottom: 8 }} onClick={() => setShowChangePassword(true)}>Changer le mot de passe</button>
           <button className="btn outline" style={{ width: "100%" }} onClick={logout}>Se déconnecter</button>
         </div>
       </div>
@@ -103,6 +106,7 @@ export default function App() {
         {screen === "messages" && <Messages />}
         {screen === "groups" && <Groups />}
       </div>
+      {showChangePassword && <ChangePasswordModal onClose={() => setShowChangePassword(false)} />}
     </div>
   );
 }

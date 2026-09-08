@@ -26,6 +26,7 @@ export function assetUrl(relativePath) {
 
 export const api = {
   login: (email, password) => request("/auth/login", { method: "POST", body: { email, password } }),
+  changePassword: (currentPassword, newPassword) => request("/auth/change-password", { method: "POST", body: { currentPassword, newPassword } }),
   listRides: () => request("/rides"),
   createRide: (payload) => request("/rides", { method: "POST", body: payload }),
   assignDriver: (rideId, driverId) => request(`/rides/${rideId}/assign`, { method: "POST", body: { driverId } }),

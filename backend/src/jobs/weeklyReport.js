@@ -1,6 +1,6 @@
 import { prisma } from "../lib/prisma.js";
 
-function mondayOf(date) {
+export function mondayOf(date) {
   const d = new Date(date);
   const day = d.getDay() || 7;
   d.setHours(0, 0, 0, 0);

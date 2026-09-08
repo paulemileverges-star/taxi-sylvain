@@ -6,6 +6,7 @@ import { fileURLToPath } from "url";
 import { prisma } from "../lib/prisma.js";
 import { requireAuth, requireRole } from "../middleware/auth.js";
 import { deleteUserCascade } from "../lib/deleteUser.js";
+import { getOnlineDriverIds } from "../lib/onlineDrivers.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const uploadsDir = path.join(__dirname, "..", "..", "uploads");
@@ -30,7 +31,8 @@ router.get("/", requireRole("DISPATCH"), async (req, res) => {
     where: { role: "DRIVER" },
     select: { id: true, name: true, carModel: true, plate: true, ratingAvg: true, photoUrl: true, carPhotoUrl: true },
   });
-  res.json(drivers);
+  const onlineIds = getOnlineDriverIds();
+  res.json(drivers.map((d) => ({ ...d, online: onlineIds.has(d.id) })));
 });
 
 // Créer un compte chauffeur depuis la console Dispatch

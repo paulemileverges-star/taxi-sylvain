@@ -24,6 +24,7 @@ export async function reportDownloadUrl(format, weekStart, weekEnd) {
 
 export const api = {
   login: (email, password) => request("/auth/login", { method: "POST", body: { email, password } }),
+  changePassword: (currentPassword, newPassword) => request("/auth/change-password", { method: "POST", body: { currentPassword, newPassword } }),
   myRides: () => request("/rides"),
   mySchedule: () => request("/schedule"),
   acceptRide: (id) => request(`/rides/${id}/accept`, { method: "POST" }),
@@ -35,6 +36,7 @@ export const api = {
   dispatchMessages: (driverId) => request(`/messages/direct/${driverId}`),
   sendDispatchMessage: (driverId, text) => request(`/messages/direct/${driverId}`, { method: "POST", body: { text } }),
   myReports: () => request("/reports/mine"),
+  myEarnings: () => request("/reports/my-earnings"),
   rate: (rideId, toUserId, stars, comment) => request(`/ratings/${rideId}`, { method: "POST", body: { toUserId, stars, comment } }),
   listConversations: () => request("/conversations"),
   conversationMessages: (id) => request(`/conversations/${id}/messages`),

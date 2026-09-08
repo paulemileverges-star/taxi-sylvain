@@ -1,20 +1,29 @@
-import React from "react";
-import { View, Text, TouchableOpacity, StyleSheet } from "react-native";
+import React, { useEffect, useState } from "react";
+import { View, Text, TouchableOpacity, StyleSheet, ActivityIndicator } from "react-native";
+import { api } from "../lib/api";
 
-// NOTE : ceci affiche des données d'exemple. À brancher sur une route dédiée
-// GET /api/reports/weekly?driverId=moi (déjà présente côté backend, filtrée par chauffeur à ajouter).
 export default function EarningsScreen({ onBack }) {
+  const [earnings, setEarnings] = useState(null);
+
+  useEffect(() => {
+    api.myEarnings().then(setEarnings).catch(() => setEarnings({ totalFare: 0, royaltyDue: 0, rideCount: 0 }));
+  }, []);
+
   return (
     <View style={{ flex: 1, padding: 16 }}>
       <TouchableOpacity onPress={onBack}><Text style={{ color: "#8b99b5", marginBottom: 12 }}>← Retour</Text></TouchableOpacity>
       <Text style={styles.title}>Mes revenus</Text>
-      <View style={styles.card}>
-        <Text style={styles.label}>Total gagné cette semaine</Text>
-        <Text style={styles.amount}>1 240,00 $</Text>
-        <View style={styles.divider} />
-        <Text style={styles.label}>Redevance Taxi Sylvain (10 %)</Text>
-        <Text style={[styles.amount, { color: "#f5a623", fontSize: 20 }]}>124,00 $</Text>
-      </View>
+      {!earnings ? (
+        <ActivityIndicator color="#f5a623" />
+      ) : (
+        <View style={styles.card}>
+          <Text style={styles.label}>Total gagné cette semaine ({earnings.rideCount} course{earnings.rideCount === 1 ? "" : "s"})</Text>
+          <Text style={styles.amount}>{earnings.totalFare.toFixed(2)} $</Text>
+          <View style={styles.divider} />
+          <Text style={styles.label}>Redevance Taxi Sylvain</Text>
+          <Text style={[styles.amount, { color: "#f5a623", fontSize: 20 }]}>{earnings.royaltyDue.toFixed(2)} $</Text>
+        </View>
+      )}
     </View>
   );
 }

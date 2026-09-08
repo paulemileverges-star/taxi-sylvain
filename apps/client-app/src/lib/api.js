@@ -22,6 +22,7 @@ async function request(path, { method = "GET", body } = {}) {
 
 export const api = {
   login: (email, password) => request("/auth/login", { method: "POST", body: { email, password } }),
+  changePassword: (currentPassword, newPassword) => request("/auth/change-password", { method: "POST", body: { currentPassword, newPassword } }),
   myRides: () => request("/rides"),
   acceptRide: (id) => request(`/rides/${id}/accept`, { method: "POST" }),
   refuseRide: (id) => request(`/rides/${id}/refuse`, { method: "POST" }),
