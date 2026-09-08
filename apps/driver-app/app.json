@@ -5,8 +5,17 @@
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
+    "splash": {
+      "image": "./assets/icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#0F1B2D"
+    },
     "android": {
-      "package": "com.taxisylvain.driver"
+      "package": "com.taxisylvain.driver",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/icon.png",
+        "backgroundColor": "#0F1B2D"
+      }
     },
     "ios": {
       "bundleIdentifier": "com.taxisylvain.driver"

@@ -5,7 +5,26 @@
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
-    "android": { "package": "com.taxisylvain.client" },
-    "ios": { "bundleIdentifier": "com.taxisylvain.client" }
+    "splash": {
+      "image": "./assets/icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#0F1B2D"
+    },
+    "android": {
+      "package": "com.taxisylvain.client",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/icon.png",
+        "backgroundColor": "#0F1B2D"
+      }
+    },
+    "ios": {
+      "bundleIdentifier": "com.taxisylvain.client"
+    },
+    "extra": {
+      "eas": {
+        "projectId": "9f276dbe-760d-4892-bbc5-7b1987a358d5"
+      }
+    },
+    "owner": "taxisylvains-team"
   }
 }
