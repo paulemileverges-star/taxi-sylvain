@@ -3,20 +3,30 @@ import { View, Text, TextInput, TouchableOpacity, StyleSheet, Linking } from "re
 import { api } from "../lib/api";
 import { playSound } from "../lib/sound";
 import { showAlert } from "../lib/alert";
+import AddressInput from "../components/AddressInput";
 
 export default function BookScreen({ user, onBooked, onOpenGroups, onOpenChangePassword, onLogout }) {
-  const [pickupAddress, setPickup] = useState("");
-  const [destAddress, setDest] = useState("");
+  const [pickup, setPickup] = useState({ address: "", lat: null, lng: null });
+  const [dest, setDest] = useState({ address: "", lat: null, lng: null });
   const [flightNumber, setFlightNumber] = useState("");
 
   const book = async () => {
-    if (!pickupAddress.trim() || !destAddress.trim()) {
+    if (!pickup.address.trim() || !dest.address.trim()) {
       showAlert("Adresses requises", "Merci d'indiquer la prise en charge et la destination.");
       return;
     }
     try {
       // fare estimée ici de façon simplifiée — à remplacer par un vrai calcul (distance x tarif/km)
-      const ride = await api.bookRide({ pickupAddress, destAddress, fare: 20, flightNumber: flightNumber || undefined });
+      const ride = await api.bookRide({
+        pickupAddress: pickup.address,
+        pickupLat: pickup.lat ?? undefined,
+        pickupLng: pickup.lng ?? undefined,
+        destAddress: dest.address,
+        destLat: dest.lat ?? undefined,
+        destLng: dest.lng ?? undefined,
+        fare: 20,
+        flightNumber: flightNumber || undefined,
+      });
       playSound("action");
       onBooked(ride.id);
     } catch (e) {
@@ -35,8 +45,8 @@ export default function BookScreen({ user, onBooked, onOpenGroups, onOpenChangeP
         <TouchableOpacity onPress={onOpenChangePassword}><Text style={styles.link}>Mot de passe</Text></TouchableOpacity>
       </View>
       <Text style={styles.subtitle}>Où allez-vous ?</Text>
-      <TextInput style={styles.input} placeholder="Adresse de prise en charge" placeholderTextColor="#8b99b5" value={pickupAddress} onChangeText={setPickup} />
-      <TextInput style={styles.input} placeholder="Destination" placeholderTextColor="#8b99b5" value={destAddress} onChangeText={setDest} />
+      <AddressInput placeholder="Adresse de prise en charge" value={pickup.address} onChange={setPickup} />
+      <AddressInput placeholder="Destination" value={dest.address} onChange={setDest} />
       <TextInput style={styles.input} placeholder="Numéro de vol (optionnel)" placeholderTextColor="#8b99b5" value={flightNumber} onChangeText={setFlightNumber} />
       <TouchableOpacity style={styles.primaryBtn} onPress={book}>
         <Text style={styles.primaryBtnText}>Réserver dans l'app</Text>

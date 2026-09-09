@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { api } from "../lib/api.js";
 import { playSound } from "../lib/sound.js";
+import AddressInput from "../components/AddressInput.jsx";
 
 const STATUS_LABEL = {
   REQUESTED: "Demandée",
@@ -34,7 +35,11 @@ export default function Courses() {
   const [drivers, setDrivers] = useState([]);
   const [clients, setClients] = useState([]);
   const [showCreate, setShowCreate] = useState(false);
-  const EMPTY_FORM = { pickupAddress: "", destAddress: "", fare: "", driverId: "", clientId: "", flightNumber: "", clientName: "", clientPhone: "" };
+  const EMPTY_FORM = {
+    pickupAddress: "", pickupLat: null, pickupLng: null,
+    destAddress: "", destLat: null, destLng: null,
+    fare: "", driverId: "", clientId: "", flightNumber: "", clientName: "", clientPhone: "",
+  };
   const [form, setForm] = useState(EMPTY_FORM);
   const [error, setError] = useState("");
 
@@ -52,7 +57,11 @@ export default function Courses() {
     try {
       await api.createRide({
         pickupAddress: form.pickupAddress,
+        pickupLat: form.pickupLat ?? undefined,
+        pickupLng: form.pickupLng ?? undefined,
         destAddress: form.destAddress,
+        destLat: form.destLat ?? undefined,
+        destLng: form.destLng ?? undefined,
         fare: Number(form.fare),
         driverId: form.driverId || undefined,
         clientId: form.clientId && form.clientId !== "__new__" ? form.clientId : undefined,
@@ -131,10 +140,16 @@ export default function Courses() {
         <div className="modal-backdrop">
           <div className="modal">
             <div className="row"><h3>Nouvelle course</h3><button onClick={() => setShowCreate(false)}>✕</button></div>
-            <label>Adresse de prise en charge</label>
-            <input className="input" value={form.pickupAddress} onChange={(e) => setForm({ ...form, pickupAddress: e.target.value })} />
-            <label style={{ display: "block", marginTop: 8 }}>Adresse de destination</label>
-            <input className="input" value={form.destAddress} onChange={(e) => setForm({ ...form, destAddress: e.target.value })} />
+            <AddressInput
+              label="Adresse de prise en charge"
+              value={form.pickupAddress}
+              onChange={({ address, lat, lng }) => setForm({ ...form, pickupAddress: address, pickupLat: lat, pickupLng: lng })}
+            />
+            <AddressInput
+              label="Adresse de destination"
+              value={form.destAddress}
+              onChange={({ address, lat, lng }) => setForm({ ...form, destAddress: address, destLat: lat, destLng: lng })}
+            />
             <label style={{ display: "block", marginTop: 8 }}>Numéro de vol (optionnel)</label>
             <input className="input" value={form.flightNumber} onChange={(e) => setForm({ ...form, flightNumber: e.target.value })} placeholder="ex. AC1234" />
             <label style={{ display: "block", marginTop: 8 }}>Montant prévu ($)</label>

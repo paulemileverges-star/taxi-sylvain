@@ -49,7 +49,7 @@ router.get("/:id", async (req, res) => {
 
 // Créer une course (Dispatch ou Client)
 router.post("/", requireRole("DISPATCH", "CLIENT"), async (req, res) => {
-  const { pickupAddress, destAddress, distanceKm, fare, driverId, scheduledFor, flightNumber, clientName, clientPhone } = req.body;
+  const { pickupAddress, destAddress, distanceKm, fare, driverId, scheduledFor, flightNumber, clientName, clientPhone, pickupLat, pickupLng, destLat, destLng } = req.body;
   if (!pickupAddress || !destAddress || !fare) {
     return res.status(400).json({ error: "Adresse de prise en charge, destination et montant requis." });
   }
@@ -70,6 +70,10 @@ router.post("/", requireRole("DISPATCH", "CLIENT"), async (req, res) => {
       clientId,
       driverId: driverId ?? null,
       status: driverId ? "ACCEPTED" : "REQUESTED",
+      pickupLat: typeof pickupLat === "number" ? pickupLat : null,
+      pickupLng: typeof pickupLng === "number" ? pickupLng : null,
+      destLat: typeof destLat === "number" ? destLat : null,
+      destLng: typeof destLng === "number" ? destLng : null,
     },
     include: { client: { select: { id: true, name: true } } },
   });

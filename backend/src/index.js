@@ -16,6 +16,7 @@ import reportRoutes from "./routes/reports.js";
 import scheduleRoutes from "./routes/schedule.js";
 import clientRoutes from "./routes/clients.js";
 import conversationRoutes from "./routes/conversations.js";
+import geocodeRoutes from "./routes/geocode.js";
 import { registerSocketHandlers } from "./sockets/index.js";
 import { generateWeeklyReports } from "./jobs/weeklyReport.js";
 
@@ -36,6 +37,7 @@ app.use("/api/reports", reportRoutes);
 app.use("/api/schedule", scheduleRoutes);
 app.use("/api/clients", clientRoutes);
 app.use("/api/conversations", conversationRoutes);
+app.use("/api/geocode", geocodeRoutes);
 
 const server = http.createServer(app);
 const io = new Server(server, { cors: { origin: process.env.CORS_ORIGIN || "*" } });

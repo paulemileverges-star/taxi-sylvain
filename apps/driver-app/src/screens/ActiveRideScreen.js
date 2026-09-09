@@ -4,6 +4,7 @@ import { api } from "../lib/api";
 import { playSound } from "../lib/sound";
 import { startTrackingLocation, stopTrackingLocation } from "../lib/locationTracker";
 import { showAlert } from "../lib/alert";
+import { openWaze as openWazeTo, openGoogleMaps as openGoogleMapsTo } from "../lib/navigation";
 
 const NEXT_STATUS = { ACCEPTED: "EN_ROUTE", EN_ROUTE: "STARTED", STARTED: "COMPLETED" };
 const LABEL = { ACCEPTED: "En route pour la course", EN_ROUTE: "Démarrer la course", STARTED: "Terminer la course" };
@@ -68,13 +69,22 @@ export default function ActiveRideScreen({ rideId, onDone, onOpenChat, onOpenMes
     }
   };
 
-  const openWaze = () => {
+  // Avant la prise en charge (ACCEPTED/EN_ROUTE) on navigue vers le client ; une fois la
+  // course démarrée (STARTED), on navigue vers la destination finale.
+  const navTarget = () =>
+    ride.status === "STARTED"
+      ? { address: ride.destAddress, lat: ride.destLat, lng: ride.destLng }
+      : { address: ride.pickupAddress, lat: ride.pickupLat, lng: ride.pickupLng };
+
+  const openWaze = async () => {
     if (!ride) return;
-    Linking.openURL(`https://waze.com/ul?navigate=yes&q=${encodeURIComponent(ride.destAddress)}`);
+    const ok = await openWazeTo(navTarget());
+    if (!ok) showAlert("Waze indisponible", "Impossible d'ouvrir Waze. Vérifiez qu'il est installé, ou utilisez Google Maps.");
   };
-  const openGoogleMaps = () => {
+  const openGoogleMaps = async () => {
     if (!ride) return;
-    Linking.openURL(`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(ride.destAddress)}`);
+    const ok = await openGoogleMapsTo(navTarget());
+    if (!ok) showAlert("Google Maps indisponible", "Impossible d'ouvrir Google Maps. Vérifiez qu'il est installé, ou utilisez Waze.");
   };
 
   const callMasked = async () => {
@@ -104,6 +114,9 @@ export default function ActiveRideScreen({ rideId, onDone, onOpenChat, onOpenMes
         <Field label="Numéro de vol" value={ride.flightNumber} />
         <Field label="Montant prévu de la course" value={ride.fare != null ? `${ride.fare} $` : null} />
       </View>
+      <Text style={styles.navHint}>
+        Navigation vers {ride.status === "STARTED" ? "la destination" : "le client"}
+      </Text>
       <View style={styles.rowBetween}>
         <TouchableOpacity style={styles.outlineBtn} onPress={openWaze}><Text style={styles.outlineBtnText}>Waze</Text></TouchableOpacity>
         <TouchableOpacity style={styles.outlineBtn} onPress={openGoogleMaps}><Text style={styles.outlineBtnText}>Google Maps</Text></TouchableOpacity>
@@ -138,6 +151,7 @@ const styles = StyleSheet.create({
   fieldRow: { flexDirection: "row", justifyContent: "space-between", marginBottom: 6 },
   fieldLabel: { color: "#8b99b5", fontSize: 12 },
   fieldValue: { color: "#edeff3", fontSize: 13, fontWeight: "600", flexShrink: 1, textAlign: "right" },
+  navHint: { color: "#8b99b5", fontSize: 12, marginBottom: 6 },
   addr: { color: "#edeff3", marginBottom: 6 },
   fare: { color: "#f5a623", fontWeight: "700", marginTop: 6 },
   rowBetween: { flexDirection: "row", gap: 8, marginBottom: 14 },
