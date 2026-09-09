@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from "react";
-import { View, Text, Image, TouchableOpacity, Linking, Alert, StyleSheet } from "react-native";
+import { View, Text, Image, TouchableOpacity, Linking, StyleSheet } from "react-native";
 import { api, assetUrl } from "../lib/api";
 import { playSound } from "../lib/sound";
+import { showAlert } from "../lib/alert";
 import { getSocket } from "../lib/socket";
 import DriverMap from "../components/DriverMap";
 
@@ -64,7 +65,7 @@ export default function TrackingScreen({ rideId, onOpenChat, onBack }) {
       playSound("action");
       Linking.openURL(`tel:${proxyNumber}`);
     } catch (e) {
-      Alert.alert("Appel indisponible", e.message);
+      showAlert("Appel indisponible", e.message);
     }
   };
 

@@ -1,7 +1,8 @@
 import React, { useState } from "react";
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert } from "react-native";
+import { View, Text, TextInput, TouchableOpacity, StyleSheet } from "react-native";
 import { api } from "../lib/api";
 import { playSound } from "../lib/sound";
+import { showAlert } from "../lib/alert";
 
 export default function ChangePasswordScreen({ onBack }) {
   const [currentPassword, setCurrentPassword] = useState("");
@@ -10,15 +11,15 @@ export default function ChangePasswordScreen({ onBack }) {
 
   const submit = async () => {
     if (newPassword !== confirm) {
-      Alert.alert("Erreur", "Les deux nouveaux mots de passe ne correspondent pas.");
+      showAlert("Erreur", "Les deux nouveaux mots de passe ne correspondent pas.");
       return;
     }
     try {
       await api.changePassword(currentPassword, newPassword);
       playSound("action");
-      Alert.alert("Succès", "Mot de passe mis à jour.", [{ text: "OK", onPress: onBack }]);
+      showAlert("Succès", "Mot de passe mis à jour.", [{ text: "OK", onPress: onBack }]);
     } catch (e) {
-      Alert.alert("Erreur", e.message);
+      showAlert("Erreur", e.message);
     }
   };
 

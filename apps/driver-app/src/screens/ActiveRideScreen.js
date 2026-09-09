@@ -1,8 +1,9 @@
 import React, { useEffect, useState } from "react";
-import { View, Text, TouchableOpacity, StyleSheet, Linking, Alert } from "react-native";
+import { View, Text, TouchableOpacity, StyleSheet, Linking } from "react-native";
 import { api } from "../lib/api";
 import { playSound } from "../lib/sound";
 import { startTrackingLocation, stopTrackingLocation } from "../lib/locationTracker";
+import { showAlert } from "../lib/alert";
 
 const NEXT_STATUS = { ACCEPTED: "EN_ROUTE", EN_ROUTE: "STARTED", STARTED: "COMPLETED" };
 const LABEL = { ACCEPTED: "En route pour la course", EN_ROUTE: "Démarrer la course", STARTED: "Terminer la course" };
@@ -41,7 +42,7 @@ export default function ActiveRideScreen({ rideId, onDone, onOpenChat, onOpenMes
     if (ride && TRACKED_STATUSES.includes(ride.status)) {
       startTrackingLocation(rideId, ride.status).then((granted) => {
         if (!granted) {
-          Alert.alert(
+          showAlert(
             "Position désactivée",
             "Le Dispatch et le client ne peuvent pas suivre votre déplacement sans l'accès à votre position. Activez la localisation pour Taxi Sylvain dans les réglages de votre téléphone."
           );
@@ -61,7 +62,7 @@ export default function ActiveRideScreen({ rideId, onDone, onOpenChat, onOpenMes
     setRide(updated);
     playSound("action");
     if (next === "COMPLETED") {
-      Alert.alert("Course terminée", "Merci de noter le client dans l'écran suivant (à brancher sur RatingScreen).", [
+      showAlert("Course terminée", "Merci de noter le client dans l'écran suivant (à brancher sur RatingScreen).", [
         { text: "OK", onPress: onDone },
       ]);
     }
@@ -82,7 +83,7 @@ export default function ActiveRideScreen({ rideId, onDone, onOpenChat, onOpenMes
       playSound("action");
       Linking.openURL(`tel:${proxyNumber}`);
     } catch (e) {
-      Alert.alert("Appel indisponible", e.message);
+      showAlert("Appel indisponible", e.message);
     }
   };
 

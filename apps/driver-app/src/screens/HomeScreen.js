@@ -1,7 +1,8 @@
 import React, { useCallback, useEffect, useState } from "react";
-import { View, Text, FlatList, TouchableOpacity, StyleSheet, RefreshControl, Alert } from "react-native";
+import { View, Text, FlatList, TouchableOpacity, StyleSheet, RefreshControl } from "react-native";
 import { api } from "../lib/api";
 import { playSound } from "../lib/sound";
+import { showAlert } from "../lib/alert";
 
 function fmtDate(d) {
   return d ? new Date(d).toLocaleDateString("fr-CA") : "—";
@@ -32,7 +33,7 @@ export default function HomeScreen({ user, onOpenRide, onOpenEarnings, onOpenMes
       setRides(rideData);
       setSchedule(scheduleData);
     } catch (e) {
-      Alert.alert("Erreur", e.message);
+      showAlert("Erreur", e.message);
     } finally {
       setRefreshing(false);
     }
@@ -46,7 +47,7 @@ export default function HomeScreen({ user, onOpenRide, onOpenEarnings, onOpenMes
       playSound("action");
       onOpenRide(id);
     } catch (e) {
-      Alert.alert("Course déjà prise", e.message);
+      showAlert("Course déjà prise", e.message);
       load();
     }
   };

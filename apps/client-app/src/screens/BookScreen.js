@@ -1,7 +1,8 @@
 import React, { useState } from "react";
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, Linking } from "react-native";
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, Linking } from "react-native";
 import { api } from "../lib/api";
 import { playSound } from "../lib/sound";
+import { showAlert } from "../lib/alert";
 
 export default function BookScreen({ user, onBooked, onOpenGroups, onOpenChangePassword, onLogout }) {
   const [pickupAddress, setPickup] = useState("");
@@ -10,7 +11,7 @@ export default function BookScreen({ user, onBooked, onOpenGroups, onOpenChangeP
 
   const book = async () => {
     if (!pickupAddress.trim() || !destAddress.trim()) {
-      Alert.alert("Adresses requises", "Merci d'indiquer la prise en charge et la destination.");
+      showAlert("Adresses requises", "Merci d'indiquer la prise en charge et la destination.");
       return;
     }
     try {
@@ -19,7 +20,7 @@ export default function BookScreen({ user, onBooked, onOpenGroups, onOpenChangeP
       playSound("action");
       onBooked(ride.id);
     } catch (e) {
-      Alert.alert("Erreur", e.message);
+      showAlert("Erreur", e.message);
     }
   };
 
