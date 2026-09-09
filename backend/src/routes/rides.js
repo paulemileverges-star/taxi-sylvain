@@ -4,6 +4,7 @@ import crypto from "crypto";
 import { prisma } from "../lib/prisma.js";
 import { requireAuth, requireRole } from "../middleware/auth.js";
 import { isConfigured as isCallMaskingConfigured, getOrCreateCallSession } from "../lib/twilioProxy.js";
+import { notifyUser, notifyAllDrivers } from "../lib/push.js";
 
 // Réservation par téléphone (besoin #5) : le Dispatch peut créer une course pour un client sans
 // compte — on retrouve son compte existant par téléphone, ou on lui en crée un à la volée.
@@ -79,7 +80,14 @@ router.post("/", requireRole("DISPATCH", "CLIENT"), async (req, res) => {
   });
 
   broadcast(req, "dispatch", "ride:created", ride);
-  if (driverId) broadcast(req, `driver:${driverId}`, "ride:assigned", ride);
+  if (driverId) {
+    broadcast(req, `driver:${driverId}`, "ride:assigned", ride);
+    notifyUser(driverId, {
+      title: "Nouvelle course assignée",
+      body: `${ride.pickupAddress} → ${ride.destAddress}`,
+      data: { type: "ride:assigned", rideId: ride.id },
+    });
+  }
   res.status(201).json(ride);
 });
 
@@ -90,7 +98,14 @@ router.post("/:id/assign", requireRole("DISPATCH"), async (req, res) => {
     where: { id: req.params.id },
     data: { driverId, status: driverId ? "ACCEPTED" : "REQUESTED" },
   });
-  if (driverId) broadcast(req, `driver:${driverId}`, "ride:assigned", ride);
+  if (driverId) {
+    broadcast(req, `driver:${driverId}`, "ride:assigned", ride);
+    notifyUser(driverId, {
+      title: "Nouvelle course assignée",
+      body: `${ride.pickupAddress} → ${ride.destAddress}`,
+      data: { type: "ride:assigned", rideId: ride.id },
+    });
+  }
   broadcast(req, "dispatch", "ride:updated", ride);
   broadcast(req, `ride:${ride.id}`, "ride:status", ride);
   res.json(ride);
@@ -103,6 +118,11 @@ router.post("/:id/broadcast", requireRole("DISPATCH"), async (req, res) => {
     data: { status: "BROADCAST", driverId: null },
   });
   broadcast(req, "drivers", "ride:broadcast", ride);
+  notifyAllDrivers({
+    title: "Course de dernière minute",
+    body: `${ride.pickupAddress} → ${ride.destAddress} — premier arrivé, premier servi`,
+    data: { type: "ride:broadcast", rideId: ride.id },
+  });
   res.json(ride);
 });
 
@@ -156,6 +176,15 @@ router.post("/:id/status", requireRole("DRIVER"), async (req, res) => {
   };
   broadcast(req, "dispatch", "ride:notification", { rideId: ride.id, text: labels[status] });
   broadcast(req, `ride:${ride.id}`, "ride:status", ride);
+
+  const clientLabels = {
+    EN_ROUTE: { title: "Votre chauffeur arrive", body: `${req.user.name} est en route pour vous récupérer.` },
+    STARTED: { title: "Départ vers votre destination", body: "Votre course a démarré." },
+    COMPLETED: { title: "Course terminée", body: "Merci d'avoir voyagé avec Taxi Sylvain." },
+  };
+  if (ride.clientId && clientLabels[status]) {
+    notifyUser(ride.clientId, { ...clientLabels[status], data: { type: "ride:status", rideId: ride.id, status } });
+  }
   res.json(ride);
 });
 

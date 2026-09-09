@@ -23,6 +23,8 @@ async function request(path, { method = "GET", body } = {}) {
 export const api = {
   login: (email, password) => request("/auth/login", { method: "POST", body: { email, password } }),
   changePassword: (currentPassword, newPassword) => request("/auth/change-password", { method: "POST", body: { currentPassword, newPassword } }),
+  registerPushToken: (token) => request("/auth/push-token", { method: "POST", body: { token } }),
+  clearPushToken: () => request("/auth/push-token", { method: "DELETE" }),
   myRides: () => request("/rides"),
   geocodeSearch: (q) => request(`/geocode/search?q=${encodeURIComponent(q)}`),
   acceptRide: (id) => request(`/rides/${id}/accept`, { method: "POST" }),

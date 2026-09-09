@@ -11,6 +11,8 @@ import ChangePasswordScreen from "./src/screens/ChangePasswordScreen";
 import { getSocket, resetSocket } from "./src/lib/socket";
 import { logout as clearSession } from "./src/lib/api";
 import { playSound } from "./src/lib/sound";
+import * as Notifications from "expo-notifications";
+import { registerForPushNotifications, clearPushToken } from "./src/lib/pushNotifications";
 
 export default function App() {
   const [user, setUser] = useState(null);
@@ -45,11 +47,28 @@ export default function App() {
       sock = s;
       s.on("message:group", ({ message }) => { if (message.sender.id !== user.id) playSound("notify"); });
     });
+    registerForPushNotifications();
     return () => sock?.off("message:group");
   }, [user]);
 
+  // Permet de rouvrir directement le bon écran quand on tape sur une notification reçue
+  // app fermée ou en arrière-plan.
+  useEffect(() => {
+    const sub = Notifications.addNotificationResponseReceivedListener((response) => {
+      const data = response.notification.request.content.data;
+      if (data?.type === "ride:status" && data.rideId) {
+        setActiveRideId(data.rideId);
+        setScreen(data.status === "COMPLETED" ? "rate" : "tracking");
+      } else if (data?.type === "message:group") {
+        setScreen("groups");
+      }
+    });
+    return () => sub.remove();
+  }, []);
+
   const logout = async () => {
     resetSocket();
+    await clearPushToken();
     await clearSession();
     setUser(null);
     setScreen("book");

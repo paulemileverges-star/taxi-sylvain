@@ -55,6 +55,29 @@ router.post("/change-password", requireAuth, async (req, res) => {
   res.json({ ok: true });
 });
 
+// Jeton de notification push (Expo) de l'appareil — pour recevoir une alerte (nouvelle course,
+// message...) même quand l'app est fermée ou l'écran verrouillé. Un même appareil physique peut
+// passer d'un compte à l'autre (chauffeur qui se déconnecte/reconnecte) : on retire donc ce jeton
+// de tout autre compte avant de l'attribuer au compte actuellement connecté.
+router.post("/push-token", requireAuth, async (req, res) => {
+  const { token } = req.body;
+  if (!token) return res.status(400).json({ error: "Jeton requis." });
+
+  await prisma.user.updateMany({
+    where: { pushToken: token, NOT: { id: req.user.id } },
+    data: { pushToken: null },
+  });
+  await prisma.user.update({ where: { id: req.user.id }, data: { pushToken: token } });
+  res.json({ ok: true });
+});
+
+// À appeler à la déconnexion pour qu'un compte qui n'est plus utilisé sur cet appareil
+// n'y reçoive plus de notifications.
+router.delete("/push-token", requireAuth, async (req, res) => {
+  await prisma.user.update({ where: { id: req.user.id }, data: { pushToken: null } });
+  res.json({ ok: true });
+});
+
 function signToken(user) {
   return jwt.sign(
     { id: user.id, role: user.role, name: user.name },

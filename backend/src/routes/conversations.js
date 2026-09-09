@@ -2,6 +2,7 @@ import { Router } from "express";
 import { prisma } from "../lib/prisma.js";
 import { requireAuth, requireRole } from "../middleware/auth.js";
 import { personalRoom } from "../lib/rooms.js";
+import { notifyUsers } from "../lib/push.js";
 
 const router = Router();
 router.use(requireAuth);
@@ -78,6 +79,15 @@ router.post("/:id/messages", async (req, res) => {
     const rooms = new Set(participants.map((p) => personalRoom(p.user)).filter(Boolean));
     for (const room of rooms) io.to(room).emit("message:group", { conversationId: req.params.id, message });
   }
+
+  const recipientIds = participants
+    .filter((p) => p.user.id !== req.user.id && p.user.role !== "DISPATCH")
+    .map((p) => p.user.id);
+  notifyUsers(recipientIds, {
+    title: `${req.user.name} (groupe)`,
+    body: text,
+    data: { type: "message:group", conversationId: req.params.id },
+  });
   res.status(201).json(message);
 });
 

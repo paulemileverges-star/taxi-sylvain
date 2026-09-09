@@ -27,7 +27,7 @@ function Field({ label, value }) {
   );
 }
 
-export default function ActiveRideScreen({ rideId, onDone, onOpenChat, onOpenMessages, onBack }) {
+export default function ActiveRideScreen({ rideId, onCompleted, onOpenChat, onOpenMessages, onBack }) {
   const [ride, setRide] = useState(null);
 
   const load = async () => {
@@ -62,11 +62,7 @@ export default function ActiveRideScreen({ rideId, onDone, onOpenChat, onOpenMes
     const updated = await api.setRideStatus(ride.id, next);
     setRide(updated);
     playSound("action");
-    if (next === "COMPLETED") {
-      showAlert("Course terminée", "Merci de noter le client dans l'écran suivant (à brancher sur RatingScreen).", [
-        { text: "OK", onPress: onDone },
-      ]);
-    }
+    if (next === "COMPLETED") onCompleted();
   };
 
   // Avant la prise en charge (ACCEPTED/EN_ROUTE) on navigue vers le client ; une fois la

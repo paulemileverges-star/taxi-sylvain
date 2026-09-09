@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { prisma } from "../lib/prisma.js";
 import { requireAuth } from "../middleware/auth.js";
+import { notifyUser } from "../lib/push.js";
 
 const router = Router();
 router.use(requireAuth);
@@ -45,6 +46,9 @@ router.post("/direct/:driverId", async (req, res) => {
     io.to(`driver:${driverId}`).emit("message:direct", message);
     io.to("dispatch").emit("message:direct", message);
   }
+  if (req.user.role === "DISPATCH") {
+    notifyUser(driverId, { title: "Message de Taxi Sylvain", body: text, data: { type: "message:direct" } });
+  }
   res.status(201).json(message);
 });
 
@@ -53,6 +57,7 @@ async function requireRideParty(req, res, next) {
   if (!ride) return res.status(404).json({ error: "Course introuvable." });
   const isParty = req.user.role === "DISPATCH" || req.user.id === ride.clientId || req.user.id === ride.driverId;
   if (!isParty) return res.status(403).json({ error: "Accès refusé." });
+  req.ride = ride;
   next();
 }
 
@@ -76,6 +81,11 @@ router.post("/:rideId", requireRideParty, async (req, res) => {
 
   const io = req.app.get("io");
   if (io) io.to(`ride:${req.params.rideId}`).emit("message:new", message);
+
+  const otherPartyId = req.user.id === req.ride.clientId ? req.ride.driverId : req.ride.clientId;
+  if (otherPartyId && req.user.role !== "DISPATCH") {
+    notifyUser(otherPartyId, { title: `Message de ${req.user.name}`, body: text, data: { type: "message:ride", rideId: req.params.rideId } });
+  }
   res.status(201).json(message);
 });
 

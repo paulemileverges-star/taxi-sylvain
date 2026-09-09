@@ -20,6 +20,15 @@
     "ios": {
       "bundleIdentifier": "com.taxisylvain.client"
     },
+    "plugins": [
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/icon.png",
+          "color": "#f5a623"
+        }
+      ]
+    ],
     "extra": {
       "eas": {
         "projectId": "9f276dbe-760d-4892-bbc5-7b1987a358d5"

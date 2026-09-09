@@ -13,10 +13,12 @@ import Reports from "./pages/Reports.jsx";
 import Messages from "./pages/Messages.jsx";
 import Groups from "./pages/Groups.jsx";
 import LiveMap from "./pages/LiveMap.jsx";
+import Search from "./pages/Search.jsx";
 import ChangePasswordModal from "./components/ChangePasswordModal.jsx";
 
 const NAV = [
   { key: "dashboard", label: "Tableau de bord" },
+  { key: "search", label: "Recherche" },
   { key: "map", label: "Carte" },
   { key: "courses", label: "Courses" },
   { key: "schedule", label: "Cédule" },
@@ -97,6 +99,7 @@ export default function App() {
       </div>
       <div className="content">
         {screen === "dashboard" && <Dashboard notifs={notifs} />}
+        {screen === "search" && <Search />}
         {screen === "map" && <LiveMap />}
         {screen === "courses" && <Courses />}
         {screen === "schedule" && <Schedule />}

@@ -44,6 +44,10 @@ model User {
   // service) — jamais montré au client lui-même, visible seulement côté Dispatch.
   notes String?
 
+  // Jeton de notification push (Expo) de l'appareil actuellement connecté — permet d'alerter un
+  // chauffeur ou un client même quand l'app est fermée ou l'écran verrouillé.
+  pushToken String?
+
   ridesAsClient   Ride[]         @relation("ClientRides")
   ridesAsDriver   Ride[]         @relation("DriverRides")
   messagesSent    Message[]      @relation("MessageSender")

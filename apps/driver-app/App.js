@@ -4,6 +4,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import LoginScreen from "./src/screens/LoginScreen";
 import HomeScreen from "./src/screens/HomeScreen";
 import ActiveRideScreen from "./src/screens/ActiveRideScreen";
+import RatingScreen from "./src/screens/RatingScreen";
 import EarningsScreen from "./src/screens/EarningsScreen";
 import MessagesScreen from "./src/screens/MessagesScreen";
 import ReportsScreen from "./src/screens/ReportsScreen";
@@ -13,6 +14,8 @@ import ChangePasswordScreen from "./src/screens/ChangePasswordScreen";
 import { getSocket, resetSocket } from "./src/lib/socket";
 import { logout as clearSession } from "./src/lib/api";
 import { playSound } from "./src/lib/sound";
+import * as Notifications from "expo-notifications";
+import { registerForPushNotifications, clearPushToken } from "./src/lib/pushNotifications";
 
 export default function App() {
   const [user, setUser] = useState(null);
@@ -38,6 +41,7 @@ export default function App() {
       s.on("report:ready", () => { setNewReport(true); playSound("notify"); });
       s.on("message:group", ({ message }) => { if (message.sender.id !== user.id) playSound("notify"); });
     });
+    registerForPushNotifications();
     return () => {
       sock?.off("ride:broadcast");
       sock?.off("ride:assigned");
@@ -46,8 +50,26 @@ export default function App() {
     };
   }, [user]);
 
+  // Permet de rouvrir directement la bonne course quand on tape sur une notification
+  // reçue app fermée ou en arrière-plan.
+  useEffect(() => {
+    const sub = Notifications.addNotificationResponseReceivedListener((response) => {
+      const data = response.notification.request.content.data;
+      if ((data?.type === "ride:assigned" || data?.type === "ride:broadcast") && data.rideId) {
+        setActiveRideId(data.rideId);
+        setScreen("active");
+      } else if (data?.type === "message:direct") {
+        setScreen("messages");
+      } else if (data?.type === "message:group") {
+        setScreen("groups");
+      }
+    });
+    return () => sub.remove();
+  }, []);
+
   const logout = async () => {
     resetSocket();
+    await clearPushToken();
     await clearSession();
     setUser(null);
     setScreen("home");
@@ -82,11 +104,14 @@ export default function App() {
       {screen === "active" && activeRideId && (
         <ActiveRideScreen
           rideId={activeRideId}
-          onDone={() => { setActiveRideId(null); setScreen("home"); }}
+          onCompleted={() => setScreen("rating")}
           onOpenChat={() => setScreen("rideChat")}
           onOpenMessages={() => setScreen("messages")}
           onBack={() => setScreen("home")}
         />
+      )}
+      {screen === "rating" && activeRideId && (
+        <RatingScreen rideId={activeRideId} onDone={() => { setActiveRideId(null); setScreen("home"); }} />
       )}
       {screen === "rideChat" && activeRideId && (
         <RideChatScreen rideId={activeRideId} onBack={() => setScreen("active")} />

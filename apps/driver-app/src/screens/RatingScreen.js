@@ -4,28 +4,30 @@ import { api } from "../lib/api";
 import { playSound } from "../lib/sound";
 import { showAlert } from "../lib/alert";
 
-export default function RateScreen({ rideId, onDone }) {
+export default function RatingScreen({ rideId, onDone }) {
   const [stars, setStars] = useState(5);
   const [comment, setComment] = useState("");
-  const [driver, setDriver] = useState(null);
+  const [client, setClient] = useState(null);
+  const [loaded, setLoaded] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
     api.myRides().then((rides) => {
       const ride = rides.find((r) => r.id === rideId);
-      setDriver(ride?.driver || null);
+      setClient(ride?.client || null);
+      setLoaded(true);
     });
   }, [rideId]);
 
   const submit = async () => {
-    if (!driver?.id) {
-      showAlert("Erreur", "Impossible de retrouver le chauffeur de cette course.");
+    if (!client?.id) {
+      // Réservation par téléphone sans compte client — rien à noter, on passe simplement à la suite.
       onDone();
       return;
     }
     setSubmitting(true);
     try {
-      await api.rate(rideId, driver.id, stars, comment);
+      await api.rate(rideId, client.id, stars, comment);
       playSound("action");
     } catch (e) {
       showAlert("Erreur", e.message);
@@ -36,8 +38,8 @@ export default function RateScreen({ rideId, onDone }) {
 
   return (
     <View style={{ flex: 1, padding: 16 }}>
-      <Text style={styles.title}>Merci ! Notez {driver ? driver.name : "votre chauffeur"}</Text>
-      {!driver ? (
+      <Text style={styles.title}>Course terminée ! Notez {client ? client.name : "le client"}</Text>
+      {!loaded ? (
         <ActivityIndicator color="#f5a623" />
       ) : (
         <>
@@ -59,6 +61,9 @@ export default function RateScreen({ rideId, onDone }) {
           <TouchableOpacity style={styles.primaryBtn} onPress={submit} disabled={submitting}>
             <Text style={styles.primaryBtnText}>{submitting ? "Envoi…" : "Envoyer"}</Text>
           </TouchableOpacity>
+          <TouchableOpacity style={styles.skipBtn} onPress={onDone}>
+            <Text style={styles.skipBtnText}>Passer</Text>
+          </TouchableOpacity>
         </>
       )}
     </View>
@@ -71,4 +76,6 @@ const styles = StyleSheet.create({
   input: { backgroundColor: "#16233a", color: "#edeff3", borderRadius: 12, padding: 12, minHeight: 80, borderWidth: 1, borderColor: "#28395a", marginBottom: 12 },
   primaryBtn: { backgroundColor: "#f5a623", borderRadius: 12, padding: 14, alignItems: "center" },
   primaryBtnText: { color: "#1a1200", fontWeight: "700" },
+  skipBtn: { padding: 12, alignItems: "center", marginTop: 6 },
+  skipBtnText: { color: "#8b99b5" },
 });
