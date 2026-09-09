@@ -22,6 +22,19 @@ export async function openGoogleMaps({ address, lat, lng }) {
 }
 
 async function openWithFallback(nativeUrl, webUrl) {
+  // react-native-web's Linking.canOpenURL() always resolves true regardless of the URL
+  // (it can't actually probe app schemes from a browser), so on web we'd otherwise always
+  // "succeed" at silently no-oping on an unopenable waze://... scheme. Go straight to the
+  // https link there — the browser/OS handles app-vs-website resolution itself.
+  if (Platform.OS === "web") {
+    try {
+      await Linking.openURL(webUrl);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
   try {
     const canOpenNative = await Linking.canOpenURL(nativeUrl).catch(() => false);
     await Linking.openURL(canOpenNative ? nativeUrl : webUrl);
