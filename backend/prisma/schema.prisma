@@ -40,6 +40,10 @@ model User {
   photoUrl    String? // photo du chauffeur (besoin #13)
   carPhotoUrl String? // photo du véhicule (besoin #13)
 
+  // Mémo interne du Dispatch sur un client (préférences, notes utiles pour personnaliser le
+  // service) — jamais montré au client lui-même, visible seulement côté Dispatch.
+  notes String?
+
   ridesAsClient   Ride[]         @relation("ClientRides")
   ridesAsDriver   Ride[]         @relation("DriverRides")
   messagesSent    Message[]      @relation("MessageSender")

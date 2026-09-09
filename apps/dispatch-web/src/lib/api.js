@@ -37,6 +37,7 @@ export const api = {
   deleteDriver: (id) => request(`/drivers/${id}`, { method: "DELETE" }),
   listClients: () => request("/clients"),
   deleteClient: (id) => request(`/clients/${id}`, { method: "DELETE" }),
+  updateClientNotes: (id, notes) => request(`/clients/${id}/notes`, { method: "PATCH", body: { notes } }),
   deleteRide: (id) => request(`/rides/${id}`, { method: "DELETE" }),
   weeklyReport: () => request("/reports/weekly"),
   generateWeeklyReport: (range) => request("/reports/generate", { method: "POST", body: range || {} }),
