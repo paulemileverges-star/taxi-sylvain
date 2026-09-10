@@ -13,6 +13,7 @@ export default function Drivers() {
   const [form, setForm] = useState(EMPTY_FORM);
   const [error, setError] = useState("");
   const [exporting, setExporting] = useState(false);
+  const [credentials, setCredentials] = useState(null);
 
   const load = () => api.listDrivers().then(setDrivers);
   useEffect(() => { load(); }, []);
@@ -55,11 +56,12 @@ export default function Drivers() {
   const createDriver = async () => {
     setError("");
     try {
-      await api.createDriver(form);
+      const driver = await api.createDriver(form);
       setForm(EMPTY_FORM);
       setShowAdd(false);
       playSound("action");
       load();
+      if (driver.tempPassword) setCredentials(driver.tempPassword);
     } catch (e) {
       setError(e.message);
     }
@@ -134,7 +136,7 @@ export default function Drivers() {
             <input className="input" type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
             <label style={{ display: "block", marginTop: 8 }}>Téléphone</label>
             <input className="input" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} placeholder="+15145551234" />
-            <label style={{ display: "block", marginTop: 8 }}>Mot de passe temporaire</label>
+            <label style={{ display: "block", marginTop: 8 }}>Mot de passe temporaire (optionnel — généré automatiquement si vide)</label>
             <input className="input" type="password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} />
             <label style={{ display: "block", marginTop: 8 }}>Modèle du véhicule</label>
             <input className="input" value={form.carModel} onChange={(e) => setForm({ ...form, carModel: e.target.value })} placeholder="ex. Toyota Camry 2021" />
@@ -142,6 +144,21 @@ export default function Drivers() {
             <input className="input" value={form.plate} onChange={(e) => setForm({ ...form, plate: e.target.value })} />
             {error && <div style={{ color: "#e85d4c", fontSize: 13, marginTop: 8 }}>{error}</div>}
             <button className="btn" style={{ marginTop: 14, width: "100%" }} onClick={createDriver}>Créer le compte chauffeur</button>
+          </div>
+        </div>
+      )}
+
+      {credentials && (
+        <div className="modal-backdrop">
+          <div className="modal">
+            <div className="row"><h3>Accès générés</h3><button onClick={() => setCredentials(null)}>✕</button></div>
+            <div className="field-row"><span className="field-label">Mot de passe temporaire :</span><span>{credentials}</span></div>
+            <div style={{ color: "var(--muted)", fontSize: 12, marginTop: 6 }}>
+              Transmettez-le au chauffeur — il pourra le changer une fois connecté.
+            </div>
+            <button className="btn outline" style={{ marginTop: 12, width: "100%" }} onClick={() => navigator.clipboard?.writeText(credentials)}>
+              Copier
+            </button>
           </div>
         </div>
       )}

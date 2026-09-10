@@ -5,19 +5,24 @@ import { prisma } from "../lib/prisma.js";
 import { requireAuth, requireRole } from "../middleware/auth.js";
 import { isConfigured as isCallMaskingConfigured, getOrCreateCallSession } from "../lib/twilioProxy.js";
 import { notifyUser, notifyAllDrivers } from "../lib/push.js";
+import { createDriverAccount } from "./drivers.js";
+import { generateTempPassword } from "../lib/placeholderEmail.js";
 
 // Réservation par téléphone (besoin #5) : le Dispatch peut créer une course pour un client sans
-// compte — on retrouve son compte existant par téléphone, ou on lui en crée un à la volée.
-async function findOrCreateClientByPhone(name, phone, email) {
+// compte — on retrouve son compte existant par téléphone, ou on lui en crée un à la volée. Si le
+// client est réellement créé (pas seulement retrouvé), un mot de passe temporaire est renvoyé en
+// clair pour que le Dispatch puisse le transmettre.
+async function findOrCreateClientByPhone(name, phone, email, address, notes) {
   const existing = await prisma.user.findFirst({ where: { role: "CLIENT", phone } });
-  if (existing) return existing.id;
+  if (existing) return { id: existing.id, tempPassword: null };
 
-  const passwordHash = await bcrypt.hash(crypto.randomBytes(16).toString("hex"), 10);
+  const tempPassword = generateTempPassword();
+  const passwordHash = await bcrypt.hash(tempPassword, 10);
   const finalEmail = email || `client-${crypto.randomBytes(6).toString("hex")}@reservation.taxisylvain.local`;
   const created = await prisma.user.create({
-    data: { role: "CLIENT", name, phone, email: finalEmail, passwordHash },
+    data: { role: "CLIENT", name, phone, email: finalEmail, address: address || null, notes: notes || null, passwordHash },
   });
-  return created.id;
+  return { id: created.id, tempPassword };
 }
 
 const router = Router();
@@ -50,14 +55,34 @@ router.get("/:id", async (req, res) => {
 
 // Créer une course (Dispatch ou Client)
 router.post("/", requireRole("DISPATCH", "CLIENT"), async (req, res) => {
-  const { pickupAddress, destAddress, distanceKm, fare, driverId, scheduledFor, flightNumber, clientName, clientPhone, clientEmail, pickupLat, pickupLng, destLat, destLng } = req.body;
+  const {
+    pickupAddress, destAddress, distanceKm, fare, scheduledFor, flightNumber,
+    clientName, clientPhone, clientEmail, clientAddress, clientNotes,
+    pickupLat, pickupLng, destLat, destLng, broadcastAll,
+    newDriver, // { name, email, phone, password?, carModel?, plate? } — créé à la volée et affecté
+  } = req.body;
+  let { driverId } = req.body;
   if (!pickupAddress || !destAddress || !fare) {
     return res.status(400).json({ error: "Adresse de prise en charge, destination et montant requis." });
   }
 
   let clientId = req.user.role === "CLIENT" ? req.user.id : req.body.clientId ?? null;
+  let clientTempPassword = null;
   if (!clientId && req.user.role === "DISPATCH" && clientName && clientPhone) {
-    clientId = await findOrCreateClientByPhone(clientName, clientPhone, clientEmail);
+    const result = await findOrCreateClientByPhone(clientName, clientPhone, clientEmail, clientAddress, clientNotes);
+    clientId = result.id;
+    clientTempPassword = result.tempPassword;
+  }
+
+  let driverTempPassword = null;
+  if (!driverId && req.user.role === "DISPATCH" && newDriver?.name && newDriver?.email && newDriver?.phone) {
+    try {
+      const { driver, tempPassword } = await createDriverAccount(newDriver);
+      driverId = driver.id;
+      driverTempPassword = tempPassword;
+    } catch (e) {
+      return res.status(e.status || 500).json({ error: e.message });
+    }
   }
 
   const ride = await prisma.ride.create({
@@ -70,7 +95,7 @@ router.post("/", requireRole("DISPATCH", "CLIENT"), async (req, res) => {
       scheduledFor: scheduledFor ? new Date(scheduledFor) : null,
       clientId,
       driverId: driverId ?? null,
-      status: driverId ? "ACCEPTED" : "REQUESTED",
+      status: broadcastAll ? "BROADCAST" : driverId ? "ACCEPTED" : "REQUESTED",
       pickupLat: typeof pickupLat === "number" ? pickupLat : null,
       pickupLng: typeof pickupLng === "number" ? pickupLng : null,
       destLat: typeof destLat === "number" ? destLat : null,
@@ -87,8 +112,15 @@ router.post("/", requireRole("DISPATCH", "CLIENT"), async (req, res) => {
       body: `${ride.pickupAddress} → ${ride.destAddress}`,
       data: { type: "ride:assigned", rideId: ride.id },
     });
+  } else if (broadcastAll) {
+    broadcast(req, "drivers", "ride:broadcast", ride);
+    notifyAllDrivers({
+      title: "Course de dernière minute",
+      body: `${ride.pickupAddress} → ${ride.destAddress} — premier arrivé, premier servi`,
+      data: { type: "ride:broadcast", rideId: ride.id },
+    });
   }
-  res.status(201).json(ride);
+  res.status(201).json({ ...ride, clientTempPassword, driverTempPassword });
 });
 
 // Affecter / réaffecter un chauffeur (Dispatch)
@@ -158,21 +190,31 @@ router.post("/:id/refuse", requireRole("DRIVER"), async (req, res) => {
   res.json({ ok: true });
 });
 
-// Progression du statut par le chauffeur : EN_ROUTE -> STARTED -> COMPLETED
+// Progression du statut par le chauffeur : EN_ROUTE -> STARTED -> COMPLETED, ou annulation
+// (CANCELLED) tant que la course n'est pas terminée — permet au chauffeur de libérer une course
+// qu'il ne peut finalement pas honorer (besoin #9).
 router.post("/:id/status", requireRole("DRIVER"), async (req, res) => {
   const { status } = req.body;
-  const allowed = { EN_ROUTE: "enRouteAt", STARTED: "startedAt", COMPLETED: "completedAt" };
+  const allowed = { EN_ROUTE: "enRouteAt", STARTED: "startedAt", COMPLETED: "completedAt", CANCELLED: "cancelledAt" };
   if (!allowed[status]) return res.status(400).json({ error: "Statut invalide." });
+
+  const current = await prisma.ride.findUnique({ where: { id: req.params.id } });
+  if (!current) return res.status(404).json({ error: "Course introuvable." });
+  if (current.driverId !== req.user.id) return res.status(403).json({ error: "Cette course ne vous est pas affectée." });
 
   const ride = await prisma.ride.update({
     where: { id: req.params.id },
-    data: { status, [allowed[status]]: new Date() },
+    data:
+      status === "CANCELLED"
+        ? { status, cancelledAt: new Date(), driverId: null }
+        : { status, [allowed[status]]: new Date() },
   });
 
   const labels = {
     EN_ROUTE: `${req.user.name} est en route pour récupérer le client.`,
     STARTED: `${req.user.name} a démarré la course vers la destination.`,
     COMPLETED: `La course de ${req.user.name} est terminée.`,
+    CANCELLED: `${req.user.name} a annulé la course — elle n'est plus affectée.`,
   };
   broadcast(req, "dispatch", "ride:notification", { rideId: ride.id, text: labels[status] });
   broadcast(req, `ride:${ride.id}`, "ride:status", ride);
@@ -181,6 +223,7 @@ router.post("/:id/status", requireRole("DRIVER"), async (req, res) => {
     EN_ROUTE: { title: "Votre chauffeur arrive", body: `${req.user.name} est en route pour vous récupérer.` },
     STARTED: { title: "Départ vers votre destination", body: "Votre course a démarré." },
     COMPLETED: { title: "Course terminée", body: "Merci d'avoir voyagé avec Taxi Sylvain." },
+    CANCELLED: { title: "Changement de chauffeur", body: "Taxi Sylvain vous réaffecte un autre chauffeur pour votre course." },
   };
   if (ride.clientId && clientLabels[status]) {
     notifyUser(ride.clientId, { ...clientLabels[status], data: { type: "ride:status", rideId: ride.id, status } });

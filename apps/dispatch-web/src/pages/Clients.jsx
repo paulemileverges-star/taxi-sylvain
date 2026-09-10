@@ -4,14 +4,18 @@ import { playSound } from "../lib/sound.js";
 
 function ClientCard({ client, onDelete }) {
   const [notes, setNotes] = useState(client.notes || "");
+  const [address, setAddress] = useState(client.address || "");
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
-  const dirty = notes !== (client.notes || "");
+  const dirty = notes !== (client.notes || "") || address !== (client.address || "");
 
   const save = async () => {
     setSaving(true);
     try {
-      await api.updateClientNotes(client.id, notes.trim() || null);
+      await Promise.all([
+        api.updateClientNotes(client.id, notes.trim() || null),
+        api.updateClientAddress(client.id, address.trim() || null),
+      ]);
       playSound("action");
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
@@ -25,7 +29,7 @@ function ClientCard({ client, onDelete }) {
       <div className="row">
         <div>
           <div>{client.name}</div>
-          <div style={{ color: "#8b99b5", fontSize: 13 }}>{client.email} · {client.phone}</div>
+          <div style={{ color: "#8b99b5", fontSize: 13 }}>{client.email || "(pas de courriel)"} · {client.phone}</div>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
           <span className="chip">★ {client.ratingAvg?.toFixed(1) ?? "5.0"}</span>
@@ -33,6 +37,16 @@ function ClientCard({ client, onDelete }) {
         </div>
       </div>
       <label style={{ display: "block", marginTop: 12, fontSize: 12, color: "var(--muted)", textTransform: "uppercase", letterSpacing: 0.5 }}>
+        Adresse
+      </label>
+      <input
+        className="input"
+        style={{ marginTop: 6 }}
+        placeholder="ex. 123 rue Principale, Montréal, QC"
+        value={address}
+        onChange={(e) => setAddress(e.target.value)}
+      />
+      <label style={{ display: "block", marginTop: 10, fontSize: 12, color: "var(--muted)", textTransform: "uppercase", letterSpacing: 0.5 }}>
         Mémo et préférences (visible uniquement par le Dispatch)
       </label>
       <textarea
@@ -47,14 +61,14 @@ function ClientCard({ client, onDelete }) {
           {saved ? "Enregistré." : dirty ? "Modifications non enregistrées." : ""}
         </span>
         <button className="btn outline" disabled={!dirty || saving} onClick={save}>
-          {saving ? "Enregistrement…" : "Enregistrer le mémo"}
+          {saving ? "Enregistrement…" : "Enregistrer"}
         </button>
       </div>
     </div>
   );
 }
 
-const EMPTY_FORM = { name: "", email: "", phone: "" };
+const EMPTY_FORM = { name: "", email: "", phone: "", address: "", notes: "" };
 
 export default function Clients() {
   const [clients, setClients] = useState([]);
@@ -62,6 +76,7 @@ export default function Clients() {
   const [form, setForm] = useState(EMPTY_FORM);
   const [error, setError] = useState("");
   const [exporting, setExporting] = useState(false);
+  const [credentials, setCredentials] = useState(null);
 
   const load = () => api.listClients().then(setClients);
   useEffect(() => { load(); }, []);
@@ -76,11 +91,12 @@ export default function Clients() {
   const createClient = async () => {
     setError("");
     try {
-      await api.createClient(form);
+      const client = await api.createClient(form);
       setForm(EMPTY_FORM);
       setShowAdd(false);
       playSound("action");
       load();
+      if (client.tempPassword) setCredentials(client.tempPassword);
     } catch (e) {
       setError(e.message);
     }
@@ -123,8 +139,27 @@ export default function Clients() {
             <input className="input" type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
             <label style={{ display: "block", marginTop: 8 }}>Téléphone</label>
             <input className="input" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} placeholder="+15145551234" />
+            <label style={{ display: "block", marginTop: 8 }}>Adresse (optionnel)</label>
+            <input className="input" value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} placeholder="ex. 123 rue Principale, Montréal, QC" />
+            <label style={{ display: "block", marginTop: 8 }}>Préférences ou mémo (optionnel)</label>
+            <textarea className="input" style={{ minHeight: 60, fontFamily: "inherit" }} value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} />
             {error && <div style={{ color: "#e85d4c", fontSize: 13, marginTop: 8 }}>{error}</div>}
             <button className="btn" style={{ marginTop: 14, width: "100%" }} onClick={createClient}>Créer le client</button>
+          </div>
+        </div>
+      )}
+
+      {credentials && (
+        <div className="modal-backdrop">
+          <div className="modal">
+            <div className="row"><h3>Accès générés</h3><button onClick={() => setCredentials(null)}>✕</button></div>
+            <div className="field-row"><span className="field-label">Mot de passe temporaire :</span><span>{credentials}</span></div>
+            <div style={{ color: "var(--muted)", fontSize: 12, marginTop: 6 }}>
+              Transmettez-le au client — il pourra le changer une fois connecté.
+            </div>
+            <button className="btn outline" style={{ marginTop: 12, width: "100%" }} onClick={() => navigator.clipboard?.writeText(credentials)}>
+              Copier
+            </button>
           </div>
         </div>
       )}

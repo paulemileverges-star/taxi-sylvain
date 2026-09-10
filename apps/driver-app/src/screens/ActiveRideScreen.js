@@ -27,7 +27,7 @@ function Field({ label, value }) {
   );
 }
 
-export default function ActiveRideScreen({ rideId, onCompleted, onOpenChat, onOpenMessages, onBack }) {
+export default function ActiveRideScreen({ rideId, onCompleted, onCancelled, onOpenChat, onOpenMessages, onBack }) {
   const [ride, setRide] = useState(null);
 
   const load = async () => {
@@ -83,6 +83,26 @@ export default function ActiveRideScreen({ rideId, onCompleted, onOpenChat, onOp
     if (!ok) showAlert("Google Maps indisponible", "Impossible d'ouvrir Google Maps. Vérifiez qu'il est installé, ou utilisez Waze.");
   };
 
+  const cancelRide = async () => {
+    if (!ride) return;
+    showAlert(
+      "Annuler la course",
+      "Confirmez-vous l'annulation ? La course redeviendra disponible pour être réaffectée par Taxi Sylvain.",
+      [
+        { text: "Non", style: "cancel" },
+        {
+          text: "Oui, annuler",
+          style: "destructive",
+          onPress: async () => {
+            await api.cancelRide(ride.id);
+            playSound("action");
+            onCancelled();
+          },
+        },
+      ]
+    );
+  };
+
   const callMasked = async () => {
     try {
       const { proxyNumber } = await api.callMasked(ride.id);
@@ -135,6 +155,11 @@ export default function ActiveRideScreen({ rideId, onCompleted, onOpenChat, onOp
       <TouchableOpacity style={styles.primaryBtn} onPress={advance}>
         <Text style={styles.primaryBtnText}>{LABEL[ride.status] || "Course terminée"}</Text>
       </TouchableOpacity>
+      {ride.status !== "STARTED" && (
+        <TouchableOpacity style={styles.cancelBtn} onPress={cancelRide}>
+          <Text style={styles.cancelBtnText}>Annuler la course</Text>
+        </TouchableOpacity>
+      )}
     </View>
   );
 }
@@ -155,4 +180,6 @@ const styles = StyleSheet.create({
   outlineBtnText: { color: "#edeff3" },
   primaryBtn: { backgroundColor: "#f5a623", borderRadius: 12, padding: 14, alignItems: "center" },
   primaryBtnText: { color: "#1a1200", fontWeight: "700" },
+  cancelBtn: { padding: 12, alignItems: "center", marginTop: 8 },
+  cancelBtnText: { color: "#e85d4c", fontWeight: "600" },
 });

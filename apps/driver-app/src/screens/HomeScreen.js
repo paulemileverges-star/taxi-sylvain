@@ -115,7 +115,7 @@ export default function HomeScreen({ user, onOpenRide, onOpenEarnings, onOpenMes
                 </TouchableOpacity>
               </View>
             )}
-            {item.status === "ACCEPTED" && (
+            {["ACCEPTED", "EN_ROUTE", "STARTED"].includes(item.status) && (
               <TouchableOpacity style={styles.smallBtn} onPress={() => onOpenRide(item.id)}>
                 <Text style={styles.smallBtnText}>Ouvrir la course</Text>
               </TouchableOpacity>

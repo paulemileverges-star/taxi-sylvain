@@ -42,7 +42,8 @@ model User {
 
   // Mémo interne du Dispatch sur un client (préférences, notes utiles pour personnaliser le
   // service) — jamais montré au client lui-même, visible seulement côté Dispatch.
-  notes String?
+  notes   String?
+  address String?
 
   // Jeton de notification push (Expo) de l'appareil actuellement connecté — permet d'alerter un
   // chauffeur ou un client même quand l'app est fermée ou l'écran verrouillé.
@@ -81,6 +82,7 @@ model Ride {
   enRouteAt     DateTime?
   startedAt     DateTime?
   completedAt   DateTime?
+  cancelledAt   DateTime?
 
   clientId String?
   client   User?   @relation("ClientRides", fields: [clientId], references: [id])

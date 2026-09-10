@@ -8,6 +8,32 @@ import { requireAuth, requireRole } from "../middleware/auth.js";
 import { deleteUserCascade } from "../lib/deleteUser.js";
 import { getOnlineDriverIds } from "../lib/onlineDrivers.js";
 import { streamListPdf, streamListXlsx } from "../lib/exportReport.js";
+import { generateTempPassword } from "../lib/placeholderEmail.js";
+
+// Crée un compte chauffeur — réutilisé par la route de création directe ci-dessous et par la
+// création "à la volée" d'un nouveau chauffeur pendant la création d'une course (rides.js).
+// Le mot de passe est optionnel : s'il n'est pas fourni, un mot de passe temporaire est généré
+// et renvoyé en clair (une seule fois) pour que le Dispatch puisse le transmettre au chauffeur.
+export async function createDriverAccount({ name, email, phone, password, carModel, plate }) {
+  if (!name || !email || !phone) {
+    const err = new Error("Nom, courriel et téléphone sont requis.");
+    err.status = 400;
+    throw err;
+  }
+  const existing = await prisma.user.findUnique({ where: { email } });
+  if (existing) {
+    const err = new Error("Ce courriel est déjà utilisé.");
+    err.status = 409;
+    throw err;
+  }
+  const tempPassword = password || generateTempPassword();
+  const passwordHash = await bcrypt.hash(tempPassword, 10);
+  const driver = await prisma.user.create({
+    data: { role: "DRIVER", name, email, phone, passwordHash, carModel: carModel || null, plate: plate || null },
+    select: { id: true, name: true, email: true, phone: true, carModel: true, plate: true, ratingAvg: true, photoUrl: true, carPhotoUrl: true },
+  });
+  return { driver, tempPassword };
+}
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const uploadsDir = path.join(__dirname, "..", "..", "uploads");
@@ -38,20 +64,12 @@ router.get("/", requireRole("DISPATCH"), async (req, res) => {
 
 // Créer un compte chauffeur depuis la console Dispatch
 router.post("/", requireRole("DISPATCH"), async (req, res) => {
-  const { name, email, phone, password, carModel, plate } = req.body;
-  if (!name || !email || !phone || !password) {
-    return res.status(400).json({ error: "Nom, courriel, téléphone et mot de passe sont requis." });
+  try {
+    const { driver, tempPassword } = await createDriverAccount(req.body);
+    res.status(201).json({ ...driver, tempPassword });
+  } catch (e) {
+    res.status(e.status || 500).json({ error: e.message });
   }
-
-  const existing = await prisma.user.findUnique({ where: { email } });
-  if (existing) return res.status(409).json({ error: "Ce courriel est déjà utilisé." });
-
-  const passwordHash = await bcrypt.hash(password, 10);
-  const driver = await prisma.user.create({
-    data: { role: "DRIVER", name, email, phone, passwordHash, carModel, plate },
-    select: { id: true, name: true, carModel: true, plate: true, ratingAvg: true, photoUrl: true, carPhotoUrl: true },
-  });
-  res.status(201).json(driver);
 });
 
 router.delete("/:id", requireRole("DISPATCH"), async (req, res) => {

@@ -105,6 +105,7 @@ export default function App() {
         <ActiveRideScreen
           rideId={activeRideId}
           onCompleted={() => setScreen("rating")}
+          onCancelled={() => { setActiveRideId(null); setScreen("home"); }}
           onOpenChat={() => setScreen("rideChat")}
           onOpenMessages={() => setScreen("messages")}
           onBack={() => setScreen("home")}

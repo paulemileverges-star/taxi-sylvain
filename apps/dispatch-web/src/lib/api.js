@@ -56,6 +56,7 @@ export const api = {
   createClient: (payload) => request("/clients", { method: "POST", body: payload }),
   deleteClient: (id) => request(`/clients/${id}`, { method: "DELETE" }),
   updateClientNotes: (id, notes) => request(`/clients/${id}/notes`, { method: "PATCH", body: { notes } }),
+  updateClientAddress: (id, address) => request(`/clients/${id}/address`, { method: "PATCH", body: { address } }),
   exportClients: (format) => downloadFile(`/clients/export?format=${format}`, `clients-taxi-sylvain.${format}`),
   exportDrivers: (format) => downloadFile(`/drivers/export?format=${format}`, `chauffeurs-taxi-sylvain.${format}`),
   deleteRide: (id) => request(`/rides/${id}`, { method: "DELETE" }),
