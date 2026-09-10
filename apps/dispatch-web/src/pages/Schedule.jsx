@@ -93,7 +93,7 @@ export default function Schedule() {
         </div>
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 8 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(150px, 1fr))", gap: 8 }}>
         {DAYS.map((label, i) => {
           const date = new Date(weekStart.getTime() + i * 86400000);
           return (

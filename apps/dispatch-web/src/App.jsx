@@ -83,7 +83,7 @@ export default function App() {
     <div className="layout">
       <div className="sidebar">
         <div className="brand"><img src={logo} alt="" />TAXI SYLVAIN</div>
-        <div style={{ flex: 1 }}>
+        <div className="nav-list" style={{ flex: 1 }}>
           {NAV.filter((n) => {
             if (user.role === "DISPATCH") return true;
             if (n.dispatchOnly) return false;
@@ -99,7 +99,7 @@ export default function App() {
             </button>
           ))}
         </div>
-        <div style={{ padding: "12px 20px", borderTop: "1px solid var(--border)" }}>
+        <div className="sidebar-footer" style={{ padding: "12px 20px", borderTop: "1px solid var(--border)" }}>
           <div style={{ fontSize: 13, color: "var(--muted)", marginBottom: 8 }}>{user.name}</div>
           <button className="btn outline" style={{ width: "100%", marginBottom: 8 }} onClick={() => setShowChangePassword(true)}>Changer le mot de passe</button>
           <button className="btn outline" style={{ width: "100%" }} onClick={logout}>Se déconnecter</button>

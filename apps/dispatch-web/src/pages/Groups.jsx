@@ -82,8 +82,8 @@ export default function Groups() {
         <h1>Groupes de discussion</h1>
         <button className="btn" onClick={() => setShowCreate(true)}>Nouveau groupe</button>
       </div>
-      <div style={{ display: "flex", gap: 16, height: 560 }}>
-        <div className="card" style={{ width: 240, padding: 8, overflowY: "auto" }}>
+      <div className="messages-layout">
+        <div className="card messages-driverlist" style={{ padding: 8, overflowY: "auto" }}>
           {conversations.map((c) => (
             <button
               key={c.id}

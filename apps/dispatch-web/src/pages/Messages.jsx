@@ -49,8 +49,8 @@ export default function Messages() {
   return (
     <div>
       <h1>Messagerie — Chauffeurs</h1>
-      <div style={{ display: "flex", gap: 16, height: 560 }}>
-        <div className="card" style={{ width: 220, padding: 8, overflowY: "auto" }}>
+      <div className="messages-layout">
+        <div className="card messages-driverlist" style={{ padding: 8, overflowY: "auto" }}>
           {drivers.map((d) => (
             <button
               key={d.id}

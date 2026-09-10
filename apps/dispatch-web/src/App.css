@@ -21,5 +21,33 @@ body { margin: 0; background: var(--bg); color: var(--text); font-family: Inter,
 .input, select, textarea { width: 100%; background: #1d2c46; color: var(--text); border: 1px solid var(--border); border-radius: 10px; padding: 8px 10px; margin-top: 4px; }
 .row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .chip { font-size: 12px; padding: 3px 8px; border-radius: 999px; background: #1d2c46; color: var(--muted); }
-.modal-backdrop { position: fixed; inset: 0; background: rgba(5,10,20,0.6); display: flex; align-items: center; justify-content: center; }
-.modal { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 20px; width: 420px; }
+.messages-layout { display: flex; gap: 16px; height: 560px; }
+.messages-driverlist { width: 240px; flex-shrink: 0; }
+.modal-backdrop { position: fixed; inset: 0; background: rgba(5,10,20,0.6); display: flex; align-items: center; justify-content: center; padding: 16px; overflow-y: auto; }
+.modal { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 20px; width: 420px; max-width: 100%; max-height: calc(100vh - 32px); overflow-y: auto; }
+
+/* En dessous de ce seuil, la barre latérale fixe (220px) ne laisse plus assez de place au
+   contenu — on la transforme en bandeau horizontal compact en haut de l'écran, avec les
+   sections repliées dans un menu déroulant pour ne pas pousser le contenu hors de l'écran. */
+@media (max-width: 760px) {
+  .layout { flex-direction: column; min-height: 0; }
+  .sidebar { width: 100%; flex-direction: row; flex-wrap: wrap; align-items: center; padding: 10px 12px; border-right: none; border-bottom: 1px solid var(--border); position: sticky; top: 0; z-index: 20; background: #0a1120; }
+  .brand { padding: 0; margin-right: auto; font-size: 17px; }
+  .brand img { width: 26px; height: 26px; }
+  .nav-list { flex: 0 0 100%; display: flex; flex-wrap: wrap; gap: 4px; order: 3; margin-top: 8px; }
+  .nav-item { width: auto; padding: 6px 10px; border-radius: 8px; font-size: 13px; }
+  .nav-item.active { background: rgba(245,166,35,0.15); }
+  .sidebar-footer { border-top: none !important; padding: 0 !important; display: flex; gap: 8px; order: 2; }
+  .sidebar-footer > div { display: none; } /* nom de l'utilisateur — repris dans le bandeau, inutile deux fois */
+  .sidebar-footer button { margin-bottom: 0 !important; white-space: nowrap; }
+  .content { padding: 16px; }
+  .content h1 { font-size: 22px; }
+  .messages-layout { flex-direction: column; height: auto; }
+  .messages-driverlist { width: 100%; max-height: 160px; }
+}
+
+/* Les tableaux/diagrammes plus larges que l'écran défilent dans leur propre conteneur plutôt
+   que de forcer toute la page à défiler horizontalement. */
+@media (max-width: 600px) {
+  .row { flex-wrap: wrap; row-gap: 8px; }
+}
