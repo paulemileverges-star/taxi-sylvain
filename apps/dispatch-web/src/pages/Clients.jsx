@@ -54,8 +54,14 @@ function ClientCard({ client, onDelete }) {
   );
 }
 
+const EMPTY_FORM = { name: "", email: "", phone: "" };
+
 export default function Clients() {
   const [clients, setClients] = useState([]);
+  const [showAdd, setShowAdd] = useState(false);
+  const [form, setForm] = useState(EMPTY_FORM);
+  const [error, setError] = useState("");
+  const [exporting, setExporting] = useState(false);
 
   const load = () => api.listClients().then(setClients);
   useEffect(() => { load(); }, []);
@@ -67,13 +73,61 @@ export default function Clients() {
     load();
   };
 
+  const createClient = async () => {
+    setError("");
+    try {
+      await api.createClient(form);
+      setForm(EMPTY_FORM);
+      setShowAdd(false);
+      playSound("action");
+      load();
+    } catch (e) {
+      setError(e.message);
+    }
+  };
+
+  const exportAs = async (format) => {
+    setExporting(true);
+    try {
+      await api.exportClients(format);
+    } catch (e) {
+      alert(e.message);
+    } finally {
+      setExporting(false);
+    }
+  };
+
   return (
     <div>
-      <h1>Clients</h1>
+      <div className="row">
+        <h1>Clients</h1>
+        <div style={{ display: "flex", gap: 8 }}>
+          <button className="btn outline" disabled={exporting} onClick={() => exportAs("pdf")}>Exporter PDF</button>
+          <button className="btn outline" disabled={exporting} onClick={() => exportAs("xlsx")}>Exporter Excel</button>
+          <button className="btn" onClick={() => setShowAdd(true)}>Nouveau client</button>
+        </div>
+      </div>
+
       {clients.map((c) => (
         <ClientCard key={c.id} client={c} onDelete={remove} />
       ))}
       {clients.length === 0 && <div style={{ color: "#8b99b5", fontSize: 14 }}>Aucun client pour l'instant.</div>}
+
+      {showAdd && (
+        <div className="modal-backdrop">
+          <div className="modal">
+            <div className="row"><h3>Nouveau client</h3><button onClick={() => setShowAdd(false)}>✕</button></div>
+            <label>Nom complet</label>
+            <input className="input" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
+            <label style={{ display: "block", marginTop: 8 }}>Courriel (optionnel)</label>
+            <input className="input" type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
+            <label style={{ display: "block", marginTop: 8 }}>Téléphone</label>
+            <input className="input" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} placeholder="+15145551234" />
+            {error && <div style={{ color: "#e85d4c", fontSize: 13, marginTop: 8 }}>{error}</div>}
+            <button className="btn" style={{ marginTop: 14, width: "100%" }} onClick={createClient}>Créer le client</button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

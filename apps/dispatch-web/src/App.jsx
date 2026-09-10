@@ -15,6 +15,7 @@ import Groups from "./pages/Groups.jsx";
 import LiveMap from "./pages/LiveMap.jsx";
 import Search from "./pages/Search.jsx";
 import ChangePasswordModal from "./components/ChangePasswordModal.jsx";
+import logo from "./assets/logo.png";
 
 const NAV = [
   { key: "dashboard", label: "Tableau de bord" },
@@ -79,7 +80,7 @@ export default function App() {
   return (
     <div className="layout">
       <div className="sidebar">
-        <div className="brand">TAXI SYLVAIN</div>
+        <div className="brand"><img src={logo} alt="" />TAXI SYLVAIN</div>
         <div style={{ flex: 1 }}>
           {NAV.map((n) => (
             <button

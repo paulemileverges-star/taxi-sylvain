@@ -53,6 +53,62 @@ export function streamReportPdf(res, { weekStart, weekEnd, rows }) {
   doc.end();
 }
 
+// Export générique d'une liste (chauffeurs, clients...) en PDF — colonnes: [{ key, label, width }]
+export function streamListPdf(res, { title, filename, columns, rows }) {
+  res.setHeader("Content-Type", "application/pdf");
+  res.setHeader("Content-Disposition", `attachment; filename="${filename}.pdf"`);
+
+  const doc = new PDFDocument({ margin: 40, layout: "landscape" });
+  doc.pipe(res);
+
+  doc.fontSize(18).text(title, { align: "left" });
+  doc.moveDown(0.3);
+  doc.fontSize(11).fillColor("#555").text(`${rows.length} entrée(s) — exporté le ${fmtDate(new Date())}`);
+  doc.moveDown(1);
+
+  const startX = 40;
+  let colX = [];
+  let x = startX;
+  for (const col of columns) {
+    colX.push(x);
+    x += col.width;
+  }
+
+  const headerY = doc.y;
+  doc.fontSize(10).fillColor("#000");
+  columns.forEach((col, i) => doc.text(col.label, colX[i], headerY, { width: col.width }));
+  doc.moveDown(0.5);
+  doc.moveTo(startX, doc.y).lineTo(x, doc.y).strokeColor("#ccc").stroke();
+  doc.moveDown(0.3);
+
+  for (const row of rows) {
+    const y = doc.y;
+    columns.forEach((col, i) => doc.text(String(row[col.key] ?? "—"), colX[i], y, { width: col.width }));
+    doc.moveDown(0.6);
+    if (doc.y > 500) doc.addPage({ margin: 40, layout: "landscape" });
+  }
+
+  doc.end();
+}
+
+// Export générique d'une liste en Excel — colonnes: [{ key, label, width }]
+export async function streamListXlsx(res, { title, filename, columns, rows }) {
+  const workbook = new ExcelJS.Workbook();
+  const sheet = workbook.addWorksheet(title.slice(0, 31));
+
+  const headerRow = sheet.addRow(columns.map((c) => c.label));
+  headerRow.font = { bold: true };
+  for (const row of rows) {
+    sheet.addRow(columns.map((c) => row[c.key] ?? ""));
+  }
+  sheet.columns = columns.map((c) => ({ width: Math.max(12, Math.round(c.width / 6)) }));
+
+  res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+  res.setHeader("Content-Disposition", `attachment; filename="${filename}.xlsx"`);
+  await workbook.xlsx.write(res);
+  res.end();
+}
+
 export async function streamReportXlsx(res, { weekStart, weekEnd, rows }) {
   const workbook = new ExcelJS.Workbook();
   const sheet = workbook.addWorksheet(`Semaine ${fmtDate(weekStart)}`);

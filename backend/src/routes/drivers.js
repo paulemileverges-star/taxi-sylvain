@@ -7,6 +7,7 @@ import { prisma } from "../lib/prisma.js";
 import { requireAuth, requireRole } from "../middleware/auth.js";
 import { deleteUserCascade } from "../lib/deleteUser.js";
 import { getOnlineDriverIds } from "../lib/onlineDrivers.js";
+import { streamListPdf, streamListXlsx } from "../lib/exportReport.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const uploadsDir = path.join(__dirname, "..", "..", "uploads");
@@ -76,6 +77,41 @@ router.get("/search", requireRole("DISPATCH"), async (req, res) => {
     }),
   ]);
   res.json({ users, rides });
+});
+
+// Export de la base de chauffeurs (PDF ou Excel).
+router.get("/export", requireRole("DISPATCH"), async (req, res) => {
+  const format = req.query.format === "xlsx" ? "xlsx" : "pdf";
+  const drivers = await prisma.user.findMany({
+    where: { role: "DRIVER" },
+    select: { name: true, email: true, phone: true, carModel: true, plate: true, ratingAvg: true, createdAt: true },
+    orderBy: { name: "asc" },
+  });
+
+  const rows = drivers.map((d) => ({
+    name: d.name,
+    email: d.email,
+    phone: d.phone,
+    carModel: d.carModel || "",
+    plate: d.plate || "",
+    ratingAvg: d.ratingAvg?.toFixed(1) ?? "5.0",
+    createdAt: new Date(d.createdAt).toLocaleDateString("fr-CA"),
+  }));
+  const columns = [
+    { key: "name", label: "Nom", width: 140 },
+    { key: "email", label: "Courriel", width: 200 },
+    { key: "phone", label: "Téléphone", width: 110 },
+    { key: "carModel", label: "Véhicule", width: 150 },
+    { key: "plate", label: "Plaque", width: 90 },
+    { key: "ratingAvg", label: "Note", width: 60 },
+    { key: "createdAt", label: "Chauffeur depuis", width: 110 },
+  ];
+
+  if (format === "xlsx") {
+    await streamListXlsx(res, { title: "Chauffeurs Taxi Sylvain", filename: "chauffeurs-taxi-sylvain", columns, rows });
+  } else {
+    streamListPdf(res, { title: "Taxi Sylvain — Liste des chauffeurs", filename: "chauffeurs-taxi-sylvain", columns, rows });
+  }
 });
 
 // Photo du chauffeur et/ou de son véhicule (besoin #13) — le chauffeur peut mettre à jour

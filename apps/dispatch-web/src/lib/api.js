@@ -24,6 +24,22 @@ export function assetUrl(relativePath) {
   return `${BASE_URL.replace(/\/api\/?$/, "")}${relativePath}`;
 }
 
+async function downloadFile(path, filename) {
+  const res = await fetch(`${BASE_URL}${path}`, {
+    headers: { ...(getToken() ? { Authorization: `Bearer ${getToken()}` } : {}) },
+  });
+  if (!res.ok) throw new Error("Échec du téléchargement.");
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
 export const api = {
   login: (email, password) => request("/auth/login", { method: "POST", body: { email, password } }),
   changePassword: (currentPassword, newPassword) => request("/auth/change-password", { method: "POST", body: { currentPassword, newPassword } }),
@@ -37,8 +53,11 @@ export const api = {
   createDriver: (payload) => request("/drivers", { method: "POST", body: payload }),
   deleteDriver: (id) => request(`/drivers/${id}`, { method: "DELETE" }),
   listClients: () => request("/clients"),
+  createClient: (payload) => request("/clients", { method: "POST", body: payload }),
   deleteClient: (id) => request(`/clients/${id}`, { method: "DELETE" }),
   updateClientNotes: (id, notes) => request(`/clients/${id}/notes`, { method: "PATCH", body: { notes } }),
+  exportClients: (format) => downloadFile(`/clients/export?format=${format}`, `clients-taxi-sylvain.${format}`),
+  exportDrivers: (format) => downloadFile(`/drivers/export?format=${format}`, `chauffeurs-taxi-sylvain.${format}`),
   deleteRide: (id) => request(`/rides/${id}`, { method: "DELETE" }),
   weeklyReport: () => request("/reports/weekly"),
   generateWeeklyReport: (range) => request("/reports/generate", { method: "POST", body: range || {} }),

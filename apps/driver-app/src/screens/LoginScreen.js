@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { View, Text, TextInput, TouchableOpacity, StyleSheet } from "react-native";
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, Image } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { api } from "../lib/api";
 
@@ -21,6 +21,7 @@ export default function LoginScreen({ onLogin }) {
 
   return (
     <View style={styles.container}>
+      <Image source={require("../../assets/icon.png")} style={styles.logo} />
       <Text style={styles.title}>Taxi Sylvain — Chauffeur</Text>
       <TextInput style={styles.input} placeholder="Courriel" placeholderTextColor="#8b99b5" value={email} onChangeText={setEmail} autoCapitalize="none" />
       <TextInput style={styles.input} placeholder="Mot de passe" placeholderTextColor="#8b99b5" value={password} onChangeText={setPassword} secureTextEntry />
@@ -32,7 +33,8 @@ export default function LoginScreen({ onLogin }) {
 
 const styles = StyleSheet.create({
   container: { flex: 1, justifyContent: "center", padding: 24 },
-  title: { color: "#f5a623", fontSize: 24, fontWeight: "700", marginBottom: 20 },
+  logo: { width: 96, height: 96, borderRadius: 48, alignSelf: "center", marginBottom: 16 },
+  title: { color: "#f5a623", fontSize: 24, fontWeight: "700", marginBottom: 20, textAlign: "center" },
   input: { backgroundColor: "#1d2c46", color: "#edeff3", borderRadius: 10, padding: 12, marginBottom: 10, borderWidth: 1, borderColor: "#28395a" },
   btn: { backgroundColor: "#f5a623", borderRadius: 10, padding: 14, alignItems: "center", marginTop: 8 },
   btnText: { color: "#1a1200", fontWeight: "700" },

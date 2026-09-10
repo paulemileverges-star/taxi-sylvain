@@ -38,7 +38,7 @@ export default function Courses() {
   const EMPTY_FORM = {
     pickupAddress: "", pickupLat: null, pickupLng: null,
     destAddress: "", destLat: null, destLng: null,
-    fare: "", driverId: "", clientId: "", flightNumber: "", clientName: "", clientPhone: "",
+    fare: "", driverId: "", clientId: "", flightNumber: "", clientName: "", clientPhone: "", clientEmail: "",
   };
   const [form, setForm] = useState(EMPTY_FORM);
   const [error, setError] = useState("");
@@ -67,6 +67,7 @@ export default function Courses() {
         clientId: form.clientId && form.clientId !== "__new__" ? form.clientId : undefined,
         clientName: form.clientId === "__new__" ? form.clientName : undefined,
         clientPhone: form.clientId === "__new__" ? form.clientPhone : undefined,
+        clientEmail: form.clientId === "__new__" ? form.clientEmail || undefined : undefined,
         flightNumber: form.flightNumber || undefined,
       });
       setForm(EMPTY_FORM);
@@ -166,6 +167,8 @@ export default function Courses() {
                 <input className="input" value={form.clientName} onChange={(e) => setForm({ ...form, clientName: e.target.value })} />
                 <label style={{ display: "block", marginTop: 8 }}>Téléphone du nouveau client</label>
                 <input className="input" value={form.clientPhone} onChange={(e) => setForm({ ...form, clientPhone: e.target.value })} placeholder="+15145551234" />
+                <label style={{ display: "block", marginTop: 8 }}>Courriel du nouveau client (optionnel)</label>
+                <input className="input" type="email" value={form.clientEmail} onChange={(e) => setForm({ ...form, clientEmail: e.target.value })} />
                 <div style={{ color: "var(--muted)", fontSize: 12, marginTop: 4 }}>
                   Un compte client sera créé automatiquement (ou réutilisé si ce numéro existe déjà).
                 </div>

@@ -12,6 +12,7 @@ export default function Drivers() {
   const [showAdd, setShowAdd] = useState(false);
   const [form, setForm] = useState(EMPTY_FORM);
   const [error, setError] = useState("");
+  const [exporting, setExporting] = useState(false);
 
   const load = () => api.listDrivers().then(setDrivers);
   useEffect(() => { load(); }, []);
@@ -64,11 +65,26 @@ export default function Drivers() {
     }
   };
 
+  const exportAs = async (format) => {
+    setExporting(true);
+    try {
+      await api.exportDrivers(format);
+    } catch (e) {
+      alert(e.message);
+    } finally {
+      setExporting(false);
+    }
+  };
+
   return (
     <div>
       <div className="row">
         <h1>Chauffeurs</h1>
-        <button className="btn" onClick={() => setShowAdd(true)}>Nouveau chauffeur</button>
+        <div style={{ display: "flex", gap: 8 }}>
+          <button className="btn outline" disabled={exporting} onClick={() => exportAs("pdf")}>Exporter PDF</button>
+          <button className="btn outline" disabled={exporting} onClick={() => exportAs("xlsx")}>Exporter Excel</button>
+          <button className="btn" onClick={() => setShowAdd(true)}>Nouveau chauffeur</button>
+        </div>
       </div>
       {drivers.map((d) => (
         <div key={d.id} className="card row">

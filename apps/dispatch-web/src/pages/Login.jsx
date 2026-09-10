@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import logo from "../assets/logo.png";
 
 export default function Login({ onLogin }) {
   const [email, setEmail] = useState("");
@@ -18,7 +19,10 @@ export default function Login({ onLogin }) {
   return (
     <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center" }}>
       <form onSubmit={submit} className="card" style={{ width: 320 }}>
-        <div style={{ fontSize: 22, fontWeight: 700, color: "#f5a623", marginBottom: 16 }}>Taxi Sylvain — Dispatch</div>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16 }}>
+          <img src={logo} alt="" style={{ width: 44, height: 44, borderRadius: "50%" }} />
+          <div style={{ fontSize: 20, fontWeight: 700, color: "#f5a623" }}>Taxi Sylvain — Dispatch</div>
+        </div>
         <label>Courriel</label>
         <input className="input" value={email} onChange={(e) => setEmail(e.target.value)} />
         <label style={{ display: "block", marginTop: 10 }}>Mot de passe</label>

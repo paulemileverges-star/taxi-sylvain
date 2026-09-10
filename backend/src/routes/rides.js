@@ -8,14 +8,14 @@ import { notifyUser, notifyAllDrivers } from "../lib/push.js";
 
 // Réservation par téléphone (besoin #5) : le Dispatch peut créer une course pour un client sans
 // compte — on retrouve son compte existant par téléphone, ou on lui en crée un à la volée.
-async function findOrCreateClientByPhone(name, phone) {
+async function findOrCreateClientByPhone(name, phone, email) {
   const existing = await prisma.user.findFirst({ where: { role: "CLIENT", phone } });
   if (existing) return existing.id;
 
   const passwordHash = await bcrypt.hash(crypto.randomBytes(16).toString("hex"), 10);
-  const email = `client-${crypto.randomBytes(6).toString("hex")}@reservation.taxisylvain.local`;
+  const finalEmail = email || `client-${crypto.randomBytes(6).toString("hex")}@reservation.taxisylvain.local`;
   const created = await prisma.user.create({
-    data: { role: "CLIENT", name, phone, email, passwordHash },
+    data: { role: "CLIENT", name, phone, email: finalEmail, passwordHash },
   });
   return created.id;
 }
@@ -50,14 +50,14 @@ router.get("/:id", async (req, res) => {
 
 // Créer une course (Dispatch ou Client)
 router.post("/", requireRole("DISPATCH", "CLIENT"), async (req, res) => {
-  const { pickupAddress, destAddress, distanceKm, fare, driverId, scheduledFor, flightNumber, clientName, clientPhone, pickupLat, pickupLng, destLat, destLng } = req.body;
+  const { pickupAddress, destAddress, distanceKm, fare, driverId, scheduledFor, flightNumber, clientName, clientPhone, clientEmail, pickupLat, pickupLng, destLat, destLng } = req.body;
   if (!pickupAddress || !destAddress || !fare) {
     return res.status(400).json({ error: "Adresse de prise en charge, destination et montant requis." });
   }
 
   let clientId = req.user.role === "CLIENT" ? req.user.id : req.body.clientId ?? null;
   if (!clientId && req.user.role === "DISPATCH" && clientName && clientPhone) {
-    clientId = await findOrCreateClientByPhone(clientName, clientPhone);
+    clientId = await findOrCreateClientByPhone(clientName, clientPhone, clientEmail);
   }
 
   const ride = await prisma.ride.create({
