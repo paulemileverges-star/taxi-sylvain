@@ -3,6 +3,7 @@ import { View, Text, TouchableOpacity, StyleSheet, FlatList, ActivityIndicator }
 import { api } from "../lib/api";
 import { playSound } from "../lib/sound";
 import { showAlert } from "../lib/alert";
+import SwipeButton from "../components/SwipeButton";
 
 const STATUS_LABEL = {
   REQUESTED: "Demandée", BROADCAST: "Diffusée", ACCEPTED: "Acceptée",
@@ -94,9 +95,9 @@ export default function RidesScreen({ onOpenRide, onBack }) {
                 <Text style={styles.addr}>{item.pickupAddress} → {item.destAddress}</Text>
                 <Text style={styles.fare}>{item.fare != null ? `${item.fare} $` : ""}</Text>
                 {isOffer && (
-                  <TouchableOpacity style={[styles.smallBtn, { backgroundColor: "#3fa796", marginRight: 0 }]} onPress={() => accept(item.id)}>
-                    <Text style={styles.smallBtnText}>Accepter</Text>
-                  </TouchableOpacity>
+                  <View style={{ marginTop: 8 }}>
+                    <SwipeButton label="Accepter la course" onConfirm={() => accept(item.id)} color="#3fa796" textColor="#06231d" />
+                  </View>
                 )}
                 {["ACCEPTED", "EN_ROUTE", "STARTED"].includes(item.status) && (
                   <TouchableOpacity style={styles.smallBtn} onPress={() => onOpenRide(item.id)}>

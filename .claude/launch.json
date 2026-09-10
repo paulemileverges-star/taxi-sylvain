@@ -6,6 +6,12 @@
       "runtimeExecutable": "npm",
       "runtimeArgs": ["run", "dev", "--prefix", "apps/dispatch-web"],
       "port": 5173
+    },
+    {
+      "name": "driver-app-static",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": ["serve", "apps/driver-app/dist", "-p", "8084", "-s"],
+      "port": 8084
     }
   ]
 }

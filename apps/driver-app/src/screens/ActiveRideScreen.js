@@ -5,6 +5,7 @@ import { playSound } from "../lib/sound";
 import { startTrackingLocation, stopTrackingLocation } from "../lib/locationTracker";
 import { showAlert } from "../lib/alert";
 import { openWaze as openWazeTo, openGoogleMaps as openGoogleMapsTo } from "../lib/navigation";
+import SwipeButton from "../components/SwipeButton";
 
 const NEXT_STATUS = { ACCEPTED: "EN_ROUTE", EN_ROUTE: "STARTED", STARTED: "COMPLETED" };
 const LABEL = { ACCEPTED: "En route pour la course", EN_ROUTE: "Démarrer la course", STARTED: "Terminer la course" };
@@ -152,9 +153,7 @@ export default function ActiveRideScreen({ rideId, onCompleted, onCancelled, onO
           </TouchableOpacity>
         </View>
       )}
-      <TouchableOpacity style={styles.primaryBtn} onPress={advance}>
-        <Text style={styles.primaryBtnText}>{LABEL[ride.status] || "Course terminée"}</Text>
-      </TouchableOpacity>
+      <SwipeButton label={LABEL[ride.status] || "Course terminée"} onConfirm={advance} disabled={!LABEL[ride.status]} />
       {ride.status !== "STARTED" && (
         <TouchableOpacity style={styles.cancelBtn} onPress={cancelRide}>
           <Text style={styles.cancelBtnText}>Annuler la course</Text>
@@ -178,8 +177,6 @@ const styles = StyleSheet.create({
   rowBetween: { flexDirection: "row", gap: 8, marginBottom: 14 },
   outlineBtn: { flex: 1, borderWidth: 1, borderColor: "#28395a", borderRadius: 10, padding: 10, alignItems: "center" },
   outlineBtnText: { color: "#edeff3" },
-  primaryBtn: { backgroundColor: "#f5a623", borderRadius: 12, padding: 14, alignItems: "center" },
-  primaryBtnText: { color: "#1a1200", fontWeight: "700" },
   cancelBtn: { padding: 12, alignItems: "center", marginTop: 8 },
   cancelBtnText: { color: "#e85d4c", fontWeight: "600" },
 });

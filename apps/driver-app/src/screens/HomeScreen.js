@@ -3,6 +3,7 @@ import { View, Text, FlatList, TouchableOpacity, StyleSheet, RefreshControl } fr
 import { api } from "../lib/api";
 import { playSound } from "../lib/sound";
 import { showAlert } from "../lib/alert";
+import SwipeButton from "../components/SwipeButton";
 
 function fmtDate(d) {
   return d ? new Date(d).toLocaleDateString("fr-CA") : "—";
@@ -119,9 +120,9 @@ export default function HomeScreen({ user, onOpenRide, onOpenEarnings, onOpenMes
                 <Text style={styles.status}>{item.status}</Text>
               </View>
               {isOffer && (
-                <TouchableOpacity style={[styles.smallBtn, { backgroundColor: "#3fa796", marginTop: 8, marginRight: 0 }]} onPress={() => accept(item.id)}>
-                  <Text style={styles.smallBtnText}>Accepter</Text>
-                </TouchableOpacity>
+                <View style={{ marginTop: 8 }}>
+                  <SwipeButton label="Accepter la course" onConfirm={() => accept(item.id)} color="#3fa796" textColor="#06231d" />
+                </View>
               )}
               {["ACCEPTED", "EN_ROUTE", "STARTED"].includes(item.status) && (
                 <TouchableOpacity style={styles.smallBtn} onPress={() => onOpenRide(item.id)}>
