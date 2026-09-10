@@ -2,12 +2,14 @@ import React, { useEffect, useRef, useState } from "react";
 import { api } from "../lib/api.js";
 import { getSocket } from "../lib/socket.js";
 import { playSound } from "../lib/sound.js";
+import RideEditModal from "../components/RideEditModal.jsx";
 
 export default function Messages() {
   const [drivers, setDrivers] = useState([]);
   const [activeDriverId, setActiveDriverId] = useState(null);
   const [messages, setMessages] = useState([]);
   const [draft, setDraft] = useState("");
+  const [openRideId, setOpenRideId] = useState(null);
   const bottomRef = useRef(null);
 
   useEffect(() => {
@@ -69,16 +71,27 @@ export default function Messages() {
           <div style={{ fontWeight: 600, marginBottom: 8 }}>{activeDriver ? activeDriver.name : "Sélectionnez un chauffeur"}</div>
           <div style={{ flex: 1, overflowY: "auto", display: "flex", flexDirection: "column", gap: 6 }}>
             {messages.map((m) => (
-              <div
-                key={m.id}
-                style={{
-                  alignSelf: m.sender.role === "DISPATCH" ? "flex-end" : "flex-start",
-                  maxWidth: "70%", padding: "8px 12px", borderRadius: 14, fontSize: 14,
-                  background: m.sender.role === "DISPATCH" ? "var(--amber)" : "#1d2c46",
-                  color: m.sender.role === "DISPATCH" ? "#1a1200" : "var(--text)",
-                }}
-              >
-                {m.text}
+              <div key={m.id} style={{ alignSelf: m.sender.role === "DISPATCH" ? "flex-end" : "flex-start", maxWidth: "70%" }}>
+                <div
+                  style={{
+                    padding: "8px 12px", borderRadius: 14, fontSize: 14,
+                    background: m.sender.role === "DISPATCH" ? "var(--amber)" : "#1d2c46",
+                    color: m.sender.role === "DISPATCH" ? "#1a1200" : "var(--text)",
+                  }}
+                >
+                  {m.text}
+                </div>
+                {m.ride && (
+                  <button
+                    onClick={() => setOpenRideId(m.ride.id)}
+                    style={{
+                      background: "none", border: "none", cursor: "pointer", padding: 0, marginTop: 4,
+                      color: "var(--amber)", fontSize: 11, textDecoration: "underline",
+                    }}
+                  >
+                    Voir la course : {m.ride.pickupAddress} → {m.ride.destAddress}
+                  </button>
+                )}
               </div>
             ))}
             <div ref={bottomRef} />
@@ -95,6 +108,7 @@ export default function Messages() {
           </div>
         </div>
       </div>
+      {openRideId && <RideEditModal rideId={openRideId} onClose={() => setOpenRideId(null)} />}
     </div>
   );
 }

@@ -4,7 +4,7 @@ import { api } from "../lib/api";
 import { getSocket } from "../lib/socket";
 import { playSound } from "../lib/sound";
 
-export default function MessagesScreen({ user, onBack }) {
+export default function MessagesScreen({ user, onBack, rideContext }) {
   const [messages, setMessages] = useState([]);
   const [draft, setDraft] = useState("");
   const scrollRef = useRef(null);
@@ -25,7 +25,7 @@ export default function MessagesScreen({ user, onBack }) {
 
   const send = async () => {
     if (!draft.trim()) return;
-    await api.sendDispatchMessage(user.id, draft);
+    await api.sendDispatchMessage(user.id, draft, rideContext?.id);
     setDraft("");
     playSound("action");
   };
@@ -36,16 +36,27 @@ export default function MessagesScreen({ user, onBack }) {
         <TouchableOpacity onPress={onBack}><Text style={styles.link}>← Retour</Text></TouchableOpacity>
         <Text style={styles.title}>Messagerie — Centrale</Text>
       </View>
+      {rideContext && (
+        <View style={styles.rideBanner}>
+          <Text style={styles.rideBannerText}>Au sujet de la course : {rideContext.pickupAddress} → {rideContext.destAddress}</Text>
+        </View>
+      )}
       <ScrollView ref={scrollRef} style={{ flex: 1, paddingHorizontal: 16 }} onContentSizeChange={() => scrollRef.current?.scrollToEnd({ animated: true })}>
         {messages.map((m) => (
-          <View
-            key={m.id}
-            style={[
-              styles.bubble,
-              m.sender.role === "DRIVER" ? styles.bubbleMine : styles.bubbleTheirs,
-            ]}
-          >
-            <Text style={m.sender.role === "DRIVER" ? styles.bubbleTextMine : styles.bubbleTextTheirs}>{m.text}</Text>
+          <View key={m.id}>
+            <View
+              style={[
+                styles.bubble,
+                m.sender.role === "DRIVER" ? styles.bubbleMine : styles.bubbleTheirs,
+              ]}
+            >
+              <Text style={m.sender.role === "DRIVER" ? styles.bubbleTextMine : styles.bubbleTextTheirs}>{m.text}</Text>
+            </View>
+            {m.ride && (
+              <Text style={[styles.rideTag, m.sender.role === "DRIVER" ? { alignSelf: "flex-end" } : { alignSelf: "flex-start" }]}>
+                À propos de : {m.ride.pickupAddress} → {m.ride.destAddress}
+              </Text>
+            )}
           </View>
         ))}
       </ScrollView>
@@ -70,6 +81,9 @@ const styles = StyleSheet.create({
   headerRow: { flexDirection: "row", alignItems: "center", padding: 16, gap: 12 },
   link: { color: "#f5a623" },
   title: { color: "#edeff3", fontSize: 18, fontWeight: "700" },
+  rideBanner: { backgroundColor: "#1d2c46", marginHorizontal: 16, marginBottom: 8, padding: 10, borderRadius: 10, borderWidth: 1, borderColor: "#28395a" },
+  rideBannerText: { color: "#f5a623", fontSize: 12, fontWeight: "600" },
+  rideTag: { color: "#8b99b5", fontSize: 10, marginBottom: 8, marginTop: -4 },
   bubble: { maxWidth: "75%", padding: 10, borderRadius: 14, marginBottom: 8 },
   bubbleMine: { alignSelf: "flex-end", backgroundColor: "#f5a623" },
   bubbleTheirs: { alignSelf: "flex-start", backgroundColor: "#1d2c46" },

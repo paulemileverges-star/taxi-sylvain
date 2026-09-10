@@ -147,7 +147,7 @@ export default function ActiveRideScreen({ rideId, onCompleted, onCancelled, onO
       </View>
       {onOpenMessages && (
         <View style={styles.rowBetween}>
-          <TouchableOpacity style={[styles.outlineBtn, { flex: 1 }]} onPress={onOpenMessages}>
+          <TouchableOpacity style={[styles.outlineBtn, { flex: 1 }]} onPress={() => onOpenMessages(ride)}>
             <Text style={styles.outlineBtnText}>Écrire à Taxi Sylvain à propos de cette course</Text>
           </TouchableOpacity>
         </View>

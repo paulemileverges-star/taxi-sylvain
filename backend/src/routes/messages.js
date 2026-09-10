@@ -20,25 +20,33 @@ router.get("/direct/:driverId", async (req, res) => {
   if (req.user.role === "CLIENT") return res.status(403).json({ error: "Accès refusé." });
 
   const messages = await prisma.message.findMany({
-    where: { driverId, rideId: null },
+    where: { driverId },
     orderBy: { createdAt: "asc" },
-    include: { sender: { select: { id: true, name: true, role: true } } },
+    include: {
+      sender: { select: { id: true, name: true, role: true } },
+      ride: { select: { id: true, pickupAddress: true, destAddress: true } },
+    },
   });
   res.json(messages);
 });
 
 router.post("/direct/:driverId", async (req, res) => {
   const { driverId } = req.params;
-  const { text } = req.body;
+  const { text, rideId } = req.body;
   if (req.user.role === "DRIVER" && req.user.id !== driverId) {
     return res.status(403).json({ error: "Accès refusé." });
   }
   if (req.user.role === "CLIENT") return res.status(403).json({ error: "Accès refusé." });
   if (!text || !text.trim()) return res.status(400).json({ error: "Message vide." });
 
+  // Un chauffeur peut écrire "à propos" d'une course précise (bouton dans l'écran de course) —
+  // on associe le message à cette course pour que le Dispatch puisse l'ouvrir en un clic.
   const message = await prisma.message.create({
-    data: { driverId, senderId: req.user.id, text },
-    include: { sender: { select: { id: true, name: true, role: true } } },
+    data: { driverId, senderId: req.user.id, text, rideId: rideId || null },
+    include: {
+      sender: { select: { id: true, name: true, role: true } },
+      ride: { select: { id: true, pickupAddress: true, destAddress: true } },
+    },
   });
 
   const io = req.app.get("io");

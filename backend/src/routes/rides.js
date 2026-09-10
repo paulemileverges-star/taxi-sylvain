@@ -260,6 +260,36 @@ router.post("/:id/call", async (req, res) => {
   }
 });
 
+// Corriger les détails d'une course (Dispatch) — utilisé notamment depuis le lien "Voir la
+// course" d'un message envoyé par un chauffeur à propos d'une course précise (besoin #3).
+router.patch("/:id", requireRole("DISPATCH"), async (req, res) => {
+  const { pickupAddress, destAddress, fare, flightNumber, scheduledFor, pickupLat, pickupLng, destLat, destLng } = req.body;
+  const data = {};
+  if (pickupAddress !== undefined) data.pickupAddress = pickupAddress;
+  if (destAddress !== undefined) data.destAddress = destAddress;
+  if (fare !== undefined) data.fare = Number(fare);
+  if (flightNumber !== undefined) data.flightNumber = flightNumber || null;
+  if (scheduledFor !== undefined) data.scheduledFor = scheduledFor ? new Date(scheduledFor) : null;
+  if (pickupLat !== undefined) data.pickupLat = typeof pickupLat === "number" ? pickupLat : null;
+  if (pickupLng !== undefined) data.pickupLng = typeof pickupLng === "number" ? pickupLng : null;
+  if (destLat !== undefined) data.destLat = typeof destLat === "number" ? destLat : null;
+  if (destLng !== undefined) data.destLng = typeof destLng === "number" ? destLng : null;
+
+  try {
+    const ride = await prisma.ride.update({
+      where: { id: req.params.id },
+      data,
+      include: { client: { select: { id: true, name: true } }, driver: { select: { id: true, name: true } } },
+    });
+    broadcast(req, "dispatch", "ride:updated", ride);
+    broadcast(req, `ride:${ride.id}`, "ride:status", ride);
+    if (ride.driverId) broadcast(req, `driver:${ride.driverId}`, "ride:assigned", ride);
+    res.json(ride);
+  } catch (e) {
+    res.status(404).json({ error: "Course introuvable." });
+  }
+});
+
 // Supprimer une course erronée (Dispatch)
 router.delete("/:id", requireRole("DISPATCH"), async (req, res) => {
   try {

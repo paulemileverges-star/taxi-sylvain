@@ -22,6 +22,7 @@ export default function App() {
   const [screen, setScreen] = useState("home");
   const [activeRideId, setActiveRideId] = useState(null);
   const [newReport, setNewReport] = useState(false);
+  const [messageRideContext, setMessageRideContext] = useState(null);
 
   useEffect(() => {
     (async () => {
@@ -93,7 +94,7 @@ export default function App() {
           user={user}
           onOpenRide={(id) => { setActiveRideId(id); setScreen("active"); }}
           onOpenEarnings={() => setScreen("earnings")}
-          onOpenMessages={() => setScreen("messages")}
+          onOpenMessages={() => { setMessageRideContext(null); setScreen("messages"); }}
           onOpenReports={() => { setNewReport(false); setScreen("reports"); }}
           onOpenGroups={() => setScreen("groups")}
           onOpenChangePassword={() => setScreen("changePassword")}
@@ -107,7 +108,7 @@ export default function App() {
           onCompleted={() => setScreen("rating")}
           onCancelled={() => { setActiveRideId(null); setScreen("home"); }}
           onOpenChat={() => setScreen("rideChat")}
-          onOpenMessages={() => setScreen("messages")}
+          onOpenMessages={(ride) => { setMessageRideContext(ride || null); setScreen("messages"); }}
           onBack={() => setScreen("home")}
         />
       )}
@@ -118,7 +119,13 @@ export default function App() {
         <RideChatScreen rideId={activeRideId} onBack={() => setScreen("active")} />
       )}
       {screen === "earnings" && <EarningsScreen onBack={() => setScreen("home")} />}
-      {screen === "messages" && <MessagesScreen user={user} onBack={() => setScreen("home")} />}
+      {screen === "messages" && (
+        <MessagesScreen
+          user={user}
+          onBack={() => setScreen(messageRideContext ? "active" : "home")}
+          rideContext={messageRideContext}
+        />
+      )}
       {screen === "reports" && <ReportsScreen onBack={() => setScreen("home")} />}
       {screen === "groups" && <GroupsScreen user={user} onBack={() => setScreen("home")} />}
       {screen === "changePassword" && <ChangePasswordScreen onBack={() => setScreen("home")} />}

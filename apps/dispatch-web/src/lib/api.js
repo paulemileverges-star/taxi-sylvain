@@ -46,6 +46,8 @@ export const api = {
   listRides: () => request("/rides"),
   geocodeSearch: (q) => request(`/geocode/search?q=${encodeURIComponent(q)}`),
   createRide: (payload) => request("/rides", { method: "POST", body: payload }),
+  getRide: (id) => request(`/rides/${id}`),
+  updateRide: (id, payload) => request(`/rides/${id}`, { method: "PATCH", body: payload }),
   assignDriver: (rideId, driverId) => request(`/rides/${rideId}/assign`, { method: "POST", body: { driverId } }),
   broadcastRide: (rideId) => request(`/rides/${rideId}/broadcast`, { method: "POST" }),
   listDrivers: () => request("/drivers"),
