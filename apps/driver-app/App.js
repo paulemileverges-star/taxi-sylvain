@@ -11,6 +11,8 @@ import ReportsScreen from "./src/screens/ReportsScreen";
 import RideChatScreen from "./src/screens/RideChatScreen";
 import GroupsScreen from "./src/screens/GroupsScreen";
 import ChangePasswordScreen from "./src/screens/ChangePasswordScreen";
+import NotificationSettingsScreen from "./src/screens/NotificationSettingsScreen";
+import RidesScreen from "./src/screens/RidesScreen";
 import { getSocket, resetSocket } from "./src/lib/socket";
 import { logout as clearSession } from "./src/lib/api";
 import { playSound } from "./src/lib/sound";
@@ -98,8 +100,16 @@ export default function App() {
           onOpenReports={() => { setNewReport(false); setScreen("reports"); }}
           onOpenGroups={() => setScreen("groups")}
           onOpenChangePassword={() => setScreen("changePassword")}
+          onOpenNotifications={() => setScreen("notifications")}
+          onOpenRides={() => setScreen("rides")}
           onLogout={logout}
           hasNewReport={newReport}
+        />
+      )}
+      {screen === "rides" && (
+        <RidesScreen
+          onOpenRide={(id) => { setActiveRideId(id); setScreen("active"); }}
+          onBack={() => setScreen("home")}
         />
       )}
       {screen === "active" && activeRideId && (
@@ -129,6 +139,13 @@ export default function App() {
       {screen === "reports" && <ReportsScreen onBack={() => setScreen("home")} />}
       {screen === "groups" && <GroupsScreen user={user} onBack={() => setScreen("home")} />}
       {screen === "changePassword" && <ChangePasswordScreen onBack={() => setScreen("home")} />}
+      {screen === "notifications" && (
+        <NotificationSettingsScreen
+          user={user}
+          onSaved={(u) => setUser(u)}
+          onBack={() => setScreen("home")}
+        />
+      )}
     </SafeAreaView>
   );
 }

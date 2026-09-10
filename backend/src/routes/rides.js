@@ -28,7 +28,14 @@ async function findOrCreateClientByPhone(name, phone, email, address, notes) {
 const router = Router();
 router.use(requireAuth);
 
-// Liste des courses — filtrée selon le rôle
+const TERMINAL_STATUSES = ["COMPLETED", "CANCELLED", "REFUSED"];
+const RIDE_INCLUDE = {
+  driver: { select: { id: true, name: true, carModel: true, plate: true, ratingAvg: true, photoUrl: true, carPhotoUrl: true } },
+  client: { select: { id: true, name: true } },
+};
+
+// Liste des courses — filtrée selon le rôle. Sans "when", renvoie tout (comportement historique,
+// utilisé par l'écran d'accueil). Avec "when=upcoming|past", pagine par lot de 10 (besoin #4).
 router.get("/", async (req, res) => {
   const { role, id } = req.user;
   let where = {};
@@ -36,11 +43,21 @@ router.get("/", async (req, res) => {
   if (role === "DRIVER") where = { OR: [{ driverId: id }, { status: "BROADCAST" }] };
   // DISPATCH voit tout
 
-  const rides = await prisma.ride.findMany({
-    where,
-    orderBy: { createdAt: "desc" },
-    include: { driver: { select: { id: true, name: true, carModel: true, plate: true, ratingAvg: true, photoUrl: true, carPhotoUrl: true } }, client: { select: { id: true, name: true } } },
-  });
+  const { when, page = "1", pageSize = "10" } = req.query;
+  if (when === "past") where = { ...where, status: { in: TERMINAL_STATUSES } };
+  else if (when === "upcoming") where = { ...where, status: { notIn: TERMINAL_STATUSES } };
+
+  if (when) {
+    const take = Math.min(Number(pageSize) || 10, 50);
+    const skip = (Math.max(Number(page), 1) - 1) * take;
+    const [rides, total] = await Promise.all([
+      prisma.ride.findMany({ where, orderBy: { createdAt: "desc" }, skip, take, include: RIDE_INCLUDE }),
+      prisma.ride.count({ where }),
+    ]);
+    return res.json({ rides, total, page: Number(page), pageSize: take });
+  }
+
+  const rides = await prisma.ride.findMany({ where, orderBy: { createdAt: "desc" }, include: RIDE_INCLUDE });
   res.json(rides);
 });
 

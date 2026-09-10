@@ -8,6 +8,8 @@ import RateScreen from "./src/screens/RateScreen";
 import ChatScreen from "./src/screens/ChatScreen";
 import GroupsScreen from "./src/screens/GroupsScreen";
 import ChangePasswordScreen from "./src/screens/ChangePasswordScreen";
+import NotificationSettingsScreen from "./src/screens/NotificationSettingsScreen";
+import RidesScreen from "./src/screens/RidesScreen";
 import { getSocket, resetSocket } from "./src/lib/socket";
 import { logout as clearSession } from "./src/lib/api";
 import { playSound } from "./src/lib/sound";
@@ -93,7 +95,15 @@ export default function App() {
           onBooked={(rideId) => { setActiveRideId(rideId); setScreen("tracking"); }}
           onOpenGroups={() => setScreen("groups")}
           onOpenChangePassword={() => setScreen("changePassword")}
+          onOpenNotifications={() => setScreen("notifications")}
+          onOpenRides={() => setScreen("rides")}
           onLogout={logout}
+        />
+      )}
+      {screen === "rides" && (
+        <RidesScreen
+          onOpenRide={(id) => { setActiveRideId(id); setScreen("tracking"); }}
+          onBack={() => setScreen("book")}
         />
       )}
       {screen === "tracking" && activeRideId && (
@@ -107,6 +117,13 @@ export default function App() {
       )}
       {screen === "groups" && <GroupsScreen user={user} onBack={() => setScreen("book")} />}
       {screen === "changePassword" && <ChangePasswordScreen onBack={() => setScreen("book")} />}
+      {screen === "notifications" && (
+        <NotificationSettingsScreen
+          user={user}
+          onSaved={(u) => setUser(u)}
+          onBack={() => setScreen("book")}
+        />
+      )}
     </SafeAreaView>
   );
 }

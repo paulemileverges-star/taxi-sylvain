@@ -78,6 +78,22 @@ router.delete("/push-token", requireAuth, async (req, res) => {
   res.json({ ok: true });
 });
 
+// Préférences de rappel de course (besoin #1) — décalages en minutes avant l'heure de prise en
+// charge auxquels le chauffeur ou le client veut être notifié. Par défaut : 1h avant et 10min avant.
+const ALLOWED_OFFSETS = [1440, 120, 60, 30, 10];
+router.patch("/notification-prefs", requireAuth, async (req, res) => {
+  const offsets = Array.isArray(req.body.offsets) ? req.body.offsets : null;
+  if (!offsets || offsets.some((o) => !ALLOWED_OFFSETS.includes(o))) {
+    return res.status(400).json({ error: "Décalages invalides." });
+  }
+  const user = await prisma.user.update({
+    where: { id: req.user.id },
+    data: { reminderOffsets: [...new Set(offsets)] },
+    select: { reminderOffsets: true },
+  });
+  res.json(user);
+});
+
 function signToken(user) {
   return jwt.sign(
     { id: user.id, role: user.role, name: user.name },

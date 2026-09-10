@@ -19,6 +19,7 @@ import conversationRoutes from "./routes/conversations.js";
 import geocodeRoutes from "./routes/geocode.js";
 import { registerSocketHandlers } from "./sockets/index.js";
 import { generateWeeklyReports } from "./jobs/weeklyReport.js";
+import { sendRideReminders } from "./jobs/rideReminders.js";
 
 const app = express();
 app.use(cors({ origin: process.env.CORS_ORIGIN || "*" }));
@@ -47,6 +48,9 @@ registerSocketHandlers(io);
 // Génère automatiquement le récap de la semaine qui vient de se terminer, chaque lundi à 00h05
 // (besoin #14) — voir POST /api/reports/generate pour un déclenchement manuel (tests, rattrapage).
 cron.schedule("5 0 * * 1", () => generateWeeklyReports(io));
+
+// Rappels de course programmés (besoin #1) — voir src/jobs/rideReminders.js.
+cron.schedule("* * * * *", () => sendRideReminders().catch((e) => console.error("Erreur rappels de course:", e.message)));
 
 const port = process.env.PORT || 4000;
 server.listen(port, () => console.log(`Taxi Sylvain API en écoute sur le port ${port}`));

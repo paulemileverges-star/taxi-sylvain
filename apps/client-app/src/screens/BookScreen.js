@@ -5,7 +5,7 @@ import { playSound } from "../lib/sound";
 import { showAlert } from "../lib/alert";
 import AddressInput from "../components/AddressInput";
 
-export default function BookScreen({ user, onBooked, onOpenGroups, onOpenChangePassword, onLogout }) {
+export default function BookScreen({ user, onBooked, onOpenGroups, onOpenChangePassword, onOpenNotifications, onOpenRides, onLogout }) {
   const [pickup, setPickup] = useState({ address: "", lat: null, lng: null });
   const [dest, setDest] = useState({ address: "", lat: null, lng: null });
   const [flightNumber, setFlightNumber] = useState("");
@@ -40,9 +40,11 @@ export default function BookScreen({ user, onBooked, onOpenGroups, onOpenChangeP
         <Text style={styles.title}>Bonjour {user?.name || ""}</Text>
         <TouchableOpacity onPress={onLogout}><Text style={styles.logoutLink}>Se déconnecter</Text></TouchableOpacity>
       </View>
-      <View style={{ flexDirection: "row", gap: 16, marginBottom: 16 }}>
+      <View style={{ flexDirection: "row", gap: 16, marginBottom: 16, flexWrap: "wrap" }}>
+        <TouchableOpacity onPress={onOpenRides}><Text style={styles.link}>Courses</Text></TouchableOpacity>
         <TouchableOpacity onPress={onOpenGroups}><Text style={styles.link}>Groupes</Text></TouchableOpacity>
         <TouchableOpacity onPress={onOpenChangePassword}><Text style={styles.link}>Mot de passe</Text></TouchableOpacity>
+        <TouchableOpacity onPress={onOpenNotifications}><Text style={styles.link}>Notifications</Text></TouchableOpacity>
       </View>
       <Text style={styles.subtitle}>Où allez-vous ?</Text>
       <AddressInput placeholder="Adresse de prise en charge" value={pickup.address} onChange={setPickup} />
