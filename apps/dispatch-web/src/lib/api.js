@@ -40,6 +40,19 @@ async function downloadFile(path, filename) {
   URL.revokeObjectURL(url);
 }
 
+async function uploadFile(path, file) {
+  const form = new FormData();
+  form.append("file", file);
+  const res = await fetch(`${BASE_URL}${path}`, {
+    method: "POST",
+    headers: { ...(getToken() ? { Authorization: `Bearer ${getToken()}` } : {}) },
+    body: form,
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || "Erreur réseau");
+  return data;
+}
+
 export const api = {
   login: (email, password) => request("/auth/login", { method: "POST", body: { email, password } }),
   changePassword: (currentPassword, newPassword) => request("/auth/change-password", { method: "POST", body: { currentPassword, newPassword } }),
@@ -61,6 +74,8 @@ export const api = {
   updateClientAddress: (id, address) => request(`/clients/${id}/address`, { method: "PATCH", body: { address } }),
   exportClients: (format) => downloadFile(`/clients/export?format=${format}`, `clients-taxi-sylvain.${format}`),
   exportDrivers: (format) => downloadFile(`/drivers/export?format=${format}`, `chauffeurs-taxi-sylvain.${format}`),
+  importClients: (file) => uploadFile("/clients/import", file),
+  importDrivers: (file) => uploadFile("/drivers/import", file),
   deleteRide: (id) => request(`/rides/${id}`, { method: "DELETE" }),
   weeklyReport: () => request("/reports/weekly"),
   generateWeeklyReport: (range) => request("/reports/generate", { method: "POST", body: range || {} }),

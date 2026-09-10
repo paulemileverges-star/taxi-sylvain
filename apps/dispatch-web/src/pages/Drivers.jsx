@@ -13,7 +13,10 @@ export default function Drivers() {
   const [form, setForm] = useState(EMPTY_FORM);
   const [error, setError] = useState("");
   const [exporting, setExporting] = useState(false);
+  const [importing, setImporting] = useState(false);
+  const [importResult, setImportResult] = useState(null);
   const [credentials, setCredentials] = useState(null);
+  const fileInputRef = useRef(null);
 
   const load = () => api.listDrivers().then(setDrivers);
   useEffect(() => { load(); }, []);
@@ -78,6 +81,22 @@ export default function Drivers() {
     }
   };
 
+  const importFile = async (file) => {
+    if (!file) return;
+    setImporting(true);
+    try {
+      const result = await api.importDrivers(file);
+      playSound("action");
+      setImportResult(result);
+      load();
+    } catch (e) {
+      alert(e.message);
+    } finally {
+      setImporting(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  };
+
   return (
     <div>
       <div className="row">
@@ -85,6 +104,10 @@ export default function Drivers() {
         <div style={{ display: "flex", gap: 8 }}>
           <button className="btn outline" disabled={exporting} onClick={() => exportAs("pdf")}>Exporter PDF</button>
           <button className="btn outline" disabled={exporting} onClick={() => exportAs("xlsx")}>Exporter Excel</button>
+          <button className="btn outline" disabled={importing} onClick={() => fileInputRef.current?.click()}>
+            {importing ? "Import en cours…" : "Importer (.xlsx / .csv)"}
+          </button>
+          <input ref={fileInputRef} type="file" accept=".xlsx,.csv" style={{ display: "none" }} onChange={(e) => importFile(e.target.files[0])} />
           <button className="btn" onClick={() => setShowAdd(true)}>Nouveau chauffeur</button>
         </div>
       </div>
@@ -144,6 +167,23 @@ export default function Drivers() {
             <input className="input" value={form.plate} onChange={(e) => setForm({ ...form, plate: e.target.value })} />
             {error && <div style={{ color: "#e85d4c", fontSize: 13, marginTop: 8 }}>{error}</div>}
             <button className="btn" style={{ marginTop: 14, width: "100%" }} onClick={createDriver}>Créer le compte chauffeur</button>
+          </div>
+        </div>
+      )}
+
+      {importResult && (
+        <div className="modal-backdrop">
+          <div className="modal">
+            <div className="row"><h3>Résultat de l'import</h3><button onClick={() => setImportResult(null)}>✕</button></div>
+            <div className="field-row"><span className="field-label">Chauffeurs créés :</span><span>{importResult.createdCount}</span></div>
+            <div className="field-row"><span className="field-label">Lignes ignorées :</span><span>{importResult.skippedCount}</span></div>
+            {importResult.skipped?.length > 0 && (
+              <div style={{ marginTop: 10, maxHeight: 200, overflowY: "auto", fontSize: 12, color: "var(--muted)" }}>
+                {importResult.skipped.map((s, i) => (
+                  <div key={i} style={{ marginBottom: 4 }}>{s.row?.nom || s.row?.name || "(ligne sans nom)"} — {s.reason}</div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
       )}

@@ -1,8 +1,14 @@
 import React, { useEffect, useState } from "react";
 import { api } from "../lib/api.js";
 import { playSound } from "../lib/sound.js";
+import RideEditModal from "../components/RideEditModal.jsx";
 
 const DAYS = ["Lun", "Mar", "Mer", "Jeu", "Ven", "Sam", "Dim"];
+const STATUS_LABEL = {
+  REQUESTED: "Demandée", BROADCAST: "Diffusée", ACCEPTED: "Acceptée",
+  EN_ROUTE: "En route", STARTED: "En cours", COMPLETED: "Terminée",
+  CANCELLED: "Annulée", REFUSED: "Refusée",
+};
 
 function startOfWeek(d) {
   const date = new Date(d);
@@ -15,15 +21,18 @@ function startOfWeek(d) {
 export default function Schedule() {
   const [weekStart, setWeekStart] = useState(() => startOfWeek(new Date()));
   const [entries, setEntries] = useState([]);
+  const [rides, setRides] = useState([]);
   const [drivers, setDrivers] = useState([]);
   const [showAdd, setShowAdd] = useState(false);
   const [form, setForm] = useState({ driverId: "", label: "", startsAt: "" });
   const [error, setError] = useState("");
+  const [openRideId, setOpenRideId] = useState(null);
 
   const load = async () => {
-    const [e, d] = await Promise.all([api.listSchedule(), api.listDrivers()]);
+    const [e, d, r] = await Promise.all([api.listSchedule(), api.listDrivers(), api.listRides()]);
     setEntries(e);
     setDrivers(d);
+    setRides(r.filter((ride) => ride.scheduledFor));
   };
 
   useEffect(() => { load(); }, []);
@@ -62,6 +71,17 @@ export default function Schedule() {
     });
   };
 
+  // Toute course avec une heure de prise en charge vient remplir la cédule automatiquement
+  // (besoin #19) — cliquer dessus ouvre la fiche complète pour la corriger si nécessaire.
+  const ridesForDay = (dayIndex) => {
+    return rides.filter((r) => {
+      const d = new Date(r.scheduledFor);
+      const idx = (d.getDay() + 6) % 7;
+      const diffDays = Math.floor((d - weekStart) / 86400000);
+      return idx === dayIndex && diffDays >= 0 && diffDays < 7;
+    });
+  };
+
   return (
     <div>
       <div className="row">
@@ -81,6 +101,22 @@ export default function Schedule() {
               <div style={{ fontSize: 12, color: "#8b99b5", marginBottom: 8 }}>
                 {label} {date.getDate()}/{date.getMonth() + 1}
               </div>
+              {ridesForDay(i).map((ride) => (
+                <div
+                  key={ride.id}
+                  onClick={() => setOpenRideId(ride.id)}
+                  style={{ background: "rgba(245,166,35,0.12)", border: "1px solid var(--amber)", borderRadius: 8, padding: "6px 8px", marginBottom: 6, fontSize: 12, cursor: "pointer" }}
+                >
+                  <div className="row">
+                    <strong>{new Date(ride.scheduledFor).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</strong>
+                    <span style={{ color: "var(--amber)", fontSize: 11 }}>{STATUS_LABEL[ride.status] || ride.status}</span>
+                  </div>
+                  <div>{ride.pickupAddress} → {ride.destAddress}</div>
+                  <div style={{ color: "#8b99b5" }}>
+                    {ride.client?.name || "Client non spécifié"}{ride.driver?.name ? ` · ${ride.driver.name}` : ""}
+                  </div>
+                </div>
+              ))}
               {entriesForDay(i).map((entry) => (
                 <div key={entry.id} style={{ background: "#1d2c46", borderRadius: 8, padding: "6px 8px", marginBottom: 6, fontSize: 12 }}>
                   <div className="row">
@@ -120,6 +156,7 @@ export default function Schedule() {
           </div>
         </div>
       )}
+      {openRideId && <RideEditModal rideId={openRideId} onClose={() => setOpenRideId(null)} onSaved={load} />}
     </div>
   );
 }

@@ -9,6 +9,9 @@ import { deleteUserCascade } from "../lib/deleteUser.js";
 import { getOnlineDriverIds } from "../lib/onlineDrivers.js";
 import { streamListPdf, streamListXlsx } from "../lib/exportReport.js";
 import { generateTempPassword } from "../lib/placeholderEmail.js";
+import { parseImportFile, pick } from "../lib/bulkImport.js";
+
+const importUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024 } });
 
 // Crée un compte chauffeur — réutilisé par la route de création directe ci-dessous et par la
 // création "à la volée" d'un nouveau chauffeur pendant la création d'une course (rides.js).
@@ -79,6 +82,39 @@ router.delete("/:id", requireRole("DISPATCH"), async (req, res) => {
   } catch (e) {
     res.status(404).json({ error: "Chauffeur introuvable." });
   }
+});
+
+// Import en masse depuis un fichier .xlsx ou .csv (besoin #2) — colonnes reconnues : Nom,
+// Courriel, Téléphone, Véhicule, Plaque (accents et casse ignorés).
+router.post("/import", requireRole("DISPATCH"), importUpload.single("file"), async (req, res) => {
+  if (!req.file) return res.status(400).json({ error: "Aucun fichier reçu." });
+
+  let rows;
+  try {
+    rows = await parseImportFile(req.file);
+  } catch (e) {
+    return res.status(400).json({ error: "Fichier illisible. Utilisez un export .xlsx ou .csv avec une ligne d'en-têtes." });
+  }
+
+  const created = [];
+  const skipped = [];
+  for (const row of rows) {
+    const name = pick(row, "nom", "name");
+    const email = pick(row, "courriel", "email");
+    const phone = pick(row, "telephone", "téléphone", "phone");
+    if (!name || !email || !phone) { skipped.push({ row, reason: "Nom, courriel ou téléphone manquant." }); continue; }
+    try {
+      const { driver } = await createDriverAccount({
+        name, email, phone,
+        carModel: pick(row, "vehicule", "véhicule", "carmodel") || undefined,
+        plate: pick(row, "plaque", "plate") || undefined,
+      });
+      created.push(driver.name);
+    } catch (e) {
+      skipped.push({ row, reason: e.message });
+    }
+  }
+  res.json({ createdCount: created.length, skippedCount: skipped.length, skipped });
 });
 
 // Recherche dans les bases clients / chauffeurs / courses (besoin #14)

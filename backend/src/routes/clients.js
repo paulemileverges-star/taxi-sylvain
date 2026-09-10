@@ -1,15 +1,41 @@
 import { Router } from "express";
 import bcrypt from "bcryptjs";
 import crypto from "crypto";
+import multer from "multer";
 import { prisma } from "../lib/prisma.js";
 import { requireAuth, requireRole } from "../middleware/auth.js";
 import { deleteUserCascade } from "../lib/deleteUser.js";
 import { streamListPdf, streamListXlsx } from "../lib/exportReport.js";
 import { realEmailOrNull, generateTempPassword } from "../lib/placeholderEmail.js";
+import { parseImportFile, pick } from "../lib/bulkImport.js";
+
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024 } });
 
 const router = Router();
 router.use(requireAuth);
 router.use(requireRole("DISPATCH"));
+
+async function createClientAccount({ name, email, phone, address, notes, password }) {
+  if (!name || !phone) {
+    const err = new Error("Nom et téléphone sont requis.");
+    err.status = 400;
+    throw err;
+  }
+  const finalEmail = email || `client-${crypto.randomBytes(6).toString("hex")}@reservation.taxisylvain.local`;
+  const existing = await prisma.user.findFirst({ where: { OR: [{ email: finalEmail }, { role: "CLIENT", phone }] } });
+  if (existing) {
+    const err = new Error("Un client avec ce courriel ou ce téléphone existe déjà.");
+    err.status = 409;
+    throw err;
+  }
+  const tempPassword = password || generateTempPassword();
+  const passwordHash = await bcrypt.hash(tempPassword, 10);
+  const client = await prisma.user.create({
+    data: { role: "CLIENT", name, email: finalEmail, phone, address: address || null, notes: notes || null, passwordHash },
+    select: { id: true, name: true, email: true, phone: true, address: true, ratingAvg: true, createdAt: true, notes: true },
+  });
+  return { client, tempPassword };
+}
 
 router.get("/", async (req, res) => {
   const clients = await prisma.user.findMany({
@@ -26,22 +52,48 @@ router.get("/", async (req, res) => {
 // et le renvoie une seule fois en clair (tempPassword) pour que le Dispatch puisse le copier et
 // le transmettre au client — celui-ci pourra le changer lui-même une fois connecté.
 router.post("/", async (req, res) => {
-  const { name, email, phone, address, notes, password } = req.body;
-  if (!name || !phone) return res.status(400).json({ error: "Nom et téléphone sont requis." });
+  try {
+    const { client, tempPassword } = await createClientAccount(req.body);
+    res.status(201).json({ ...client, email: realEmailOrNull(client.email), tempPassword });
+  } catch (e) {
+    res.status(e.status || 500).json({ error: e.message });
+  }
+});
 
-  const finalEmail = email || `client-${crypto.randomBytes(6).toString("hex")}@reservation.taxisylvain.local`;
-  const existing = await prisma.user.findFirst({
-    where: { OR: [{ email: finalEmail }, { role: "CLIENT", phone } ] },
-  });
-  if (existing) return res.status(409).json({ error: "Un client avec ce courriel ou ce téléphone existe déjà." });
+// Import en masse depuis un fichier .xlsx ou .csv (besoin #2) — colonnes reconnues : Nom,
+// Courriel, Téléphone, Adresse, Mémo/Préférences (accents et casse ignorés). Les lignes en
+// double (même téléphone) ou invalides (nom/téléphone manquant) sont ignorées sans bloquer
+// le reste de l'import ; le détail est renvoyé pour que le Dispatch sache quoi corriger.
+router.post("/import", upload.single("file"), async (req, res) => {
+  if (!req.file) return res.status(400).json({ error: "Aucun fichier reçu." });
 
-  const tempPassword = password || generateTempPassword();
-  const passwordHash = await bcrypt.hash(tempPassword, 10);
-  const client = await prisma.user.create({
-    data: { role: "CLIENT", name, email: finalEmail, phone, address: address || null, notes: notes || null, passwordHash },
-    select: { id: true, name: true, email: true, phone: true, address: true, ratingAvg: true, createdAt: true, notes: true },
-  });
-  res.status(201).json({ ...client, email: realEmailOrNull(client.email), tempPassword });
+  let rows;
+  try {
+    rows = await parseImportFile(req.file);
+  } catch (e) {
+    return res.status(400).json({ error: "Fichier illisible. Utilisez un export .xlsx ou .csv avec une ligne d'en-têtes." });
+  }
+
+  const created = [];
+  const skipped = [];
+  for (const row of rows) {
+    const name = pick(row, "nom", "name");
+    const phone = pick(row, "telephone", "téléphone", "phone");
+    if (!name || !phone) { skipped.push({ row, reason: "Nom ou téléphone manquant." }); continue; }
+    try {
+      const { client } = await createClientAccount({
+        name,
+        phone,
+        email: pick(row, "courriel", "email") || undefined,
+        address: pick(row, "adresse", "address") || undefined,
+        notes: pick(row, "memo", "mémo et préférences", "notes", "preferences", "préférences") || undefined,
+      });
+      created.push(client.name);
+    } catch (e) {
+      skipped.push({ row, reason: e.message });
+    }
+  }
+  res.json({ createdCount: created.length, skippedCount: skipped.length, skipped });
 });
 
 // Mémo et préférences du Dispatch sur un client — jamais exposé au client lui-même.
