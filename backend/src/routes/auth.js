@@ -96,7 +96,7 @@ router.patch("/notification-prefs", requireAuth, async (req, res) => {
 
 function signToken(user) {
   return jwt.sign(
-    { id: user.id, role: user.role, name: user.name },
+    { id: user.id, role: user.role, name: user.name, permissions: user.permissions || [] },
     process.env.JWT_SECRET,
     { expiresIn: "30d" }
   );

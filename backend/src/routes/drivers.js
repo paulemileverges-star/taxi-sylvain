@@ -4,7 +4,7 @@ import multer from "multer";
 import path from "path";
 import { fileURLToPath } from "url";
 import { prisma } from "../lib/prisma.js";
-import { requireAuth, requireRole } from "../middleware/auth.js";
+import { requireAuth, requirePermission } from "../middleware/auth.js";
 import { deleteUserCascade } from "../lib/deleteUser.js";
 import { getOnlineDriverIds } from "../lib/onlineDrivers.js";
 import { streamListPdf, streamListXlsx } from "../lib/exportReport.js";
@@ -56,7 +56,7 @@ const upload = multer({
 const router = Router();
 router.use(requireAuth);
 
-router.get("/", requireRole("DISPATCH"), async (req, res) => {
+router.get("/", requirePermission("drivers"), async (req, res) => {
   const drivers = await prisma.user.findMany({
     where: { role: "DRIVER" },
     select: { id: true, name: true, carModel: true, plate: true, ratingAvg: true, photoUrl: true, carPhotoUrl: true },
@@ -66,7 +66,7 @@ router.get("/", requireRole("DISPATCH"), async (req, res) => {
 });
 
 // Créer un compte chauffeur depuis la console Dispatch
-router.post("/", requireRole("DISPATCH"), async (req, res) => {
+router.post("/", requirePermission("drivers"), async (req, res) => {
   try {
     const { driver, tempPassword } = await createDriverAccount(req.body);
     res.status(201).json({ ...driver, tempPassword });
@@ -75,7 +75,7 @@ router.post("/", requireRole("DISPATCH"), async (req, res) => {
   }
 });
 
-router.delete("/:id", requireRole("DISPATCH"), async (req, res) => {
+router.delete("/:id", requirePermission("drivers"), async (req, res) => {
   try {
     await deleteUserCascade(req.params.id);
     res.status(204).end();
@@ -86,7 +86,7 @@ router.delete("/:id", requireRole("DISPATCH"), async (req, res) => {
 
 // Import en masse depuis un fichier .xlsx ou .csv (besoin #2) — colonnes reconnues : Nom,
 // Courriel, Téléphone, Véhicule, Plaque (accents et casse ignorés).
-router.post("/import", requireRole("DISPATCH"), importUpload.single("file"), async (req, res) => {
+router.post("/import", requirePermission("drivers"), importUpload.single("file"), async (req, res) => {
   if (!req.file) return res.status(400).json({ error: "Aucun fichier reçu." });
 
   let rows;
@@ -118,7 +118,7 @@ router.post("/import", requireRole("DISPATCH"), importUpload.single("file"), asy
 });
 
 // Recherche dans les bases clients / chauffeurs / courses (besoin #14)
-router.get("/search", requireRole("DISPATCH"), async (req, res) => {
+router.get("/search", requirePermission("drivers"), async (req, res) => {
   const q = String(req.query.q || "");
   const [users, rides] = await Promise.all([
     prisma.user.findMany({
@@ -134,7 +134,7 @@ router.get("/search", requireRole("DISPATCH"), async (req, res) => {
 });
 
 // Export de la base de chauffeurs (PDF ou Excel).
-router.get("/export", requireRole("DISPATCH"), async (req, res) => {
+router.get("/export", requirePermission("drivers"), async (req, res) => {
   const format = req.query.format === "xlsx" ? "xlsx" : "pdf";
   const drivers = await prisma.user.findMany({
     where: { role: "DRIVER" },
@@ -175,7 +175,8 @@ router.post(
   upload.fields([{ name: "photo", maxCount: 1 }, { name: "carPhoto", maxCount: 1 }]),
   async (req, res) => {
     const { id } = req.params;
-    if (req.user.role !== "DISPATCH" && req.user.id !== id) {
+    const isAdminWithAccess = req.user.role === "ADMIN" && req.user.permissions?.includes("drivers");
+    if (req.user.role !== "DISPATCH" && !isAdminWithAccess && req.user.id !== id) {
       return res.status(403).json({ error: "Accès refusé." });
     }
 

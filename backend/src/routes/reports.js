@@ -1,7 +1,7 @@
 import { Router } from "express";
 import jwt from "jsonwebtoken";
 import { prisma } from "../lib/prisma.js";
-import { requireAuth, requireRole } from "../middleware/auth.js";
+import { requireAuth, requireRole, requirePermission } from "../middleware/auth.js";
 import { generateWeeklyReports, previousWeekRange, mondayOf } from "../jobs/weeklyReport.js";
 import { streamReportPdf, streamReportXlsx } from "../lib/exportReport.js";
 
@@ -24,7 +24,7 @@ function authFromHeaderOrQuery(req, res, next) {
 router.use((req, res, next) => (req.path === "/export" ? authFromHeaderOrQuery(req, res, next) : requireAuth(req, res, next)));
 
 // Récapitulatif en direct pour une période donnée (besoin #14) — vue Dispatch
-router.get("/weekly", requireRole("DISPATCH"), async (req, res) => {
+router.get("/weekly", requirePermission("reports"), async (req, res) => {
   const { from, to } = req.query;
   const range = {
     gte: from ? new Date(from) : previousWeekRange().weekStart,
@@ -71,7 +71,7 @@ router.get("/mine", requireRole("DRIVER"), async (req, res) => {
 });
 
 // Déclenche manuellement la génération du récap (normalement automatique, voir cron dans index.js)
-router.post("/generate", requireRole("DISPATCH"), async (req, res) => {
+router.post("/generate", requirePermission("reports"), async (req, res) => {
   const { from, to } = req.body;
   const range = from && to ? { weekStart: new Date(from), weekEnd: new Date(to) } : previousWeekRange();
   const io = req.app.get("io");
@@ -94,6 +94,9 @@ router.get("/export", async (req, res) => {
     ...(req.user.role === "DRIVER" ? { driverId: req.user.id } : {}),
   };
   if (req.user.role === "CLIENT") return res.status(403).json({ error: "Accès refusé." });
+  if (req.user.role === "ADMIN" && !req.user.permissions?.includes("reports")) {
+    return res.status(403).json({ error: "Accès refusé : cette fonctionnalité n'est pas autorisée pour votre compte." });
+  }
 
   const rides = await prisma.ride.findMany({ where, include: { driver: { select: { id: true, name: true } } } });
 

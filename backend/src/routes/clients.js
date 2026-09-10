@@ -3,7 +3,7 @@ import bcrypt from "bcryptjs";
 import crypto from "crypto";
 import multer from "multer";
 import { prisma } from "../lib/prisma.js";
-import { requireAuth, requireRole } from "../middleware/auth.js";
+import { requireAuth, requirePermission } from "../middleware/auth.js";
 import { deleteUserCascade } from "../lib/deleteUser.js";
 import { streamListPdf, streamListXlsx } from "../lib/exportReport.js";
 import { realEmailOrNull, generateTempPassword } from "../lib/placeholderEmail.js";
@@ -13,7 +13,7 @@ const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 *
 
 const router = Router();
 router.use(requireAuth);
-router.use(requireRole("DISPATCH"));
+router.use(requirePermission("clients"));
 
 async function createClientAccount({ name, email, phone, address, notes, password }) {
   if (!name || !phone) {

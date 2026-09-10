@@ -14,6 +14,7 @@ import Messages from "./pages/Messages.jsx";
 import Groups from "./pages/Groups.jsx";
 import LiveMap from "./pages/LiveMap.jsx";
 import Search from "./pages/Search.jsx";
+import Admins from "./pages/Admins.jsx";
 import ChangePasswordModal from "./components/ChangePasswordModal.jsx";
 import logo from "./assets/logo.png";
 
@@ -21,13 +22,14 @@ const NAV = [
   { key: "dashboard", label: "Tableau de bord" },
   { key: "search", label: "Recherche" },
   { key: "map", label: "Carte" },
-  { key: "courses", label: "Courses" },
-  { key: "schedule", label: "Cédule" },
-  { key: "drivers", label: "Chauffeurs" },
-  { key: "clients", label: "Clients" },
-  { key: "reports", label: "Rapports" },
+  { key: "courses", label: "Courses", permission: "courses" },
+  { key: "schedule", label: "Cédule", permission: "schedule" },
+  { key: "drivers", label: "Chauffeurs", permission: "drivers" },
+  { key: "clients", label: "Clients", permission: "clients" },
+  { key: "reports", label: "Rapports", permission: "reports" },
   { key: "messages", label: "Messagerie" },
-  { key: "groups", label: "Groupes" },
+  { key: "groups", label: "Groupes", permission: "groups" },
+  { key: "admins", label: "Administrateurs", dispatchOnly: true },
 ];
 
 export default function App() {
@@ -82,7 +84,12 @@ export default function App() {
       <div className="sidebar">
         <div className="brand"><img src={logo} alt="" />TAXI SYLVAIN</div>
         <div style={{ flex: 1 }}>
-          {NAV.map((n) => (
+          {NAV.filter((n) => {
+            if (user.role === "DISPATCH") return true;
+            if (n.dispatchOnly) return false;
+            if (!n.permission) return true;
+            return user.permissions?.includes(n.permission);
+          }).map((n) => (
             <button
               key={n.key}
               className={`nav-item ${screen === n.key ? "active" : ""}`}
@@ -109,6 +116,7 @@ export default function App() {
         {screen === "reports" && <Reports />}
         {screen === "messages" && <Messages />}
         {screen === "groups" && <Groups />}
+        {screen === "admins" && user.role === "DISPATCH" && <Admins />}
       </div>
       {showChangePassword && <ChangePasswordModal onClose={() => setShowChangePassword(false)} />}
     </div>

@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { prisma } from "../lib/prisma.js";
-import { requireAuth, requireRole } from "../middleware/auth.js";
+import { requireAuth, requirePermission } from "../middleware/auth.js";
 import { personalRoom } from "../lib/rooms.js";
 import { notifyUsers } from "../lib/push.js";
 
@@ -18,7 +18,7 @@ async function assertParticipant(conversationId, userId) {
 
 // Créer un groupe de discussion (besoin #6) — le Dispatch choisit un ou plusieurs
 // chauffeurs et/ou clients. Le créateur est automatiquement ajouté comme participant.
-router.post("/", requireRole("DISPATCH"), async (req, res) => {
+router.post("/", requirePermission("groups"), async (req, res) => {
   const { name, participantIds } = req.body;
   const ids = Array.isArray(participantIds) ? [...new Set(participantIds)] : [];
   if (ids.length === 0) return res.status(400).json({ error: "Choisissez au moins un correspondant." });

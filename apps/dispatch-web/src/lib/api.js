@@ -117,6 +117,10 @@ export const api = {
     if (!res.ok) throw new Error(data.error || "Erreur réseau");
     return data;
   },
+  listAdmins: () => request("/admins"),
+  createAdmin: (payload) => request("/admins", { method: "POST", body: payload }),
+  updateAdminPermissions: (id, permissions) => request(`/admins/${id}/permissions`, { method: "PATCH", body: { permissions } }),
+  deleteAdmin: (id) => request(`/admins/${id}`, { method: "DELETE" }),
   setToken: (t) => localStorage.setItem("ts_token", t),
   logout: () => {
     localStorage.removeItem("ts_token");

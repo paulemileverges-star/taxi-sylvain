@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { prisma } from "../lib/prisma.js";
-import { requireAuth, requireRole } from "../middleware/auth.js";
+import { requireAuth, requirePermission } from "../middleware/auth.js";
 
 const router = Router();
 router.use(requireAuth);
@@ -25,7 +25,7 @@ router.get("/", async (req, res) => {
   res.json(entries);
 });
 
-router.post("/", requireRole("DISPATCH"), async (req, res) => {
+router.post("/", requirePermission("schedule"), async (req, res) => {
   const { driverId, label, startsAt } = req.body;
   if (!driverId || !label || !startsAt) {
     return res.status(400).json({ error: "driverId, label et startsAt sont requis." });
@@ -38,7 +38,7 @@ router.post("/", requireRole("DISPATCH"), async (req, res) => {
   res.status(201).json(entry);
 });
 
-router.delete("/:id", requireRole("DISPATCH"), async (req, res) => {
+router.delete("/:id", requirePermission("schedule"), async (req, res) => {
   await prisma.schedule.delete({ where: { id: req.params.id } });
   res.status(204).end();
 });

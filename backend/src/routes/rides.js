@@ -2,7 +2,7 @@ import { Router } from "express";
 import bcrypt from "bcryptjs";
 import crypto from "crypto";
 import { prisma } from "../lib/prisma.js";
-import { requireAuth, requireRole } from "../middleware/auth.js";
+import { requireAuth, requireRole, requirePermission } from "../middleware/auth.js";
 import { isConfigured as isCallMaskingConfigured, getOrCreateCallSession } from "../lib/twilioProxy.js";
 import { notifyUser, notifyAllDrivers } from "../lib/push.js";
 import { createDriverAccount } from "./drivers.js";
@@ -71,7 +71,7 @@ router.get("/:id", async (req, res) => {
 });
 
 // Créer une course (Dispatch ou Client)
-router.post("/", requireRole("DISPATCH", "CLIENT"), async (req, res) => {
+router.post("/", requirePermission("courses", "CLIENT"), async (req, res) => {
   const {
     pickupAddress, destAddress, distanceKm, fare, scheduledFor, flightNumber,
     clientName, clientPhone, clientEmail, clientAddress, clientNotes,
@@ -141,7 +141,7 @@ router.post("/", requireRole("DISPATCH", "CLIENT"), async (req, res) => {
 });
 
 // Affecter / réaffecter un chauffeur (Dispatch)
-router.post("/:id/assign", requireRole("DISPATCH"), async (req, res) => {
+router.post("/:id/assign", requirePermission("courses"), async (req, res) => {
   const { driverId } = req.body; // null pour retirer l'affectation
   const ride = await prisma.ride.update({
     where: { id: req.params.id },
@@ -161,7 +161,7 @@ router.post("/:id/assign", requireRole("DISPATCH"), async (req, res) => {
 });
 
 // Diffuser une course de dernière minute à tous les chauffeurs
-router.post("/:id/broadcast", requireRole("DISPATCH"), async (req, res) => {
+router.post("/:id/broadcast", requirePermission("courses"), async (req, res) => {
   const ride = await prisma.ride.update({
     where: { id: req.params.id },
     data: { status: "BROADCAST", driverId: null },
@@ -279,7 +279,7 @@ router.post("/:id/call", async (req, res) => {
 
 // Corriger les détails d'une course (Dispatch) — utilisé notamment depuis le lien "Voir la
 // course" d'un message envoyé par un chauffeur à propos d'une course précise (besoin #3).
-router.patch("/:id", requireRole("DISPATCH"), async (req, res) => {
+router.patch("/:id", requirePermission("courses"), async (req, res) => {
   const { pickupAddress, destAddress, fare, flightNumber, scheduledFor, pickupLat, pickupLng, destLat, destLng } = req.body;
   const data = {};
   if (pickupAddress !== undefined) data.pickupAddress = pickupAddress;
@@ -308,7 +308,7 @@ router.patch("/:id", requireRole("DISPATCH"), async (req, res) => {
 });
 
 // Supprimer une course erronée (Dispatch)
-router.delete("/:id", requireRole("DISPATCH"), async (req, res) => {
+router.delete("/:id", requirePermission("courses"), async (req, res) => {
   try {
     await prisma.$transaction(async (tx) => {
       await tx.rating.deleteMany({ where: { rideId: req.params.id } });

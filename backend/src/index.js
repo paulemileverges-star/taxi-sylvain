@@ -17,6 +17,7 @@ import scheduleRoutes from "./routes/schedule.js";
 import clientRoutes from "./routes/clients.js";
 import conversationRoutes from "./routes/conversations.js";
 import geocodeRoutes from "./routes/geocode.js";
+import adminRoutes from "./routes/admins.js";
 import { registerSocketHandlers } from "./sockets/index.js";
 import { generateWeeklyReports } from "./jobs/weeklyReport.js";
 import { sendRideReminders } from "./jobs/rideReminders.js";
@@ -39,6 +40,7 @@ app.use("/api/schedule", scheduleRoutes);
 app.use("/api/clients", clientRoutes);
 app.use("/api/conversations", conversationRoutes);
 app.use("/api/geocode", geocodeRoutes);
+app.use("/api/admins", adminRoutes);
 
 const server = http.createServer(app);
 const io = new Server(server, { cors: { origin: process.env.CORS_ORIGIN || "*" } });
