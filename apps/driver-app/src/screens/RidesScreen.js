@@ -78,31 +78,34 @@ export default function RidesScreen({ onOpenRide, onBack }) {
           data={data.rides}
           keyExtractor={(r) => r.id}
           ListEmptyComponent={<Text style={{ color: "#8b99b5", marginTop: 12 }}>Aucune course ici.</Text>}
-          renderItem={({ item }) => (
-            <View style={styles.card}>
-              <View style={styles.rowBetween}>
-                <Text style={styles.date}>{fmtDate(item.scheduledFor || item.createdAt)} · {fmtTime(item.scheduledFor || item.createdAt)}</Text>
-                <Text style={styles.status}>{STATUS_LABEL[item.status] || item.status}</Text>
-              </View>
-              <Text style={styles.addr}>{item.pickupAddress} → {item.destAddress}</Text>
-              <Text style={styles.fare}>{item.fare != null ? `${item.fare} $` : ""}</Text>
-              {(item.status === "BROADCAST" || item.status === "REQUESTED") && (
+          renderItem={({ item }) => {
+            const isOffer = item.status === "BROADCAST" || item.status === "REQUESTED";
+            return (
+              <View style={[styles.card, isOffer && styles.offerCard]}>
+                {isOffer && (
+                  <TouchableOpacity style={styles.closeBtn} onPress={() => refuse(item.id)} accessibilityLabel="Refuser cette course">
+                    <Text style={styles.closeBtnText}>✕</Text>
+                  </TouchableOpacity>
+                )}
                 <View style={styles.rowBetween}>
-                  <TouchableOpacity style={[styles.smallBtn, { backgroundColor: "#3fa796" }]} onPress={() => accept(item.id)}>
+                  <Text style={styles.date}>{fmtDate(item.scheduledFor || item.createdAt)} · {fmtTime(item.scheduledFor || item.createdAt)}</Text>
+                  <Text style={styles.status}>{STATUS_LABEL[item.status] || item.status}</Text>
+                </View>
+                <Text style={styles.addr}>{item.pickupAddress} → {item.destAddress}</Text>
+                <Text style={styles.fare}>{item.fare != null ? `${item.fare} $` : ""}</Text>
+                {isOffer && (
+                  <TouchableOpacity style={[styles.smallBtn, { backgroundColor: "#3fa796", marginRight: 0 }]} onPress={() => accept(item.id)}>
                     <Text style={styles.smallBtnText}>Accepter</Text>
                   </TouchableOpacity>
-                  <TouchableOpacity style={[styles.smallBtn, { backgroundColor: "transparent", borderWidth: 1, borderColor: "#e85d4c" }]} onPress={() => refuse(item.id)}>
-                    <Text style={{ color: "#e85d4c", fontWeight: "700" }}>Refuser</Text>
+                )}
+                {["ACCEPTED", "EN_ROUTE", "STARTED"].includes(item.status) && (
+                  <TouchableOpacity style={styles.smallBtn} onPress={() => onOpenRide(item.id)}>
+                    <Text style={styles.smallBtnText}>Ouvrir la course</Text>
                   </TouchableOpacity>
-                </View>
-              )}
-              {["ACCEPTED", "EN_ROUTE", "STARTED"].includes(item.status) && (
-                <TouchableOpacity style={styles.smallBtn} onPress={() => onOpenRide(item.id)}>
-                  <Text style={styles.smallBtnText}>Ouvrir la course</Text>
-                </TouchableOpacity>
-              )}
-            </View>
-          )}
+                )}
+              </View>
+            );
+          }}
           ListFooterComponent={
             data.total > data.pageSize ? (
               <View style={styles.pager}>
@@ -130,6 +133,9 @@ const styles = StyleSheet.create({
   tabText: { color: "#8b99b5", fontWeight: "600" },
   tabTextActive: { color: "#1a1200" },
   card: { backgroundColor: "#16233a", borderRadius: 14, padding: 14, marginBottom: 10, borderWidth: 1, borderColor: "#28395a" },
+  offerCard: { borderColor: "#f5a623", position: "relative", paddingTop: 18 },
+  closeBtn: { position: "absolute", top: 10, right: 10, width: 26, height: 26, borderRadius: 13, backgroundColor: "rgba(232,93,76,0.15)", borderWidth: 1, borderColor: "#e85d4c", alignItems: "center", justifyContent: "center", zIndex: 1 },
+  closeBtnText: { color: "#e85d4c", fontWeight: "700", fontSize: 13, lineHeight: 15 },
   rowBetween: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginTop: 4 },
   date: { color: "#8b99b5", fontSize: 12 },
   status: { color: "#f5a623", fontSize: 12, fontWeight: "600" },

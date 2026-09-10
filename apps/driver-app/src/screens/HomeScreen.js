@@ -95,35 +95,42 @@ export default function HomeScreen({ user, onOpenRide, onOpenEarnings, onOpenMes
             ))}
           </View>
         ) : null}
-        renderItem={({ item }) => (
-          <View style={styles.card}>
-            <Field label="Date de la course" value={fmtDate(item.scheduledFor || item.createdAt)} />
-            <Field label="Heure de la course" value={fmtTime(item.scheduledFor || item.createdAt)} />
-            <Field label="Nom du client" value={item.client?.name} />
-            <Field label="Adresse de départ" value={item.pickupAddress} />
-            <Field label="Destination" value={item.destAddress} />
-            <Field label="Numéro de vol" value={item.flightNumber} />
-            <Field label="Montant prévu" value={item.fare != null ? `${item.fare} $` : null} />
-            <View style={styles.rowBetween}>
-              <Text style={styles.status}>{item.status}</Text>
-            </View>
-            {(item.status === "BROADCAST" || item.status === "REQUESTED") && (
+        renderItem={({ item }) => {
+          const isOffer = item.status === "BROADCAST" || item.status === "REQUESTED";
+          return (
+            <View style={[styles.card, isOffer && styles.offerCard]}>
+              {isOffer && (
+                <TouchableOpacity
+                  style={styles.closeBtn}
+                  onPress={() => refuse(item.id)}
+                  accessibilityLabel="Refuser cette course"
+                >
+                  <Text style={styles.closeBtnText}>✕</Text>
+                </TouchableOpacity>
+              )}
+              <Field label="Date de la course" value={fmtDate(item.scheduledFor || item.createdAt)} />
+              <Field label="Heure de la course" value={fmtTime(item.scheduledFor || item.createdAt)} />
+              <Field label="Nom du client" value={item.client?.name} />
+              <Field label="Adresse de départ" value={item.pickupAddress} />
+              <Field label="Destination" value={item.destAddress} />
+              <Field label="Numéro de vol" value={item.flightNumber} />
+              <Field label="Montant prévu" value={item.fare != null ? `${item.fare} $` : null} />
               <View style={styles.rowBetween}>
-                <TouchableOpacity style={[styles.smallBtn, { backgroundColor: "#3fa796" }]} onPress={() => accept(item.id)}>
+                <Text style={styles.status}>{item.status}</Text>
+              </View>
+              {isOffer && (
+                <TouchableOpacity style={[styles.smallBtn, { backgroundColor: "#3fa796", marginTop: 8, marginRight: 0 }]} onPress={() => accept(item.id)}>
                   <Text style={styles.smallBtnText}>Accepter</Text>
                 </TouchableOpacity>
-                <TouchableOpacity style={[styles.smallBtn, { backgroundColor: "transparent", borderWidth: 1, borderColor: "#e85d4c" }]} onPress={() => refuse(item.id)}>
-                  <Text style={{ color: "#e85d4c", fontWeight: "700" }}>Refuser</Text>
+              )}
+              {["ACCEPTED", "EN_ROUTE", "STARTED"].includes(item.status) && (
+                <TouchableOpacity style={styles.smallBtn} onPress={() => onOpenRide(item.id)}>
+                  <Text style={styles.smallBtnText}>Ouvrir la course</Text>
                 </TouchableOpacity>
-              </View>
-            )}
-            {["ACCEPTED", "EN_ROUTE", "STARTED"].includes(item.status) && (
-              <TouchableOpacity style={styles.smallBtn} onPress={() => onOpenRide(item.id)}>
-                <Text style={styles.smallBtnText}>Ouvrir la course</Text>
-              </TouchableOpacity>
-            )}
-          </View>
-        )}
+              )}
+            </View>
+          );
+        }}
         ListEmptyComponent={<Text style={{ color: "#8b99b5" }}>Aucune course pour le moment.</Text>}
       />
     </View>
@@ -139,6 +146,9 @@ const styles = StyleSheet.create({
   fieldLabel: { color: "#8b99b5", fontSize: 12 },
   fieldValue: { color: "#edeff3", fontSize: 13, fontWeight: "600", flexShrink: 1, textAlign: "right" },
   card: { backgroundColor: "#16233a", borderRadius: 14, padding: 14, marginBottom: 10, borderWidth: 1, borderColor: "#28395a" },
+  offerCard: { borderColor: "#f5a623", position: "relative", paddingTop: 18 },
+  closeBtn: { position: "absolute", top: 10, right: 10, width: 26, height: 26, borderRadius: 13, backgroundColor: "rgba(232,93,76,0.15)", borderWidth: 1, borderColor: "#e85d4c", alignItems: "center", justifyContent: "center", zIndex: 1 },
+  closeBtnText: { color: "#e85d4c", fontWeight: "700", fontSize: 13, lineHeight: 15 },
   sectionLabel: { color: "#8b99b5", fontSize: 12, textTransform: "uppercase", marginBottom: 8 },
   scheduleCard: { backgroundColor: "#16233a", borderRadius: 12, padding: 12, marginBottom: 8, borderWidth: 1, borderColor: "#28395a" },
   scheduleTime: { color: "#f5a623", fontSize: 12, fontWeight: "700", marginBottom: 4 },
