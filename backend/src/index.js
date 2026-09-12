@@ -23,8 +23,17 @@ import { generateWeeklyReports } from "./jobs/weeklyReport.js";
 import { sendRideReminders } from "./jobs/rideReminders.js";
 
 const app = express();
-app.use(cors({ origin: process.env.CORS_ORIGIN || "*" }));
-app.use(express.json());
+app.set("trust proxy", 1); // derrière le proxy Railway — nécessaire pour que req.ip soit la vraie IP (limiteur de tentatives)
+
+// CORS_ORIGIN : "*" (tout), ou une liste séparée par des virgules. Les apps natives n'envoient
+// pas d'en-tête Origin et passent toujours ; seules les pages web sont filtrées par le navigateur.
+const allowedOrigins = (process.env.CORS_ORIGIN || "*").split(",").map((o) => o.trim()).filter(Boolean);
+const corsOrigin =
+  allowedOrigins.includes("*")
+    ? "*"
+    : (origin, cb) => cb(null, !origin || allowedOrigins.includes(origin) || /-taxi-sylvain\.vercel\.app$/.test(origin));
+app.use(cors({ origin: corsOrigin }));
+app.use(express.json({ limit: "1mb" }));
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 app.use("/uploads", express.static(path.join(__dirname, "..", "uploads")));
@@ -43,7 +52,7 @@ app.use("/api/geocode", geocodeRoutes);
 app.use("/api/admins", adminRoutes);
 
 const server = http.createServer(app);
-const io = new Server(server, { cors: { origin: process.env.CORS_ORIGIN || "*" } });
+const io = new Server(server, { cors: { origin: corsOrigin } });
 app.set("io", io);
 registerSocketHandlers(io);
 

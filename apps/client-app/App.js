@@ -61,6 +61,9 @@ export default function App() {
       if (data?.type === "ride:status" && data.rideId) {
         setActiveRideId(data.rideId);
         setScreen(data.status === "COMPLETED" ? "rate" : "tracking");
+      } else if (data?.type === "ride:reminder" && data.rideId) {
+        setActiveRideId(data.rideId);
+        setScreen("tracking");
       } else if (data?.type === "message:group") {
         setScreen("groups");
       }

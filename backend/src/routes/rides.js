@@ -67,6 +67,10 @@ router.get("/:id", async (req, res) => {
     include: { driver: true, client: true, messages: true, ratings: true },
   });
   if (!ride) return res.status(404).json({ error: "Course introuvable." });
+  const isStaff = req.user.role === "DISPATCH" || req.user.role === "ADMIN";
+  const isParty = req.user.id === ride.clientId || req.user.id === ride.driverId;
+  const isOpenOffer = req.user.role === "DRIVER" && ride.status === "BROADCAST";
+  if (!isStaff && !isParty && !isOpenOffer) return res.status(403).json({ error: "Accès refusé." });
   res.json(sanitizeRide(ride, req.user));
 });
 
@@ -83,16 +87,17 @@ router.post("/", requirePermission("courses", "CLIENT"), async (req, res) => {
     return res.status(400).json({ error: "Adresse de prise en charge, destination et montant requis." });
   }
 
+  const isStaff = req.user.role === "DISPATCH" || req.user.role === "ADMIN";
   let clientId = req.user.role === "CLIENT" ? req.user.id : req.body.clientId ?? null;
   let clientTempPassword = null;
-  if (!clientId && req.user.role === "DISPATCH" && clientName && clientPhone) {
+  if (!clientId && isStaff && clientName && clientPhone) {
     const result = await findOrCreateClientByPhone(clientName, clientPhone, clientEmail, clientAddress, clientNotes);
     clientId = result.id;
     clientTempPassword = result.tempPassword;
   }
 
   let driverTempPassword = null;
-  if (!driverId && req.user.role === "DISPATCH" && newDriver?.name && newDriver?.email && newDriver?.phone) {
+  if (!driverId && isStaff && newDriver?.name && newDriver?.email && newDriver?.phone) {
     try {
       const { driver, tempPassword } = await createDriverAccount(newDriver);
       driverId = driver.id;
@@ -218,6 +223,16 @@ router.post("/:id/status", requireRole("DRIVER"), async (req, res) => {
   const current = await prisma.ride.findUnique({ where: { id: req.params.id } });
   if (!current) return res.status(404).json({ error: "Course introuvable." });
   if (current.driverId !== req.user.id) return res.status(403).json({ error: "Cette course ne vous est pas affectée." });
+
+  // Ordre des étapes imposé : ACCEPTED -> EN_ROUTE -> STARTED -> COMPLETED ; annulation possible
+  // à tout moment avant la fin. Évite qu'un double appui ou un écran désynchronisé ne saute
+  // une étape (ex. terminer une course jamais démarrée).
+  const NEXT = { ACCEPTED: "EN_ROUTE", EN_ROUTE: "STARTED", STARTED: "COMPLETED" };
+  const isTerminal = ["COMPLETED", "CANCELLED", "REFUSED"].includes(current.status);
+  if (isTerminal) return res.status(409).json({ error: "Cette course est déjà terminée ou annulée." });
+  if (status !== "CANCELLED" && NEXT[current.status] !== status) {
+    return res.status(409).json({ error: `Étape invalide : la course est actuellement « ${current.status} ».` });
+  }
 
   const ride = await prisma.ride.update({
     where: { id: req.params.id },

@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { api } from "../lib/api.js";
 
-const ROLE_LABEL = { DISPATCH: "Dispatch", DRIVER: "Chauffeur", CLIENT: "Client" };
+const ROLE_LABEL = { DISPATCH: "Dispatch", ADMIN: "Admin", DRIVER: "Chauffeur", CLIENT: "Client" };
 
 function fmtDate(d) {
   return new Date(d).toLocaleDateString("fr-CA");

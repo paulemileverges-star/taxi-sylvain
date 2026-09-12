@@ -13,11 +13,12 @@
 
 ## 2. Schéma de données (résumé — voir `backend/prisma/schema.prisma`)
 
-- **User** : rôle CLIENT / DRIVER / DISPATCH, infos de contact (jamais exposées directement à l'autre partie — voir §3)
-- **Ride** (course) : adresses, distance, montant prévu, statut (`REQUESTED → ACCEPTED → EN_ROUTE → STARTED → COMPLETED`), chauffeur affecté, client
-- **Message** : messagerie liée à une course (chauffeur↔client ou dispatch↔chauffeur), jamais de numéro de téléphone en clair
-- **Rating** : notation bidirectionnelle chauffeur↔client en fin de course
-- **Schedule** : cédule hebdomadaire, courses planifiées et affectées à l'avance
+- **User** : rôle CLIENT / DRIVER / DISPATCH / ADMIN (collaborateur à permissions limitées), infos de contact (jamais exposées directement à l'autre partie — voir §3), préférences de rappel, jeton push
+- **Ride** (course) : adresses (+ coordonnées), montant prévu, heure de prise en charge, statut (`REQUESTED → ACCEPTED → EN_ROUTE → STARTED → COMPLETED`, ou `BROADCAST` pour une course diffusée à tous, `CANCELLED`/`REFUSED`), chauffeur affecté, client
+- **Message** / **Conversation** / **GroupMessage** : messagerie liée à une course (chauffeur↔client), fil direct dispatch↔chauffeur (éventuellement rattaché à une course), groupes de discussion
+- **Rating** : notation bidirectionnelle chauffeur↔client en fin de course (une seule par partie et par course)
+- **Schedule** : créneaux manuels de la cédule ; les courses avec heure de prise en charge y apparaissent automatiquement
+- **WeeklyReport** / **SentReminder** : récaps hebdomadaires figés par chauffeur ; trace des rappels de course déjà envoyés
 
 ## 3. Confidentialité des contacts (besoin #2 du cahier des charges)
 

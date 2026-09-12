@@ -58,7 +58,7 @@ export default function App() {
   useEffect(() => {
     const sub = Notifications.addNotificationResponseReceivedListener((response) => {
       const data = response.notification.request.content.data;
-      if ((data?.type === "ride:assigned" || data?.type === "ride:broadcast") && data.rideId) {
+      if ((data?.type === "ride:assigned" || data?.type === "ride:broadcast" || data?.type === "ride:reminder") && data.rideId) {
         setActiveRideId(data.rideId);
         setScreen("active");
       } else if (data?.type === "message:direct") {

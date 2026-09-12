@@ -53,7 +53,7 @@ export default function BookScreen({ user, onBooked, onOpenGroups, onOpenChangeP
       <TouchableOpacity style={styles.primaryBtn} onPress={book}>
         <Text style={styles.primaryBtnText}>Réserver dans l'app</Text>
       </TouchableOpacity>
-      <TouchableOpacity style={styles.outlineBtn} onPress={() => Linking.openURL("tel:+15145550100")}>
+      <TouchableOpacity style={styles.outlineBtn} onPress={() => Linking.openURL("tel:+14384991120")}>
         <Text style={{ color: "#edeff3" }}>Réserver par téléphone</Text>
       </TouchableOpacity>
     </View>

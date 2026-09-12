@@ -3,28 +3,39 @@ import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import { prisma } from "../lib/prisma.js";
 import { requireAuth } from "../middleware/auth.js";
+import { rateLimit } from "../middleware/rateLimit.js";
 
 const router = Router();
 
-// Inscription — le rôle DISPATCH ne devrait être créé qu'à la main (compte admin Taxi Sylvain)
-router.post("/register", async (req, res) => {
-  const { name, email, phone, password, role, carModel, plate } = req.body;
-  if (!name || !email || !phone || !password || !role) {
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 20,
+  keyFn: (req) => `${req.ip}|${String(req.body?.email || "").toLowerCase()}`,
+});
+
+// Inscription publique — uniquement des comptes CLIENT. Les chauffeurs, admins et le Dispatch
+// sont créés depuis la console par Taxi Sylvain ; le rôle n'est jamais accepté depuis le client.
+router.post("/register", authLimiter, async (req, res) => {
+  const { name, email, phone, password } = req.body;
+  if (!name || !email || !phone || !password) {
     return res.status(400).json({ error: "Champs manquants." });
+  }
+  if (password.length < 6) {
+    return res.status(400).json({ error: "Le mot de passe doit contenir au moins 6 caractères." });
   }
   const existing = await prisma.user.findUnique({ where: { email } });
   if (existing) return res.status(409).json({ error: "Ce courriel est déjà utilisé." });
 
   const passwordHash = await bcrypt.hash(password, 10);
   const user = await prisma.user.create({
-    data: { name, email, phone, passwordHash, role, carModel, plate },
+    data: { name, email, phone, passwordHash, role: "CLIENT" },
   });
 
   const token = signToken(user);
   res.status(201).json({ token, user: publicUser(user) });
 });
 
-router.post("/login", async (req, res) => {
+router.post("/login", authLimiter, async (req, res) => {
   const { email, password } = req.body;
   const user = await prisma.user.findUnique({ where: { email } });
   if (!user) return res.status(401).json({ error: "Identifiants invalides." });

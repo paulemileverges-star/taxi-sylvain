@@ -10,12 +10,15 @@ Monorepo contenant le code source de départ pour les 3 applications demandées 
 
 ## Statut de ce code
 
-Ceci est une **base de départ fonctionnelle et cohérente**, pas un produit fini prêt pour la production :
-- La logique métier centrale (courses, affectation, statuts, messagerie, notation, rapports) est implémentée et reliée de bout en bout (API ↔ web ↔ mobile ↔ temps réel).
-- Certaines intégrations tierces (Maps/Waze réels, paiement, masquage d'appel téléphonique, notifications push) sont câblées avec des points d'ancrage clairs (`TODO`) mais nécessitent vos propres clés API / comptes fournisseurs pour fonctionner réellement.
-- Le code n'a pas pu être exécuté ni testé dans cet environnement (pas d'accès réseau pour installer les dépendances) — un développeur doit l'installer et le valider avant mise en production.
+Plateforme **déployée et en usage** :
+- API + base de données : Railway (`backend/`, `npm start` applique les migrations Prisma puis démarre le serveur).
+- Console Dispatch : https://taxi-sylvain-dispatch.vercel.app
+- App Chauffeur (web) : https://taxi-sylvain-driver.vercel.app — APK Android via EAS Build (profil `preview`).
+- App Client (web) : https://taxi-sylvain-client.vercel.app — APK Android via EAS Build (profil `preview`).
 
-## Démarrage rapide (à faire sur votre machine ou un serveur, pas ici)
+Intégrations optionnelles qui dépendent d'un compte fournisseur (voir `docs/ARCHITECTURE.md`) : masquage d'appel (Twilio Proxy), notifications push Android (Firebase Cloud Messaging à configurer sur EAS), publication sur les stores.
+
+## Démarrage rapide (développement local)
 
 ```bash
 # 1. Backend

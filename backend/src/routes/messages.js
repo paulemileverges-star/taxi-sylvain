@@ -54,7 +54,7 @@ router.post("/direct/:driverId", async (req, res) => {
     io.to(`driver:${driverId}`).emit("message:direct", message);
     io.to("dispatch").emit("message:direct", message);
   }
-  if (req.user.role === "DISPATCH") {
+  if (req.user.role === "DISPATCH" || req.user.role === "ADMIN") {
     notifyUser(driverId, { title: "Message de Taxi Sylvain", body: text, data: { type: "message:direct" } });
   }
   res.status(201).json(message);

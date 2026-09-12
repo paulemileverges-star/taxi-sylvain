@@ -21,7 +21,8 @@ export function registerSocketHandlers(io) {
 
   io.on("connection", (socket) => {
     const { role, id } = socket.user;
-    if (role === "DISPATCH") socket.join("dispatch");
+    // Les admins (collaborateurs) reçoivent les mêmes évènements temps réel que le Dispatch.
+    if (role === "DISPATCH" || role === "ADMIN") socket.join("dispatch");
     if (role === "DRIVER") {
       socket.join("drivers");
       socket.join(`driver:${id}`);

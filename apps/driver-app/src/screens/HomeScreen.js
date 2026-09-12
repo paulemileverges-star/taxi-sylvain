@@ -3,6 +3,7 @@ import { View, Text, FlatList, TouchableOpacity, StyleSheet, RefreshControl } fr
 import { api } from "../lib/api";
 import { playSound } from "../lib/sound";
 import { showAlert } from "../lib/alert";
+import { getSocket } from "../lib/socket";
 import SwipeButton from "../components/SwipeButton";
 
 function fmtDate(d) {
@@ -41,6 +42,26 @@ export default function HomeScreen({ user, onOpenRide, onOpenEarnings, onOpenMes
   }, []);
 
   useEffect(() => { load(); }, [load]);
+
+  // Rafraîchit la liste dès qu'une course est diffusée, prise par un autre chauffeur, affectée
+  // ou change de statut — sans ça il fallait tirer pour rafraîchir après la sonnerie.
+  useEffect(() => {
+    let sock;
+    const refresh = () => load();
+    getSocket().then((s) => {
+      sock = s;
+      s.on("ride:broadcast", refresh);
+      s.on("ride:taken", refresh);
+      s.on("ride:assigned", refresh);
+      s.on("ride:status", refresh);
+    });
+    return () => {
+      sock?.off("ride:broadcast", refresh);
+      sock?.off("ride:taken", refresh);
+      sock?.off("ride:assigned", refresh);
+      sock?.off("ride:status", refresh);
+    };
+  }, [load]);
 
   const accept = async (id) => {
     try {
