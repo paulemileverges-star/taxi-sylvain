@@ -37,15 +37,22 @@ router.get("/weekly", requirePermission("reports"), async (req, res) => {
   });
 
   const byDriver = {};
+  const byClient = {};
   for (const ride of rides) {
-    if (!ride.driverId) continue;
-    byDriver[ride.driverId] ??= { driver: ride.driver, rideCount: 0, totalFare: 0, royaltyDue: 0 };
-    byDriver[ride.driverId].rideCount += 1;
-    byDriver[ride.driverId].totalFare += ride.fare;
-    byDriver[ride.driverId].royaltyDue += ride.fare * ride.royaltyRate;
+    if (ride.driverId) {
+      byDriver[ride.driverId] ??= { driver: ride.driver, rideCount: 0, totalFare: 0, royaltyDue: 0 };
+      byDriver[ride.driverId].rideCount += 1;
+      byDriver[ride.driverId].totalFare += ride.fare;
+      byDriver[ride.driverId].royaltyDue += ride.fare * ride.royaltyRate;
+    }
+    // Récap par client (cahier des charges : « par chauffeur ou encore par client »)
+    const clientKey = ride.clientId || "__none__";
+    byClient[clientKey] ??= { client: ride.client || { id: null, name: "Client non spécifié" }, rideCount: 0, totalFare: 0 };
+    byClient[clientKey].rideCount += 1;
+    byClient[clientKey].totalFare += ride.fare;
   }
 
-  res.json({ range, byDriver: Object.values(byDriver) });
+  res.json({ range, byDriver: Object.values(byDriver), byClient: Object.values(byClient) });
 });
 
 // Revenus de la semaine en cours pour le chauffeur connecté — "Mes revenus". Calculé en direct

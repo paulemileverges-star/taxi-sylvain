@@ -125,15 +125,16 @@ export default function Courses() {
           <div key={ride.id} className="card">
             <div className="row" style={{ marginBottom: 8 }}>
               <span className="chip">{STATUS_LABEL[ride.status] || ride.status}</span>
-              <span style={{ color: "#f5a623", fontWeight: 700 }}>{ride.fare.toFixed(2)} $</span>
+              <span style={{ color: "#f5a623", fontWeight: 700 }}>{ride.fare > 0 ? `${ride.fare.toFixed(2)} $` : "Montant à confirmer"}</span>
             </div>
             <Field label="Date de la course :" value={fmtDate(when)} />
             <Field label="Heure de la course :" value={fmtTime(when)} />
             <Field label="Nom du client :" value={ride.client?.name} />
             <Field label="Adresse de départ :" value={ride.pickupAddress} />
             <Field label="Destination :" value={ride.destAddress} />
+            <Field label="Distance :" value={ride.distanceKm != null ? `${ride.distanceKm.toFixed(1)} km` : null} />
             <Field label="Numéro de vol :" value={ride.flightNumber} />
-            <Field label="Montant prévu de la course :" value={`${ride.fare.toFixed(2)} $`} />
+            <Field label="Montant prévu de la course :" value={ride.fare > 0 ? `${ride.fare.toFixed(2)} $` : "À confirmer"} />
             <div className="row" style={{ marginTop: 10, gap: 8 }}>
               <select className="input" style={{ width: 180, marginTop: 0 }} value={ride.driverId || ""} onChange={(e) => assign(ride.id, e.target.value)}>
                 <option value="">Non assigné</option>

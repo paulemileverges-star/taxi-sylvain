@@ -6,6 +6,12 @@ import { showAlert } from "../lib/alert";
 import { getSocket } from "../lib/socket";
 import SwipeButton from "../components/SwipeButton";
 
+const STATUS_LABEL = {
+  REQUESTED: "Course proposée", BROADCAST: "Course diffusée — premier arrivé, premier servi", ACCEPTED: "Acceptée",
+  EN_ROUTE: "En route vers le client", STARTED: "En route vers la destination",
+  COMPLETED: "Terminée", CANCELLED: "Annulée", REFUSED: "Refusée",
+};
+
 function fmtDate(d) {
   return d ? new Date(d).toLocaleDateString("fr-CA") : "—";
 }
@@ -135,10 +141,11 @@ export default function HomeScreen({ user, onOpenRide, onOpenEarnings, onOpenMes
               <Field label="Nom du client" value={item.client?.name} />
               <Field label="Adresse de départ" value={item.pickupAddress} />
               <Field label="Destination" value={item.destAddress} />
+              <Field label="Distance" value={item.distanceKm != null ? `${item.distanceKm.toFixed(1)} km` : null} />
               <Field label="Numéro de vol" value={item.flightNumber} />
-              <Field label="Montant prévu" value={item.fare != null ? `${item.fare} $` : null} />
+              <Field label="Montant prévu" value={item.fare > 0 ? `${item.fare} $` : "À confirmer"} />
               <View style={styles.rowBetween}>
-                <Text style={styles.status}>{item.status}</Text>
+                <Text style={styles.status}>{STATUS_LABEL[item.status] || item.status}</Text>
               </View>
               {isOffer && (
                 <View style={{ marginTop: 8 }}>

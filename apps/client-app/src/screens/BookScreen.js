@@ -16,7 +16,8 @@ export default function BookScreen({ user, onBooked, onOpenGroups, onOpenChangeP
       return;
     }
     try {
-      // fare estimée ici de façon simplifiée — à remplacer par un vrai calcul (distance x tarif/km)
+      // Le montant est fixé par Taxi Sylvain après réservation (pas de grille tarifaire
+      // automatique pour l'instant) — la course part donc « à confirmer ».
       const ride = await api.bookRide({
         pickupAddress: pickup.address,
         pickupLat: pickup.lat ?? undefined,
@@ -24,7 +25,6 @@ export default function BookScreen({ user, onBooked, onOpenGroups, onOpenChangeP
         destAddress: dest.address,
         destLat: dest.lat ?? undefined,
         destLng: dest.lng ?? undefined,
-        fare: 20,
         flightNumber: flightNumber || undefined,
       });
       playSound("action");

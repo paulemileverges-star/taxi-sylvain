@@ -71,7 +71,9 @@ export default function RidesScreen({ onOpenRide, onBack }) {
               </View>
               <Text style={styles.addr}>{item.pickupAddress} → {item.destAddress}</Text>
               {item.driver?.name && <Text style={styles.driver}>Chauffeur : {item.driver.name}</Text>}
-              <Text style={styles.fare}>{item.fare != null ? `${item.fare} $` : ""}</Text>
+              <Text style={styles.fare}>
+                {item.fare > 0 ? `${item.fare} $` : "Montant à confirmer"}{item.distanceKm != null ? `  ·  ${item.distanceKm.toFixed(1)} km` : ""}
+              </Text>
             </TouchableOpacity>
           )}
           ListFooterComponent={

@@ -88,8 +88,9 @@ export default function TrackingScreen({ rideId, onOpenChat, onBack }) {
           <Field label="Heure de la course" value={fmtTime(ride.scheduledFor || ride.createdAt)} />
           <Field label="Adresse de départ" value={ride.pickupAddress} />
           <Field label="Destination" value={ride.destAddress} />
+          <Field label="Distance" value={ride.distanceKm != null ? `${ride.distanceKm.toFixed(1)} km` : null} />
           <Field label="Numéro de vol" value={ride.flightNumber} />
-          <Field label="Montant prévu de la course" value={ride.fare != null ? `${ride.fare} $` : null} />
+          <Field label="Montant prévu de la course" value={ride.fare > 0 ? `${ride.fare} $` : "À confirmer par Taxi Sylvain"} />
         </View>
       )}
       {ride?.driver && (

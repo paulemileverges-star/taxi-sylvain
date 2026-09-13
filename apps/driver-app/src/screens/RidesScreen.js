@@ -93,7 +93,9 @@ export default function RidesScreen({ onOpenRide, onBack }) {
                   <Text style={styles.status}>{STATUS_LABEL[item.status] || item.status}</Text>
                 </View>
                 <Text style={styles.addr}>{item.pickupAddress} → {item.destAddress}</Text>
-                <Text style={styles.fare}>{item.fare != null ? `${item.fare} $` : ""}</Text>
+                <Text style={styles.fare}>
+                  {item.fare > 0 ? `${item.fare} $` : "Montant à confirmer"}{item.distanceKm != null ? `  ·  ${item.distanceKm.toFixed(1)} km` : ""}
+                </Text>
                 {isOffer && (
                   <View style={{ marginTop: 8 }}>
                     <SwipeButton label="Accepter la course" onConfirm={() => accept(item.id)} color="#3fa796" textColor="#06231d" />

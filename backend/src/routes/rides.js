@@ -7,6 +7,7 @@ import { isConfigured as isCallMaskingConfigured, getOrCreateCallSession } from 
 import { notifyUser, notifyAllDrivers } from "../lib/push.js";
 import { createDriverAccount } from "./drivers.js";
 import { generateTempPassword } from "../lib/placeholderEmail.js";
+import { computeDistanceKm } from "../lib/distance.js";
 
 // Réservation par téléphone (besoin #5) : le Dispatch peut créer une course pour un client sans
 // compte — on retrouve son compte existant par téléphone, ou on lui en crée un à la volée. Si le
@@ -83,7 +84,10 @@ router.post("/", requirePermission("courses", "CLIENT"), async (req, res) => {
     newDriver, // { name, email, phone, password?, carModel?, plate? } — créé à la volée et affecté
   } = req.body;
   let { driverId } = req.body;
-  if (!pickupAddress || !destAddress || !fare) {
+  // Un client qui réserve dans l'app ne connaît pas le tarif : le montant reste à 0 (« à confirmer »)
+  // jusqu'à ce que Taxi Sylvain le fixe. Le Dispatch, lui, doit toujours saisir un montant.
+  const isClientBooking = req.user.role === "CLIENT";
+  if (!pickupAddress || !destAddress || (!fare && !isClientBooking)) {
     return res.status(400).json({ error: "Adresse de prise en charge, destination et montant requis." });
   }
 
@@ -107,12 +111,16 @@ router.post("/", requirePermission("courses", "CLIENT"), async (req, res) => {
     }
   }
 
+  const pickup = { lat: pickupLat, lng: pickupLng };
+  const dest = { lat: destLat, lng: destLng };
+  const computedDistance = typeof distanceKm === "number" ? distanceKm : await computeDistanceKm(pickup, dest);
+
   const ride = await prisma.ride.create({
     data: {
       pickupAddress,
       destAddress,
-      distanceKm,
-      fare,
+      distanceKm: computedDistance,
+      fare: isClientBooking ? Number(fare) || 0 : Number(fare),
       flightNumber: flightNumber || null,
       scheduledFor: scheduledFor ? new Date(scheduledFor) : null,
       clientId,
@@ -308,6 +316,13 @@ router.patch("/:id", requirePermission("courses"), async (req, res) => {
   if (destLng !== undefined) data.destLng = typeof destLng === "number" ? destLng : null;
 
   try {
+    // Recalcule la distance si une adresse (avec coordonnées) a changé.
+    if (pickupLat !== undefined || pickupLng !== undefined || destLat !== undefined || destLng !== undefined) {
+      const current = await prisma.ride.findUnique({ where: { id: req.params.id } });
+      if (!current) return res.status(404).json({ error: "Course introuvable." });
+      const merged = { ...current, ...data };
+      data.distanceKm = await computeDistanceKm({ lat: merged.pickupLat, lng: merged.pickupLng }, { lat: merged.destLat, lng: merged.destLng });
+    }
     const ride = await prisma.ride.update({
       where: { id: req.params.id },
       data,

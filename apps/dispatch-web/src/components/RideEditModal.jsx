@@ -55,6 +55,19 @@ export default function RideEditModal({ rideId, onClose, onSaved }) {
             {ride?.client?.name && <div className="field-row"><span className="field-label">Client :</span><span>{ride.client.name}</span></div>}
             {ride?.driver?.name && <div className="field-row"><span className="field-label">Chauffeur :</span><span>{ride.driver.name}</span></div>}
             <div className="field-row"><span className="field-label">Statut :</span><span>{ride?.status}</span></div>
+            {ride?.distanceKm != null && <div className="field-row"><span className="field-label">Distance :</span><span>{ride.distanceKm.toFixed(1)} km</span></div>}
+            {ride?.ratings?.length > 0 && (
+              <div style={{ marginTop: 8 }}>
+                <div className="field-label" style={{ fontSize: 12, textTransform: "uppercase", letterSpacing: 0.5 }}>Avis reçus</div>
+                {ride.ratings.map((r) => (
+                  <div key={r.id} style={{ fontSize: 13, padding: "4px 0", borderBottom: "1px solid var(--border)" }}>
+                    <span style={{ color: "#f5a623" }}>{"★".repeat(r.stars)}{"☆".repeat(5 - r.stars)}</span>
+                    {" "}<span style={{ color: "var(--muted)" }}>{r.fromUserId === ride.clientId ? "du client sur le chauffeur" : "du chauffeur sur le client"}</span>
+                    {r.comment && <div>« {r.comment} »</div>}
+                  </div>
+                ))}
+              </div>
+            )}
 
             <label style={{ display: "block", marginTop: 10 }}>Adresse de prise en charge</label>
             <input className="input" value={form.pickupAddress} onChange={(e) => setForm({ ...form, pickupAddress: e.target.value })} />
