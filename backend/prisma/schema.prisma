@@ -94,6 +94,9 @@ model Ride {
   startedAt     DateTime?
   completedAt   DateTime?
   cancelledAt   DateTime?
+  // Chauffeurs ayant refusé cette course diffusée — elle ne leur est plus proposée, mais reste
+  // disponible pour les autres (besoin #6 / correction #17).
+  refusedBy     String[]   @default([])
 
   clientId String?
   client   User?   @relation("ClientRides", fields: [clientId], references: [id])

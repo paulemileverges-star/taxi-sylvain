@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { api } from "../lib/api.js";
+import RideEditModal from "../components/RideEditModal.jsx";
 
 const ROLE_LABEL = { DISPATCH: "Dispatch", ADMIN: "Admin", DRIVER: "Chauffeur", CLIENT: "Client" };
 
@@ -12,6 +13,7 @@ export default function Search() {
   const [results, setResults] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [openRideId, setOpenRideId] = useState(null);
 
   const run = async (e) => {
     e.preventDefault();
@@ -72,10 +74,12 @@ export default function Search() {
               <div className="field-row"><span className="field-label">Date :</span><span>{fmtDate(r.createdAt)}</span></div>
               <div className="field-row"><span className="field-label">Départ :</span><span>{r.pickupAddress}</span></div>
               <div className="field-row"><span className="field-label">Destination :</span><span>{r.destAddress}</span></div>
+              <button className="btn outline" style={{ marginTop: 8 }} onClick={() => setOpenRideId(r.id)}>Ouvrir la course</button>
             </div>
           ))}
         </>
       )}
+      {openRideId && <RideEditModal rideId={openRideId} onClose={() => setOpenRideId(null)} onSaved={(e) => run(e || { preventDefault() {} })} />}
     </div>
   );
 }

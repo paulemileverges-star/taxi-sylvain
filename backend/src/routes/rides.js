@@ -41,7 +41,7 @@ router.get("/", async (req, res) => {
   const { role, id } = req.user;
   let where = {};
   if (role === "CLIENT") where = { clientId: id };
-  if (role === "DRIVER") where = { OR: [{ driverId: id }, { status: "BROADCAST" }] };
+  if (role === "DRIVER") where = { OR: [{ driverId: id }, { status: "BROADCAST", NOT: { refusedBy: { has: id } } }] };
   // DISPATCH voit tout
 
   const { when, page = "1", pageSize = "10" } = req.query;
@@ -215,8 +215,15 @@ router.post("/:id/accept", requireRole("DRIVER"), async (req, res) => {
 });
 
 router.post("/:id/refuse", requireRole("DRIVER"), async (req, res) => {
-  // Un refus individuel ne change pas le statut global : la course reste disponible pour les autres.
-  broadcast(req, "dispatch", "ride:refused", { rideId: req.params.id, driverId: req.user.id });
+  // Un refus individuel ne change pas le statut global : la course reste disponible pour les
+  // autres, mais n'est plus proposée à ce chauffeur.
+  const ride = await prisma.ride.findUnique({ where: { id: req.params.id } });
+  if (!ride) return res.status(404).json({ error: "Course introuvable." });
+  if (!ride.refusedBy.includes(req.user.id)) {
+    await prisma.ride.update({ where: { id: ride.id }, data: { refusedBy: { push: req.user.id } } });
+  }
+  broadcast(req, "dispatch", "ride:refused", { rideId: ride.id, driverId: req.user.id, driverName: req.user.name });
+  broadcast(req, "dispatch", "ride:notification", { rideId: ride.id, text: `${req.user.name} a refusé la course diffusée ${ride.pickupAddress} → ${ride.destAddress}.` });
   res.json({ ok: true });
 });
 

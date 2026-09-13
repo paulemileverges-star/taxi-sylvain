@@ -1,4 +1,5 @@
 import { prisma } from "../lib/prisma.js";
+import { notifyUser } from "../lib/push.js";
 
 export function mondayOf(date) {
   const d = new Date(date);
@@ -43,6 +44,11 @@ export async function generateWeeklyReports(io, range) {
     });
     results.push(report);
     if (io) io.to(`driver:${driverId}`).emit("report:ready", report);
+    notifyUser(driverId, {
+      title: "Votre récap de la semaine est prêt",
+      body: `${stats.rideCount} course${stats.rideCount > 1 ? "s" : ""} · ${stats.totalFare.toFixed(2)} $ · redevance ${stats.royaltyDue.toFixed(2)} $`,
+      data: { type: "report:ready" },
+    });
   }
   if (io && results.length > 0) {
     io.to("dispatch").emit("report:generated", { weekStart, weekEnd, count: results.length });

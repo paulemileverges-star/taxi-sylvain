@@ -1,44 +1,92 @@
+import { Platform } from "react-native";
 import * as Location from "expo-location";
+import * as TaskManager from "expo-task-manager";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { getSocket } from "./socket";
 
-let watcher = null;
+// Diffuse la position GPS du chauffeur pendant qu'il est en route pour prendre en charge le
+// client ou qu'il l'amène à destination (statuts EN_ROUTE / STARTED), pour que le Dispatch (et
+// le client, sur sa propre course) puissent le suivre en direct sur la carte.
+//
+// Sur Android/iOS, le suivi continue quand l'app passe en arrière-plan — indispensable puisque le
+// chauffeur navigue avec Waze ou Google Maps au premier plan : une tâche de fond (expo-task-
+// manager) reçoit les positions et une notification persistante Android maintient le service
+// actif. Sur le web, on retombe sur un simple suivi au premier plan.
+const TASK = "taxi-sylvain-location";
+const CONTEXT_KEY = "ts_tracking_context";
+
+let webWatcher = null;
 let trackedKey = null;
 
-// Diffuse la position GPS du chauffeur pendant qu'il est en route pour prendre en charge
-// le client ou qu'il l'amène à destination (statuts EN_ROUTE / STARTED), pour que le Dispatch
-// (et le client, sur sa propre course) puissent le suivre en direct sur la carte.
+async function emitPosition(coords) {
+  const raw = await AsyncStorage.getItem(CONTEXT_KEY);
+  if (!raw) return;
+  const { rideId, status } = JSON.parse(raw);
+  try {
+    const sock = await getSocket();
+    sock.emit("driver:location", { rideId, status, lat: coords.latitude, lng: coords.longitude });
+  } catch {
+    // Pas de réseau ou socket pas encore prêt — la prochaine position réessaiera.
+  }
+}
+
+if (Platform.OS !== "web") {
+  TaskManager.defineTask(TASK, async ({ data, error }) => {
+    if (error || !data?.locations?.length) return;
+    const last = data.locations[data.locations.length - 1];
+    await emitPosition(last.coords);
+  });
+}
+
 export async function startTrackingLocation(rideId, rideStatus) {
   const key = `${rideId}:${rideStatus}`;
-  if (trackedKey === key && watcher) return true;
-  await stopTrackingLocation();
+  await AsyncStorage.setItem(CONTEXT_KEY, JSON.stringify({ rideId, status: rideStatus }));
+  if (trackedKey === key) return true;
 
-  const { status: permission } = await Location.requestForegroundPermissionsAsync();
-  if (permission !== "granted") return false;
+  const { status: foreground } = await Location.requestForegroundPermissionsAsync();
+  if (foreground !== "granted") return false;
 
+  if (Platform.OS === "web") {
+    await stopTrackingLocation();
+    trackedKey = key;
+    webWatcher = await Location.watchPositionAsync(
+      { accuracy: Location.Accuracy.Balanced, timeInterval: 6000, distanceInterval: 20 },
+      (loc) => emitPosition(loc.coords)
+    );
+    return true;
+  }
+
+  // La permission "en arrière-plan" est facultative : sans elle, le suivi s'arrête quand l'app
+  // n'est plus à l'écran, mais reprend dès qu'elle revient au premier plan.
+  await Location.requestBackgroundPermissionsAsync().catch(() => null);
+
+  const alreadyRunning = await Location.hasStartedLocationUpdatesAsync(TASK).catch(() => false);
+  if (!alreadyRunning) {
+    await Location.startLocationUpdatesAsync(TASK, {
+      accuracy: Location.Accuracy.Balanced,
+      timeInterval: 6000,
+      distanceInterval: 20,
+      showsBackgroundLocationIndicator: true,
+      foregroundService: {
+        notificationTitle: "Taxi Sylvain — course en cours",
+        notificationBody: "Votre position est partagée avec le Dispatch pendant la course.",
+        notificationColor: "#f5a623",
+      },
+    });
+  }
   trackedKey = key;
-  watcher = await Location.watchPositionAsync(
-    { accuracy: Location.Accuracy.Balanced, timeInterval: 6000, distanceInterval: 20 },
-    async (loc) => {
-      try {
-        const sock = await getSocket();
-        sock.emit("driver:location", {
-          rideId,
-          status: rideStatus,
-          lat: loc.coords.latitude,
-          lng: loc.coords.longitude,
-        });
-      } catch {
-        // Pas de réseau ou socket pas encore prêt — la prochaine mise à jour de position réessaiera.
-      }
-    }
-  );
   return true;
 }
 
 export async function stopTrackingLocation() {
-  if (watcher) {
-    watcher.remove();
-    watcher = null;
-  }
   trackedKey = null;
+  await AsyncStorage.removeItem(CONTEXT_KEY);
+  if (webWatcher) {
+    webWatcher.remove();
+    webWatcher = null;
+  }
+  if (Platform.OS !== "web") {
+    const running = await Location.hasStartedLocationUpdatesAsync(TASK).catch(() => false);
+    if (running) await Location.stopLocationUpdatesAsync(TASK).catch(() => null);
+  }
 }
