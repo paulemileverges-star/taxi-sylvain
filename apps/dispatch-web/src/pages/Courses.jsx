@@ -1,18 +1,9 @@
 import React, { useEffect, useState } from "react";
 import { api } from "../lib/api.js";
+import { getSocket } from "../lib/socket.js";
 import { playSound } from "../lib/sound.js";
 import AddressInput from "../components/AddressInput.jsx";
-
-const STATUS_LABEL = {
-  REQUESTED: "Demandée",
-  BROADCAST: "Diffusée",
-  ACCEPTED: "Acceptée",
-  EN_ROUTE: "En route vers le client",
-  STARTED: "En route vers la destination",
-  COMPLETED: "Terminée",
-  CANCELLED: "Annulée",
-  REFUSED: "Refusée",
-};
+import { STATUS_LABEL, statusClass, localInputToIso } from "../lib/status.js";
 
 function fmtDate(d) {
   return new Date(d).toLocaleDateString("fr-CA");
@@ -55,6 +46,21 @@ export default function Courses() {
 
   useEffect(() => { load(); }, []);
 
+  // Les statuts changent en direct (chauffeur en route, course prise, terminée...) sans
+  // rafraîchir la page.
+  useEffect(() => {
+    const socket = getSocket();
+    const refresh = () => load();
+    socket.on("ride:created", refresh);
+    socket.on("ride:updated", refresh);
+    socket.on("ride:refused", refresh);
+    return () => {
+      socket.off("ride:created", refresh);
+      socket.off("ride:updated", refresh);
+      socket.off("ride:refused", refresh);
+    };
+  }, []);
+
   const create = async () => {
     setError("");
     try {
@@ -66,7 +72,7 @@ export default function Courses() {
         destLat: form.destLat ?? undefined,
         destLng: form.destLng ?? undefined,
         fare: Number(form.fare),
-        scheduledFor: form.scheduledFor || undefined,
+        scheduledFor: localInputToIso(form.scheduledFor) || undefined,
         driverId: form.driverId && !["__new__", "__broadcast__"].includes(form.driverId) ? form.driverId : undefined,
         broadcastAll: form.driverId === "__broadcast__" || undefined,
         newDriver: form.driverId === "__new__" ? {
@@ -122,9 +128,9 @@ export default function Courses() {
       {rides.map((ride) => {
         const when = ride.scheduledFor || ride.createdAt;
         return (
-          <div key={ride.id} className="card">
+          <div key={ride.id} className={`card ride-card ${statusClass(ride.status)}`}>
             <div className="row" style={{ marginBottom: 8 }}>
-              <span className="chip">{STATUS_LABEL[ride.status] || ride.status}</span>
+              <span className={`chip status-chip ${statusClass(ride.status)}`}>{STATUS_LABEL[ride.status] || ride.status}</span>
               <span style={{ color: "#f5a623", fontWeight: 700 }}>{ride.fare > 0 ? `${ride.fare.toFixed(2)} $` : "Montant à confirmer"}</span>
             </div>
             <Field label="Date de la course :" value={fmtDate(when)} />

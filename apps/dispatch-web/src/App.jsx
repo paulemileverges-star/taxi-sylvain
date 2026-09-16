@@ -17,6 +17,7 @@ import Search from "./pages/Search.jsx";
 import Admins from "./pages/Admins.jsx";
 import ChangePasswordModal from "./components/ChangePasswordModal.jsx";
 import logo from "./assets/logo.png";
+import { statusClass } from "./lib/status.js";
 
 const NAV = [
   { key: "dashboard", label: "Tableau de bord" },
@@ -39,13 +40,20 @@ export default function App() {
   });
   const [screen, setScreen] = useState("dashboard");
   const [notifs, setNotifs] = useState([]);
+  const [toasts, setToasts] = useState([]);
   const [showChangePassword, setShowChangePassword] = useState(false);
 
   useEffect(() => {
     if (!user) return;
     const socket = getSocket();
-    socket.on("ride:notification", (n) => { setNotifs((prev) => [n.text, ...prev]); playSound("notify"); });
-    socket.on("ride:created", () => { setNotifs((prev) => ["Nouvelle course créée.", ...prev]); playSound("notify"); });
+    const push = (n) => {
+      const entry = { id: `${Date.now()}-${Math.random()}`, text: n.text, status: n.status || null, at: new Date() };
+      setNotifs((prev) => [entry, ...prev].slice(0, 100));
+      setToasts((prev) => [entry, ...prev].slice(0, 4));
+      setTimeout(() => setToasts((prev) => prev.filter((t) => t.id !== entry.id)), 9000);
+    };
+    socket.on("ride:notification", (n) => { push(n); playSound(n.status === "COMPLETED" ? "action" : "notify"); });
+    socket.on("ride:created", (ride) => { push({ text: `Nouvelle course créée : ${ride?.pickupAddress || ""} → ${ride?.destAddress || ""}`, status: ride?.status || "REQUESTED" }); playSound("notify"); });
     socket.on("ride:refused", () => playSound("notify"));
     socket.on("report:generated", () => playSound("notify"));
     socket.on("message:direct", (m) => { if (m.sender.role !== "DISPATCH") playSound("notify"); });
@@ -119,6 +127,14 @@ export default function App() {
         {screen === "admins" && user.role === "DISPATCH" && <Admins />}
       </div>
       {showChangePassword && <ChangePasswordModal onClose={() => setShowChangePassword(false)} />}
+      <div className="toasts" aria-live="polite">
+        {toasts.map((t) => (
+          <div key={t.id} className={`toast ${statusClass(t.status)}`} onClick={() => setToasts((prev) => prev.filter((x) => x.id !== t.id))}>
+            <span className="toast-dot" />
+            <span>{t.text}</span>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }

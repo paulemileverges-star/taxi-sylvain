@@ -10,6 +10,7 @@ import { getOnlineDriverIds } from "../lib/onlineDrivers.js";
 import { streamListPdf, streamListXlsx } from "../lib/exportReport.js";
 import { generateTempPassword } from "../lib/placeholderEmail.js";
 import { parseImportFile, pick } from "../lib/bulkImport.js";
+import { getAllDriverLocations } from "../lib/driverLocations.js";
 
 const importUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024 } });
 
@@ -115,6 +116,12 @@ router.post("/import", requirePermission("drivers"), importUpload.single("file")
     }
   }
   res.json({ createdCount: created.length, skippedCount: skipped.length, skipped });
+});
+
+// Dernières positions connues des chauffeurs en course — carte en direct du Dispatch.
+router.get("/locations", (req, res) => {
+  if (req.user.role !== "DISPATCH" && req.user.role !== "ADMIN") return res.status(403).json({ error: "Accès refusé." });
+  res.json(getAllDriverLocations());
 });
 
 // Recherche dans les bases clients / chauffeurs / courses (besoin #14)

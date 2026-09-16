@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { api } from "../lib/api.js";
 import { playSound } from "../lib/sound.js";
+import { STATUS_LABEL, statusClass, localInputToIso, isoToLocalInput } from "../lib/status.js";
 
 // Modale de correction rapide d'une course — ouverte depuis le lien "Voir la course" d'un
 // message lié à une course (Messagerie) ou depuis un créneau de la cédule (Cédule).
@@ -18,7 +19,7 @@ export default function RideEditModal({ rideId, onClose, onSaved }) {
         destAddress: r.destAddress || "",
         fare: r.fare ?? "",
         flightNumber: r.flightNumber || "",
-        scheduledFor: r.scheduledFor ? new Date(r.scheduledFor).toISOString().slice(0, 16) : "",
+        scheduledFor: isoToLocalInput(r.scheduledFor),
       });
     });
   }, [rideId]);
@@ -32,7 +33,7 @@ export default function RideEditModal({ rideId, onClose, onSaved }) {
         destAddress: form.destAddress,
         fare: Number(form.fare),
         flightNumber: form.flightNumber || null,
-        scheduledFor: form.scheduledFor || null,
+        scheduledFor: localInputToIso(form.scheduledFor),
       });
       playSound("action");
       onSaved?.();
@@ -54,7 +55,7 @@ export default function RideEditModal({ rideId, onClose, onSaved }) {
           <>
             {ride?.client?.name && <div className="field-row"><span className="field-label">Client :</span><span>{ride.client.name}</span></div>}
             {ride?.driver?.name && <div className="field-row"><span className="field-label">Chauffeur :</span><span>{ride.driver.name}</span></div>}
-            <div className="field-row"><span className="field-label">Statut :</span><span>{ride?.status}</span></div>
+            <div className="field-row"><span className="field-label">Statut :</span><span className={`chip status-chip ${statusClass(ride?.status)}`}>{STATUS_LABEL[ride?.status] || ride?.status}</span></div>
             {ride?.distanceKm != null && <div className="field-row"><span className="field-label">Distance :</span><span>{ride.distanceKm.toFixed(1)} km</span></div>}
             {ride?.ratings?.length > 0 && (
               <div style={{ marginTop: 8 }}>

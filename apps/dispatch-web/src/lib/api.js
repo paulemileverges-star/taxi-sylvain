@@ -64,6 +64,7 @@ export const api = {
   assignDriver: (rideId, driverId) => request(`/rides/${rideId}/assign`, { method: "POST", body: { driverId } }),
   broadcastRide: (rideId) => request(`/rides/${rideId}/broadcast`, { method: "POST" }),
   listDrivers: () => request("/drivers"),
+  driverLocations: () => request("/drivers/locations"),
   search: (q) => request(`/drivers/search?q=${encodeURIComponent(q)}`),
   createDriver: (payload) => request("/drivers", { method: "POST", body: payload }),
   deleteDriver: (id) => request(`/drivers/${id}`, { method: "DELETE" }),

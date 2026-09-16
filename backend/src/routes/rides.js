@@ -8,6 +8,7 @@ import { notifyUser, notifyAllDrivers } from "../lib/push.js";
 import { createDriverAccount } from "./drivers.js";
 import { generateTempPassword } from "../lib/placeholderEmail.js";
 import { computeDistanceKm } from "../lib/distance.js";
+import { clearDriverLocation, getDriverLocation } from "../lib/driverLocations.js";
 
 // Réservation par téléphone (besoin #5) : le Dispatch peut créer une course pour un client sans
 // compte — on retrouve son compte existant par téléphone, ou on lui en crée un à la volée. Si le
@@ -209,9 +210,28 @@ router.post("/:id/accept", requireRole("DRIVER"), async (req, res) => {
   }
 
   broadcast(req, "dispatch", "ride:updated", result);
+  broadcast(req, "dispatch", "ride:notification", {
+    rideId: result.id,
+    status: result.status,
+    text: `${req.user.name} a accepté la course ${result.pickupAddress} → ${result.destAddress}.`,
+  });
   broadcast(req, "drivers", "ride:taken", { id: result.id }); // pour retirer la course chez les autres chauffeurs
   broadcast(req, `ride:${result.id}`, "ride:status", result);
   res.json(result);
+});
+
+// Dernière position connue du chauffeur de cette course — pour afficher la carte tout de suite
+// à l'ouverture du suivi, sans attendre la prochaine mise à jour GPS.
+router.get("/:id/driver-location", async (req, res) => {
+  const ride = await prisma.ride.findUnique({ where: { id: req.params.id } });
+  if (!ride) return res.status(404).json({ error: "Course introuvable." });
+  const isStaff = req.user.role === "DISPATCH" || req.user.role === "ADMIN";
+  if (!isStaff && req.user.id !== ride.clientId && req.user.id !== ride.driverId) {
+    return res.status(403).json({ error: "Accès refusé." });
+  }
+  if (!ride.driverId) return res.json(null);
+  const pos = getDriverLocation(ride.driverId);
+  res.json(pos && pos.rideId === ride.id ? { lat: pos.lat, lng: pos.lng, status: pos.status, at: pos.at } : null);
 });
 
 router.post("/:id/refuse", requireRole("DRIVER"), async (req, res) => {
@@ -263,8 +283,14 @@ router.post("/:id/status", requireRole("DRIVER"), async (req, res) => {
     COMPLETED: `La course de ${req.user.name} est terminée.`,
     CANCELLED: `${req.user.name} a annulé la course — elle n'est plus affectée.`,
   };
-  broadcast(req, "dispatch", "ride:notification", { rideId: ride.id, text: labels[status] });
+  broadcast(req, "dispatch", "ride:notification", { rideId: ride.id, status, text: labels[status] });
+  broadcast(req, "dispatch", "ride:updated", ride);
   broadcast(req, `ride:${ride.id}`, "ride:status", ride);
+
+  if (status === "COMPLETED" || status === "CANCELLED") {
+    // Course finie : le chauffeur n'a plus à apparaître sur la carte.
+    if (clearDriverLocation(req.user.id)) broadcast(req, "dispatch", "driver:location:clear", { driverId: req.user.id });
+  }
 
   const clientLabels = {
     EN_ROUTE: { title: "Votre chauffeur arrive", body: `${req.user.name} est en route pour vous récupérer.` },

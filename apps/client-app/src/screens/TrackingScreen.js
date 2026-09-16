@@ -49,9 +49,12 @@ export default function TrackingScreen({ rideId, onOpenChat, onBack }) {
   // Position GPS du chauffeur en direct pendant qu'il est en route ou en course
   // (le room ride:{id} est déjà rejoint côté App.js via ride:watch).
   useEffect(() => {
+    // Dernière position connue tout de suite, puis mises à jour en direct.
+    api.driverLocation(rideId).then((p) => { if (p) setDriverPos({ lat: p.lat, lng: p.lng }); }).catch(() => null);
     let sock;
     getSocket().then((s) => {
       sock = s;
+      s.emit("ride:watch", rideId);
       s.on("driver:location", (p) => {
         if (p.rideId === rideId) setDriverPos({ lat: p.lat, lng: p.lng });
       });

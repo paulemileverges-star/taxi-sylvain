@@ -1,5 +1,6 @@
 import jwt from "jsonwebtoken";
 import { markDriverOnline, markDriverOffline } from "../lib/onlineDrivers.js";
+import { setDriverLocation, getAllDriverLocations } from "../lib/driverLocations.js";
 
 // Chaque utilisateur rejoint des "rooms" selon son rôle, pour recevoir uniquement
 // les événements qui le concernent :
@@ -22,7 +23,11 @@ export function registerSocketHandlers(io) {
   io.on("connection", (socket) => {
     const { role, id } = socket.user;
     // Les admins (collaborateurs) reçoivent les mêmes évènements temps réel que le Dispatch.
-    if (role === "DISPATCH" || role === "ADMIN") socket.join("dispatch");
+    if (role === "DISPATCH" || role === "ADMIN") {
+      socket.join("dispatch");
+      // Positions déjà connues, pour que la carte soit peuplée dès l'ouverture.
+      socket.emit("driver:locations", getAllDriverLocations());
+    }
     if (role === "DRIVER") {
       socket.join("drivers");
       socket.join(`driver:${id}`);
@@ -46,6 +51,7 @@ export function registerSocketHandlers(io) {
     socket.on("driver:location", ({ rideId, status, lat, lng }) => {
       if (role !== "DRIVER" || typeof lat !== "number" || typeof lng !== "number") return;
       const payload = { driverId: id, name: socket.user.name, rideId: rideId || null, status, lat, lng, at: Date.now() };
+      setDriverLocation(id, payload);
       io.to("dispatch").emit("driver:location", payload);
       if (rideId) io.to(`ride:${rideId}`).emit("driver:location", payload);
     });

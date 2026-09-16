@@ -35,6 +35,7 @@ export const api = {
   rideMessages: (rideId) => request(`/messages/${rideId}`),
   sendMessage: (rideId, text) => request(`/messages/${rideId}`, { method: "POST", body: { text } }),
   callMasked: (rideId) => request(`/rides/${rideId}/call`, { method: "POST" }),
+  driverLocation: (rideId) => request(`/rides/${rideId}/driver-location`),
   rate: (rideId, toUserId, stars, comment) => request(`/ratings/${rideId}`, { method: "POST", body: { toUserId, stars, comment } }),
   listConversations: () => request("/conversations"),
   conversationMessages: (id) => request(`/conversations/${id}/messages`),

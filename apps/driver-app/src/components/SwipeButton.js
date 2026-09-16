@@ -1,11 +1,14 @@
-import React, { useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { View, Text, Animated, PanResponder, StyleSheet } from "react-native";
 
 // Bouton "glisser pour confirmer" — évite les acceptations/actions déclenchées par un tap
 // accidentel sur des actions à conséquence (accepter, démarrer, terminer une course...).
-// Le trajet possible dépend de la largeur réellement mesurée du rail (onLayout), gardée dans
-// une ref pour que les callbacks du PanResponder (créés une seule fois) lisent toujours la
-// valeur à jour plutôt qu'une valeur figée au premier rendu.
+//
+// Le PanResponder n'est créé qu'une fois : tout ce dont ses callbacks ont besoin (largeur mesurée,
+// onConfirm et disabled du rendu courant) est lu à travers des refs mises à jour à chaque rendu.
+// Sans ça, le bouton garderait le onConfirm du premier rendu — c'est ce qui faisait qu'après
+// « En route », le glissement « Démarrer » rejouait l'étape précédente et ne faisait rien
+// jusqu'au rafraîchissement de la page.
 const THUMB_SIZE = 46;
 const TRACK_HEIGHT = 54;
 const CONFIRM_THRESHOLD = 0.8;
@@ -13,25 +16,40 @@ const CONFIRM_THRESHOLD = 0.8;
 export default function SwipeButton({ label, onConfirm, color = "#f5a623", textColor = "#1a1200", disabled }) {
   const pan = useRef(new Animated.Value(0)).current;
   const maxSwipeRef = useRef(1);
+  const onConfirmRef = useRef(onConfirm);
+  const disabledRef = useRef(disabled);
+  const busyRef = useRef(false);
   const [trackWidth, setTrackWidth] = useState(0);
+
+  useEffect(() => {
+    onConfirmRef.current = onConfirm;
+    disabledRef.current = disabled;
+  });
 
   const panResponder = useRef(
     PanResponder.create({
-      onStartShouldSetPanResponder: () => !disabled,
-      onMoveShouldSetPanResponder: (evt, gesture) => !disabled && Math.abs(gesture.dx) > 2,
+      onStartShouldSetPanResponder: () => !disabledRef.current && !busyRef.current,
+      onMoveShouldSetPanResponder: (evt, gesture) => !disabledRef.current && !busyRef.current && Math.abs(gesture.dx) > 2,
       onPanResponderMove: (evt, gesture) => {
         const x = Math.min(Math.max(gesture.dx, 0), maxSwipeRef.current);
         pan.setValue(x);
       },
       onPanResponderRelease: (evt, gesture) => {
         if (gesture.dx >= maxSwipeRef.current * CONFIRM_THRESHOLD) {
-          Animated.timing(pan, { toValue: maxSwipeRef.current, duration: 120, useNativeDriver: false }).start(() => {
-            onConfirm();
-            setTimeout(() => pan.setValue(0), 350);
+          busyRef.current = true;
+          Animated.timing(pan, { toValue: maxSwipeRef.current, duration: 120, useNativeDriver: false }).start(async () => {
+            try {
+              await onConfirmRef.current?.();
+            } finally {
+              setTimeout(() => { pan.setValue(0); busyRef.current = false; }, 350);
+            }
           });
         } else {
           Animated.spring(pan, { toValue: 0, useNativeDriver: false }).start();
         }
+      },
+      onPanResponderTerminate: () => {
+        Animated.spring(pan, { toValue: 0, useNativeDriver: false }).start();
       },
     })
   ).current;

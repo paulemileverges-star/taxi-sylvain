@@ -60,10 +60,17 @@ export default function ActiveRideScreen({ rideId, onCompleted, onCancelled, onO
     if (!ride) return;
     const next = NEXT_STATUS[ride.status];
     if (!next) return;
-    const updated = await api.setRideStatus(ride.id, next);
-    setRide(updated);
-    playSound("action");
-    if (next === "COMPLETED") onCompleted();
+    try {
+      const updated = await api.setRideStatus(ride.id, next);
+      setRide((prev) => ({ ...prev, ...updated }));
+      playSound("action");
+      if (next === "COMPLETED") onCompleted();
+    } catch (e) {
+      // Écran désynchronisé (étape déjà franchie, course réaffectée...) : on recharge la course
+      // pour afficher le bon bouton au lieu de laisser un glissement sans effet.
+      showAlert("Action impossible", e.message);
+      load();
+    }
   };
 
   // Avant la prise en charge (ACCEPTED/EN_ROUTE) on navigue vers le client ; une fois la

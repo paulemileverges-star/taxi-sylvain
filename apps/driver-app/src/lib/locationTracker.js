@@ -49,10 +49,16 @@ export async function startTrackingLocation(rideId, rideStatus) {
   if (Platform.OS === "web") {
     await stopTrackingLocation();
     trackedKey = key;
+    // Première position tout de suite (sans attendre le premier « tick » du suivi) pour que le
+    // chauffeur apparaisse sur la carte dès qu'il glisse « En route ».
+    Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High })
+      .then((loc) => emitPosition(loc.coords))
+      .catch(() => null);
     webWatcher = await Location.watchPositionAsync(
-      { accuracy: Location.Accuracy.Balanced, timeInterval: 6000, distanceInterval: 20 },
+      { accuracy: Location.Accuracy.High, timeInterval: 4000, distanceInterval: 10 },
       (loc) => emitPosition(loc.coords)
     );
+    startWebKeepAlive();
     return true;
   }
 
@@ -78,6 +84,46 @@ export async function startTrackingLocation(rideId, rideStatus) {
   return true;
 }
 
+// Version web : un navigateur suspend la géolocalisation quand l'écran s'éteint ou que l'onglet
+// passe en arrière-plan. On garde l'écran allumé pendant la course (Wake Lock) et, au retour au
+// premier plan, on renvoie immédiatement une position pour rattraper le silence.
+let wakeLock = null;
+let visibilityHandler = null;
+
+async function requestWakeLock() {
+  try {
+    if (typeof navigator !== "undefined" && navigator.wakeLock && !wakeLock) {
+      wakeLock = await navigator.wakeLock.request("screen");
+      wakeLock.addEventListener?.("release", () => { wakeLock = null; });
+    }
+  } catch {
+    // Non supporté ou refusé — le suivi continue simplement tant que l'onglet reste actif.
+  }
+}
+
+function startWebKeepAlive() {
+  if (typeof document === "undefined") return;
+  requestWakeLock();
+  if (!visibilityHandler) {
+    visibilityHandler = () => {
+      if (document.visibilityState !== "visible" || !trackedKey) return;
+      requestWakeLock();
+      Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High })
+        .then((loc) => emitPosition(loc.coords))
+        .catch(() => null);
+    };
+    document.addEventListener("visibilitychange", visibilityHandler);
+  }
+}
+
+function stopWebKeepAlive() {
+  if (wakeLock) { wakeLock.release?.().catch?.(() => null); wakeLock = null; }
+  if (visibilityHandler && typeof document !== "undefined") {
+    document.removeEventListener("visibilitychange", visibilityHandler);
+    visibilityHandler = null;
+  }
+}
+
 export async function stopTrackingLocation() {
   trackedKey = null;
   await AsyncStorage.removeItem(CONTEXT_KEY);
@@ -85,6 +131,7 @@ export async function stopTrackingLocation() {
     webWatcher.remove();
     webWatcher = null;
   }
+  stopWebKeepAlive();
   if (Platform.OS !== "web") {
     const running = await Location.hasStartedLocationUpdatesAsync(TASK).catch(() => false);
     if (running) await Location.stopLocationUpdatesAsync(TASK).catch(() => null);
