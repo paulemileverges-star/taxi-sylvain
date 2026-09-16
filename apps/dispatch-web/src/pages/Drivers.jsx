@@ -2,6 +2,21 @@ import React, { useEffect, useRef, useState } from "react";
 import { api, assetUrl } from "../lib/api.js";
 import { playSound } from "../lib/sound.js";
 import { getSocket } from "../lib/socket.js";
+import { prepareImageForUpload } from "../lib/image.js";
+
+// Photo dont le fichier n'existe plus sur le serveur (ex. envoyée avant la mise en place du
+// disque persistant) : on l'indique clairement au lieu d'une image cassée.
+function Photo({ src, alt, round }) {
+  const [broken, setBroken] = useState(false);
+  return (
+    <div
+      title={broken ? "Fichier introuvable — re-téléversez la photo" : alt}
+      style={{ width: 44, height: 44, borderRadius: round ? "50%" : 8, overflow: "hidden", background: broken ? "rgba(232,93,76,0.18)" : "#1d2c46", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", color: "#e85d4c", fontSize: 11 }}
+    >
+      {src && !broken ? <img src={src} alt={alt} onError={() => setBroken(true)} style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : broken ? "!" : null}
+    </div>
+  );
+}
 
 const EMPTY_FORM = { name: "", email: "", phone: "", password: "", carModel: "", plate: "" };
 
@@ -37,16 +52,24 @@ export default function Drivers() {
 
   const uploadPhoto = async (driverId, file) => {
     if (!file) return;
-    await api.uploadDriverPhotos(driverId, { photo: file });
-    playSound("action");
-    load();
+    try {
+      await api.uploadDriverPhotos(driverId, { photo: await prepareImageForUpload(file) });
+      playSound("action");
+      load();
+    } catch (e) {
+      alert(`Photo non enregistrée : ${e.message}`);
+    }
   };
 
   const uploadCarPhoto = async (driverId, file) => {
     if (!file) return;
-    await api.uploadDriverPhotos(driverId, { carPhoto: file });
-    playSound("action");
-    load();
+    try {
+      await api.uploadDriverPhotos(driverId, { carPhoto: await prepareImageForUpload(file) });
+      playSound("action");
+      load();
+    } catch (e) {
+      alert(`Photo du véhicule non enregistrée : ${e.message}`);
+    }
   };
 
   const remove = async (driver) => {
@@ -114,12 +137,8 @@ export default function Drivers() {
       {drivers.map((d) => (
         <div key={d.id} className="card row">
           <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-            <div style={{ width: 44, height: 44, borderRadius: "50%", overflow: "hidden", background: "#1d2c46", flexShrink: 0 }}>
-              {d.photoUrl && <img src={assetUrl(d.photoUrl)} alt={d.name} style={{ width: "100%", height: "100%", objectFit: "cover" }} />}
-            </div>
-            <div style={{ width: 44, height: 44, borderRadius: 8, overflow: "hidden", background: "#1d2c46", flexShrink: 0 }}>
-              {d.carPhotoUrl && <img src={assetUrl(d.carPhotoUrl)} alt="véhicule" style={{ width: "100%", height: "100%", objectFit: "cover" }} />}
-            </div>
+            <Photo src={d.photoUrl ? assetUrl(d.photoUrl) : null} alt={d.name} round />
+            <Photo src={d.carPhotoUrl ? assetUrl(d.carPhotoUrl) : null} alt="véhicule" />
             <span
               title={d.online ? "En ligne" : "Hors ligne"}
               style={{

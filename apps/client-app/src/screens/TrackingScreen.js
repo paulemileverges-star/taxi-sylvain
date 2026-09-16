@@ -2,18 +2,21 @@ import React, { useEffect, useState } from "react";
 import { View, Text, Image, TouchableOpacity, Linking, StyleSheet } from "react-native";
 import { api, assetUrl } from "../lib/api";
 import { playSound } from "../lib/sound";
-import { showAlert } from "../lib/alert";
 import { getSocket } from "../lib/socket";
 import DriverMap from "../components/DriverMap";
 
 const STATUS_LABEL = {
-  REQUESTED: "Recherche d'un chauffeur…",
+  REQUESTED: "En attente de validation par Taxi Sylvain",
   BROADCAST: "Recherche d'un chauffeur…",
-  ACCEPTED: "Un chauffeur a accepté votre course",
+  ACCEPTED: "Course confirmée — chauffeur attribué",
   EN_ROUTE: "Votre chauffeur est en route",
   STARTED: "Course en cours vers votre destination",
   COMPLETED: "Course terminée",
+  CANCELLED: "Course annulée",
+  REFUSED: "Course refusée",
 };
+const TAXI_SYLVAIN_PHONE = "+14384991120";
+const LIVE_STATUSES = ["EN_ROUTE", "STARTED"];
 
 function fmtDate(d) {
   return d ? new Date(d).toLocaleDateString("fr-CA") : "—";
@@ -49,8 +52,11 @@ export default function TrackingScreen({ rideId, onOpenChat, onBack }) {
   // Position GPS du chauffeur en direct pendant qu'il est en route ou en course
   // (le room ride:{id} est déjà rejoint côté App.js via ride:watch).
   useEffect(() => {
-    // Dernière position connue tout de suite, puis mises à jour en direct.
-    api.driverLocation(rideId).then((p) => { if (p) setDriverPos({ lat: p.lat, lng: p.lng }); }).catch(() => null);
+    // Dernière position connue tout de suite, puis mises à jour en direct ; un rappel toutes les
+    // 5 s sert de filet de sécurité si la connexion temps réel décroche.
+    const fetchPos = () => api.driverLocation(rideId).then((p) => { if (p) setDriverPos({ lat: p.lat, lng: p.lng }); }).catch(() => null);
+    fetchPos();
+    const interval = setInterval(fetchPos, 5000);
     let sock;
     getSocket().then((s) => {
       sock = s;
@@ -59,17 +65,12 @@ export default function TrackingScreen({ rideId, onOpenChat, onBack }) {
         if (p.rideId === rideId) setDriverPos({ lat: p.lat, lng: p.lng });
       });
     });
-    return () => sock?.off("driver:location");
+    return () => { clearInterval(interval); sock?.off("driver:location"); };
   }, [rideId]);
 
-  const callMasked = async () => {
-    try {
-      const { proxyNumber } = await api.callMasked(rideId);
-      playSound("action");
-      Linking.openURL(`tel:${proxyNumber}`);
-    } catch (e) {
-      showAlert("Appel indisponible", e.message);
-    }
+  const callTaxiSylvain = () => {
+    playSound("action");
+    Linking.openURL(`tel:${TAXI_SYLVAIN_PHONE}`);
   };
 
   return (
@@ -78,13 +79,15 @@ export default function TrackingScreen({ rideId, onOpenChat, onBack }) {
         {onBack && <TouchableOpacity onPress={onBack}><Text style={styles.link}>← Retour</Text></TouchableOpacity>}
         <Text style={styles.title}>{ride ? STATUS_LABEL[ride.status] : "Chargement…"}</Text>
       </View>
-      <View style={styles.mapPlaceholder}>
-        {driverPos ? (
-          <DriverMap lat={driverPos.lat} lng={driverPos.lng} />
-        ) : (
-          <Text style={{ color: "#8b99b5" }}>En attente de la position du chauffeur…</Text>
-        )}
-      </View>
+      {(!ride || LIVE_STATUSES.includes(ride.status) || driverPos) && (
+        <View style={styles.mapPlaceholder}>
+          {driverPos ? (
+            <DriverMap lat={driverPos.lat} lng={driverPos.lng} />
+          ) : (
+            <Text style={{ color: "#8b99b5" }}>En attente de la position du chauffeur…</Text>
+          )}
+        </View>
+      )}
       {ride && (
         <View style={styles.card}>
           <Field label="Date de la course" value={fmtDate(ride.scheduledFor || ride.createdAt)} />
@@ -117,14 +120,14 @@ export default function TrackingScreen({ rideId, onOpenChat, onBack }) {
           )}
           <View style={styles.rowBetween}>
             <TouchableOpacity style={styles.callBtn} onPress={() => onOpenChat(rideId)}>
-              <Text style={styles.callBtnText}>Message</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.callBtn} onPress={callMasked}>
-              <Text style={styles.callBtnText}>Appeler (masqué)</Text>
+              <Text style={styles.callBtnText}>Message au chauffeur</Text>
             </TouchableOpacity>
           </View>
         </View>
       )}
+      <TouchableOpacity style={[styles.callBtn, { marginTop: 4 }]} onPress={callTaxiSylvain}>
+        <Text style={styles.callBtnText}>Appeler Taxi Sylvain — (438) 499-1120</Text>
+      </TouchableOpacity>
     </View>
   );
 }

@@ -47,6 +47,14 @@ router.post("/login", authLimiter, async (req, res) => {
   res.json({ token, user: publicUser(user) });
 });
 
+// Profil à jour de l'utilisateur connecté (adresse de domicile, préférences...) — rafraîchi à
+// l'ouverture de l'app pour ne pas dépendre d'une copie locale faite à la connexion.
+router.get("/me", requireAuth, async (req, res) => {
+  const user = await prisma.user.findUnique({ where: { id: req.user.id } });
+  if (!user) return res.status(404).json({ error: "Compte introuvable." });
+  res.json(publicUser(user));
+});
+
 // Changement de mot de passe (besoin #6) — pour chauffeur, client ou dispatch, depuis l'app.
 router.post("/change-password", requireAuth, async (req, res) => {
   const { currentPassword, newPassword } = req.body;

@@ -11,7 +11,7 @@ import ChangePasswordScreen from "./src/screens/ChangePasswordScreen";
 import NotificationSettingsScreen from "./src/screens/NotificationSettingsScreen";
 import RidesScreen from "./src/screens/RidesScreen";
 import { getSocket, resetSocket } from "./src/lib/socket";
-import { logout as clearSession } from "./src/lib/api";
+import { api, logout as clearSession } from "./src/lib/api";
 import { playSound } from "./src/lib/sound";
 import * as Notifications from "expo-notifications";
 import { registerForPushNotifications, clearPushToken } from "./src/lib/pushNotifications";
@@ -24,7 +24,14 @@ export default function App() {
   useEffect(() => {
     (async () => {
       const raw = await AsyncStorage.getItem("ts_user");
-      if (raw) setUser(JSON.parse(raw));
+      if (!raw) return;
+      setUser(JSON.parse(raw));
+      // Profil rafraîchi (adresse de domicile modifiée par le Dispatch, etc.)
+      try {
+        const fresh = await api.me();
+        await AsyncStorage.setItem("ts_user", JSON.stringify(fresh));
+        setUser(fresh);
+      } catch { /* hors ligne ou session expirée : on garde la copie locale */ }
     })();
   }, []);
 

@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, ActivityIndicator } from "react-native";
-import { api } from "../lib/api";
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, ActivityIndicator, Image } from "react-native";
+import { api, assetUrl } from "../lib/api";
 import { playSound } from "../lib/sound";
 import { showAlert } from "../lib/alert";
 
@@ -41,6 +41,13 @@ export default function RateScreen({ rideId, onDone }) {
         <ActivityIndicator color="#f5a623" />
       ) : (
         <>
+          <View style={styles.driverRow}>
+            <View style={styles.avatar}>
+              {driver.photoUrl ? <Image source={{ uri: assetUrl(driver.photoUrl) }} style={styles.avatarImg} /> : <Text style={styles.avatarInitial}>{driver.name?.[0]}</Text>}
+            </View>
+            {driver.carPhotoUrl ? <Image source={{ uri: assetUrl(driver.carPhotoUrl) }} style={styles.carThumb} /> : null}
+            <Text style={styles.driverInfo}>{driver.carModel || ""}{driver.plate ? ` · ${driver.plate}` : ""}</Text>
+          </View>
           <View style={styles.stars}>
             {[1, 2, 3, 4, 5].map((n) => (
               <TouchableOpacity key={n} onPress={() => setStars(n)}>
@@ -67,6 +74,12 @@ export default function RateScreen({ rideId, onDone }) {
 
 const styles = StyleSheet.create({
   title: { color: "#edeff3", fontSize: 20, fontWeight: "700", marginBottom: 16 },
+  driverRow: { flexDirection: "row", alignItems: "center", gap: 10, marginBottom: 16 },
+  avatar: { width: 48, height: 48, borderRadius: 24, backgroundColor: "#1d2c46", alignItems: "center", justifyContent: "center", overflow: "hidden" },
+  avatarImg: { width: "100%", height: "100%" },
+  avatarInitial: { color: "#edeff3", fontWeight: "700", fontSize: 18 },
+  carThumb: { width: 64, height: 44, borderRadius: 8 },
+  driverInfo: { color: "#8b99b5", flexShrink: 1 },
   stars: { flexDirection: "row", justifyContent: "center", gap: 6, marginBottom: 16 },
   input: { backgroundColor: "#16233a", color: "#edeff3", borderRadius: 12, padding: 12, minHeight: 80, borderWidth: 1, borderColor: "#28395a", marginBottom: 12 },
   primaryBtn: { backgroundColor: "#f5a623", borderRadius: 12, padding: 14, alignItems: "center" },

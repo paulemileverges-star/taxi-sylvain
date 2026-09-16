@@ -15,6 +15,23 @@ function hasCoords(p) {
   return p && typeof p.lat === "number" && typeof p.lng === "number";
 }
 
+// Coordonnées d'une adresse saisie sans suggestion (ex. domicile du client) — Nominatim, best effort.
+export async function geocodeAddress(address) {
+  if (!address || String(address).trim().length < 5) return null;
+  try {
+    const params = new URLSearchParams({ q: address, format: "jsonv2", limit: "1", countrycodes: "ca,us" });
+    const res = await fetch(`https://nominatim.openstreetmap.org/search?${params}`, {
+      headers: { "User-Agent": "TaxiSylvain/1.0 (dispatch@taxi-sylvain.com)" },
+      signal: AbortSignal.timeout(4000),
+    });
+    if (!res.ok) return null;
+    const [first] = await res.json();
+    return first ? { lat: parseFloat(first.lat), lng: parseFloat(first.lon) } : null;
+  } catch {
+    return null;
+  }
+}
+
 export async function computeDistanceKm(pickup, dest) {
   if (!hasCoords(pickup) || !hasCoords(dest)) return null;
   try {

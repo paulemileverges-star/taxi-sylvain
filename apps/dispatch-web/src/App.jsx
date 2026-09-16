@@ -15,6 +15,7 @@ import Groups from "./pages/Groups.jsx";
 import LiveMap from "./pages/LiveMap.jsx";
 import Search from "./pages/Search.jsx";
 import Admins from "./pages/Admins.jsx";
+import Pricing from "./pages/Pricing.jsx";
 import ChangePasswordModal from "./components/ChangePasswordModal.jsx";
 import logo from "./assets/logo.png";
 import { statusClass } from "./lib/status.js";
@@ -24,6 +25,7 @@ const NAV = [
   { key: "search", label: "Recherche" },
   { key: "map", label: "Carte" },
   { key: "courses", label: "Courses", permission: "courses" },
+  { key: "pricing", label: "Tarifs", permission: "courses" },
   { key: "schedule", label: "Cédule", permission: "schedule" },
   { key: "drivers", label: "Chauffeurs", permission: "drivers" },
   { key: "clients", label: "Clients", permission: "clients" },
@@ -46,11 +48,24 @@ export default function App() {
   useEffect(() => {
     if (!user) return;
     const socket = getSocket();
+    // Notification système du navigateur (visible même si la fenêtre est réduite ou sur un autre
+    // onglet, tant que la console reste ouverte) — demandée une fois à la connexion.
+    if (typeof Notification !== "undefined" && Notification.permission === "default") {
+      Notification.requestPermission().catch(() => null);
+    }
+    const desktopNotify = (text) => {
+      try {
+        if (typeof Notification !== "undefined" && Notification.permission === "granted" && document.visibilityState !== "visible") {
+          new Notification("Taxi Sylvain — Dispatch", { body: text, tag: `ts-${Date.now()}` });
+        }
+      } catch { /* non supporté */ }
+    };
     const push = (n) => {
       const entry = { id: `${Date.now()}-${Math.random()}`, text: n.text, status: n.status || null, at: new Date() };
       setNotifs((prev) => [entry, ...prev].slice(0, 100));
       setToasts((prev) => [entry, ...prev].slice(0, 4));
       setTimeout(() => setToasts((prev) => prev.filter((t) => t.id !== entry.id)), 9000);
+      desktopNotify(n.text);
     };
     socket.on("ride:notification", (n) => { push(n); playSound(n.status === "COMPLETED" ? "action" : "notify"); });
     socket.on("ride:created", (ride) => { push({ text: `Nouvelle course créée : ${ride?.pickupAddress || ""} → ${ride?.destAddress || ""}`, status: ride?.status || "REQUESTED" }); playSound("notify"); });
@@ -118,6 +133,7 @@ export default function App() {
         {screen === "search" && <Search />}
         {screen === "map" && <LiveMap />}
         {screen === "courses" && <Courses />}
+        {screen === "pricing" && <Pricing />}
         {screen === "schedule" && <Schedule />}
         {screen === "drivers" && <Drivers />}
         {screen === "clients" && <Clients />}

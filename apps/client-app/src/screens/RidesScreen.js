@@ -1,10 +1,10 @@
 import React, { useEffect, useState } from "react";
-import { View, Text, TouchableOpacity, StyleSheet, FlatList, ActivityIndicator } from "react-native";
-import { api } from "../lib/api";
+import { View, Text, TouchableOpacity, StyleSheet, FlatList, ActivityIndicator, Image } from "react-native";
+import { api, assetUrl } from "../lib/api";
 import { showAlert } from "../lib/alert";
 
 const STATUS_LABEL = {
-  REQUESTED: "Demandée", BROADCAST: "Recherche d'un chauffeur", ACCEPTED: "Chauffeur en route",
+  REQUESTED: "En attente de validation", BROADCAST: "Recherche d'un chauffeur", ACCEPTED: "Confirmée",
   EN_ROUTE: "Chauffeur en route", STARTED: "En cours",
   COMPLETED: "Terminée", CANCELLED: "Annulée", REFUSED: "Refusée",
 };
@@ -60,17 +60,21 @@ export default function RidesScreen({ onOpenRide, onBack }) {
           keyExtractor={(r) => r.id}
           ListEmptyComponent={<Text style={{ color: "#8b99b5", marginTop: 12 }}>Aucune course ici.</Text>}
           renderItem={({ item }) => (
-            <TouchableOpacity
-              style={styles.card}
-              disabled={!["REQUESTED", "BROADCAST", "ACCEPTED", "EN_ROUTE", "STARTED"].includes(item.status)}
-              onPress={() => onOpenRide(item.id)}
-            >
+            <TouchableOpacity style={styles.card} onPress={() => onOpenRide(item.id)}>
               <View style={styles.rowBetween}>
                 <Text style={styles.date}>{fmtDate(item.scheduledFor || item.createdAt)} · {fmtTime(item.scheduledFor || item.createdAt)}</Text>
                 <Text style={styles.status}>{STATUS_LABEL[item.status] || item.status}</Text>
               </View>
               <Text style={styles.addr}>{item.pickupAddress} → {item.destAddress}</Text>
-              {item.driver?.name && <Text style={styles.driver}>Chauffeur : {item.driver.name}</Text>}
+              {item.driver?.name && (
+                <View style={styles.driverRow}>
+                  <View style={styles.avatar}>
+                    {item.driver.photoUrl ? <Image source={{ uri: assetUrl(item.driver.photoUrl) }} style={styles.avatarImg} /> : <Text style={styles.avatarInitial}>{item.driver.name[0]}</Text>}
+                  </View>
+                  {item.driver.carPhotoUrl ? <Image source={{ uri: assetUrl(item.driver.carPhotoUrl) }} style={styles.carThumb} /> : null}
+                  <Text style={styles.driver}>{item.driver.name}{item.driver.carModel ? ` · ${item.driver.carModel}` : ""}{item.driver.plate ? ` · ${item.driver.plate}` : ""}</Text>
+                </View>
+              )}
               <Text style={styles.fare}>
                 {item.fare > 0 ? `${item.fare} $` : "Montant à confirmer"}{item.distanceKm != null ? `  ·  ${item.distanceKm.toFixed(1)} km` : ""}
               </Text>
@@ -107,7 +111,12 @@ const styles = StyleSheet.create({
   date: { color: "#8b99b5", fontSize: 12 },
   status: { color: "#f5a623", fontSize: 12, fontWeight: "600" },
   addr: { color: "#edeff3", marginTop: 6 },
-  driver: { color: "#8b99b5", fontSize: 12, marginTop: 4 },
+  driver: { color: "#8b99b5", fontSize: 12, flexShrink: 1 },
+  driverRow: { flexDirection: "row", alignItems: "center", gap: 8, marginTop: 8 },
+  avatar: { width: 32, height: 32, borderRadius: 16, backgroundColor: "#1d2c46", alignItems: "center", justifyContent: "center", overflow: "hidden" },
+  avatarImg: { width: "100%", height: "100%" },
+  avatarInitial: { color: "#edeff3", fontWeight: "700" },
+  carThumb: { width: 44, height: 32, borderRadius: 6 },
   fare: { color: "#f5a623", fontWeight: "700", marginTop: 4 },
   pager: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingVertical: 12 },
   pagerLink: { color: "#f5a623", fontWeight: "600" },

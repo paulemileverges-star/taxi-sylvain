@@ -2,7 +2,7 @@ import React, { useEffect, useState } from "react";
 import { api } from "../lib/api.js";
 import { playSound } from "../lib/sound.js";
 
-function ClientCard({ client, onDelete }) {
+function ClientCard({ client, onDelete, onEdit }) {
   const [notes, setNotes] = useState(client.notes || "");
   const [address, setAddress] = useState(client.address || "");
   const [saving, setSaving] = useState(false);
@@ -33,6 +33,7 @@ function ClientCard({ client, onDelete }) {
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
           <span className="chip">★ {client.ratingAvg?.toFixed(1) ?? "5.0"}</span>
+          <button className="btn outline" onClick={() => onEdit(client)}>Modifier</button>
           <button className="btn red" onClick={() => onDelete(client)}>Supprimer</button>
         </div>
       </div>
@@ -79,7 +80,28 @@ export default function Clients() {
   const [importing, setImporting] = useState(false);
   const [importResult, setImportResult] = useState(null);
   const [credentials, setCredentials] = useState(null);
+  const [editing, setEditing] = useState(null); // client en cours de modification
+  const [editForm, setEditForm] = useState(EMPTY_FORM);
+  const [editError, setEditError] = useState("");
   const fileInputRef = React.useRef(null);
+
+  const openEdit = (client) => {
+    setEditing(client);
+    setEditForm({ name: client.name || "", email: client.email || "", phone: client.phone || "", address: client.address || "", notes: client.notes || "" });
+    setEditError("");
+  };
+
+  const saveEdit = async () => {
+    setEditError("");
+    try {
+      await api.updateClient(editing.id, editForm);
+      setEditing(null);
+      playSound("action");
+      load();
+    } catch (e) {
+      setEditError(e.message);
+    }
+  };
 
   const load = () => api.listClients().then(setClients);
   useEffect(() => { load(); }, []);
@@ -148,8 +170,28 @@ export default function Clients() {
       </div>
 
       {clients.map((c) => (
-        <ClientCard key={c.id} client={c} onDelete={remove} />
+        <ClientCard key={c.id} client={c} onDelete={remove} onEdit={openEdit} />
       ))}
+
+      {editing && (
+        <div className="modal-backdrop">
+          <div className="modal">
+            <div className="row"><h3>Modifier le client</h3><button onClick={() => setEditing(null)}>✕</button></div>
+            <label>Nom complet</label>
+            <input className="input" value={editForm.name} onChange={(e) => setEditForm({ ...editForm, name: e.target.value })} />
+            <label style={{ display: "block", marginTop: 8 }}>Courriel</label>
+            <input className="input" type="email" value={editForm.email} onChange={(e) => setEditForm({ ...editForm, email: e.target.value })} placeholder="(aucun)" />
+            <label style={{ display: "block", marginTop: 8 }}>Téléphone</label>
+            <input className="input" value={editForm.phone} onChange={(e) => setEditForm({ ...editForm, phone: e.target.value })} />
+            <label style={{ display: "block", marginTop: 8 }}>Adresse (domicile — prise en charge par défaut)</label>
+            <input className="input" value={editForm.address} onChange={(e) => setEditForm({ ...editForm, address: e.target.value })} />
+            <label style={{ display: "block", marginTop: 8 }}>Mémo et préférences</label>
+            <textarea className="input" style={{ minHeight: 60, fontFamily: "inherit" }} value={editForm.notes} onChange={(e) => setEditForm({ ...editForm, notes: e.target.value })} />
+            {editError && <div style={{ color: "#e85d4c", fontSize: 13, marginTop: 8 }}>{editError}</div>}
+            <button className="btn" style={{ marginTop: 14, width: "100%" }} onClick={saveEdit}>Enregistrer les modifications</button>
+          </div>
+        </div>
+      )}
       {clients.length === 0 && <div style={{ color: "#8b99b5", fontSize: 14 }}>Aucun client pour l'instant.</div>}
 
       {showAdd && (

@@ -135,6 +135,29 @@ model Rating {
   createdAt  DateTime @default(now())
 }
 
+// Destinations prédéfinies (YUL, YHU, REM...) avec tarif du catalogue — proposées au Dispatch et
+// au client à la création d'une course ; le tarif s'applique automatiquement quand il est renseigné.
+model Destination {
+  id        String  @id @default(cuid())
+  code      String  @unique
+  label     String
+  address   String
+  lat       Float?
+  lng       Float?
+  price     Float? // null = montant à confirmer par le Dispatch
+  sortOrder Int     @default(0)
+}
+
+// Grille tarifaire par municipalité de prise en charge vers les aéroports (catalogue Taxi Sylvain).
+// Le nom sert à reconnaître la municipalité dans l'adresse de départ ; null = pas de tarif.
+model PriceZone {
+  id        String @id @default(cuid())
+  name      String @unique
+  priceYUL  Float?
+  priceYHU  Float?
+  sortOrder Int    @default(0)
+}
+
 // Trace des rappels de course déjà envoyés, pour ne jamais en envoyer deux fois au même
 // utilisateur pour le même décalage (besoin #1).
 model SentReminder {

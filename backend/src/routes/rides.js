@@ -7,8 +7,9 @@ import { isConfigured as isCallMaskingConfigured, getOrCreateCallSession } from 
 import { notifyUser, notifyAllDrivers } from "../lib/push.js";
 import { createDriverAccount } from "./drivers.js";
 import { generateTempPassword } from "../lib/placeholderEmail.js";
-import { computeDistanceKm } from "../lib/distance.js";
+import { computeDistanceKm, geocodeAddress } from "../lib/distance.js";
 import { clearDriverLocation, getDriverLocation } from "../lib/driverLocations.js";
+import { quote } from "../lib/pricing.js";
 
 // Réservation par téléphone (besoin #5) : le Dispatch peut créer une course pour un client sans
 // compte — on retrouve son compte existant par téléphone, ou on lui en crée un à la volée. Si le
@@ -79,15 +80,30 @@ router.get("/:id", async (req, res) => {
 // Créer une course (Dispatch ou Client)
 router.post("/", requirePermission("courses", "CLIENT"), async (req, res) => {
   const {
-    pickupAddress, destAddress, distanceKm, fare, scheduledFor, flightNumber,
+    pickupAddress, distanceKm, scheduledFor, flightNumber, destinationCode,
     clientName, clientPhone, clientEmail, clientAddress, clientNotes,
-    pickupLat, pickupLng, destLat, destLng, broadcastAll,
+    pickupLat, pickupLng, broadcastAll,
     newDriver, // { name, email, phone, password?, carModel?, plate? } — créé à la volée et affecté
   } = req.body;
-  let { driverId } = req.body;
-  // Un client qui réserve dans l'app ne connaît pas le tarif : le montant reste à 0 (« à confirmer »)
-  // jusqu'à ce que Taxi Sylvain le fixe. Le Dispatch, lui, doit toujours saisir un montant.
+  let { driverId, destAddress, destLat, destLng, fare } = req.body;
   const isClientBooking = req.user.role === "CLIENT";
+
+  // Destination prédéfinie (YUL, YHU, REM...) : adresse, coordonnées et tarif du catalogue selon
+  // la municipalité de prise en charge. Le tarif du catalogue s'impose au client ; le Dispatch
+  // peut le surcharger en saisissant un montant.
+  if (destinationCode) {
+    const q = await quote({ pickupAddress, destinationCode });
+    if (q.destination) {
+      destAddress = q.destination.address;
+      destLat = q.destination.lat;
+      destLng = q.destination.lng;
+      if (isClientBooking || !fare) fare = q.price ?? 0;
+    }
+  }
+
+  // Un client qui réserve dans l'app ne connaît pas le tarif : sans destination au catalogue, le
+  // montant reste à 0 (« à confirmer ») jusqu'à ce que Taxi Sylvain le fixe. Le Dispatch, lui,
+  // doit toujours saisir un montant.
   if (!pickupAddress || !destAddress || (!fare && !isClientBooking)) {
     return res.status(400).json({ error: "Adresse de prise en charge, destination et montant requis." });
   }
@@ -112,7 +128,10 @@ router.post("/", requirePermission("courses", "CLIENT"), async (req, res) => {
     }
   }
 
-  const pickup = { lat: pickupLat, lng: pickupLng };
+  // Adresse de départ sans coordonnées (domicile du client, saisie libre) : on tente de la
+  // géocoder pour pouvoir calculer la distance.
+  let pickup = { lat: pickupLat, lng: pickupLng };
+  if (typeof pickup.lat !== "number" || typeof pickup.lng !== "number") pickup = (await geocodeAddress(pickupAddress)) || pickup;
   const dest = { lat: destLat, lng: destLng };
   const computedDistance = typeof distanceKm === "number" ? distanceKm : await computeDistanceKm(pickup, dest);
 
@@ -127,8 +146,8 @@ router.post("/", requirePermission("courses", "CLIENT"), async (req, res) => {
       clientId,
       driverId: driverId ?? null,
       status: broadcastAll ? "BROADCAST" : driverId ? "ACCEPTED" : "REQUESTED",
-      pickupLat: typeof pickupLat === "number" ? pickupLat : null,
-      pickupLng: typeof pickupLng === "number" ? pickupLng : null,
+      pickupLat: typeof pickup.lat === "number" ? pickup.lat : null,
+      pickupLng: typeof pickup.lng === "number" ? pickup.lng : null,
       destLat: typeof destLat === "number" ? destLat : null,
       destLng: typeof destLng === "number" ? destLng : null,
     },
@@ -136,6 +155,15 @@ router.post("/", requirePermission("courses", "CLIENT"), async (req, res) => {
   });
 
   broadcast(req, "dispatch", "ride:created", ride);
+  if (isClientBooking) {
+    // Le client est prévenu tout de suite si le tarif du catalogue s'est appliqué, sinon que sa
+    // demande attend la validation (montant) de Taxi Sylvain.
+    broadcast(req, "dispatch", "ride:notification", {
+      rideId: ride.id,
+      status: ride.status,
+      text: `${req.user.name} a réservé une course ${ride.pickupAddress} → ${ride.destAddress}${ride.fare > 0 ? ` (${ride.fare.toFixed(2)} $, tarif catalogue)` : " — montant à confirmer"}.`,
+    });
+  }
   if (driverId) {
     broadcast(req, `driver:${driverId}`, "ride:assigned", ride);
     notifyUser(driverId, {
@@ -160,6 +188,7 @@ router.post("/:id/assign", requirePermission("courses"), async (req, res) => {
   const ride = await prisma.ride.update({
     where: { id: req.params.id },
     data: { driverId, status: driverId ? "ACCEPTED" : "REQUESTED" },
+    include: { driver: { select: { name: true, carModel: true, plate: true } } },
   });
   if (driverId) {
     broadcast(req, `driver:${driverId}`, "ride:assigned", ride);
@@ -168,6 +197,13 @@ router.post("/:id/assign", requirePermission("courses"), async (req, res) => {
       body: `${ride.pickupAddress} → ${ride.destAddress}`,
       data: { type: "ride:assigned", rideId: ride.id },
     });
+    if (ride.clientId) {
+      notifyUser(ride.clientId, {
+        title: "Votre chauffeur est confirmé",
+        body: `${ride.driver.name}${ride.driver.carModel ? ` · ${ride.driver.carModel}` : ""}${ride.driver.plate ? ` · ${ride.driver.plate}` : ""} — ${ride.pickupAddress} → ${ride.destAddress}`,
+        data: { type: "ride:status", rideId: ride.id, status: ride.status },
+      });
+    }
   }
   broadcast(req, "dispatch", "ride:updated", ride);
   broadcast(req, `ride:${ride.id}`, "ride:status", ride);
@@ -356,14 +392,27 @@ router.patch("/:id", requirePermission("courses"), async (req, res) => {
       const merged = { ...current, ...data };
       data.distanceKm = await computeDistanceKm({ lat: merged.pickupLat, lng: merged.pickupLng }, { lat: merged.destLat, lng: merged.destLng });
     }
+    const before = await prisma.ride.findUnique({ where: { id: req.params.id }, select: { fare: true } });
     const ride = await prisma.ride.update({
       where: { id: req.params.id },
       data,
-      include: { client: { select: { id: true, name: true } }, driver: { select: { id: true, name: true } } },
+      include: { client: { select: { id: true, name: true } }, driver: { select: { id: true, name: true, carModel: true, plate: true } } },
     });
     broadcast(req, "dispatch", "ride:updated", ride);
     broadcast(req, `ride:${ride.id}`, "ride:status", ride);
     if (ride.driverId) broadcast(req, `driver:${ride.driverId}`, "ride:assigned", ride);
+
+    // Taxi Sylvain vient de fixer (ou corriger) le montant : le client reçoit le récapitulatif.
+    if (ride.clientId && data.fare !== undefined && ride.fare > 0 && ride.fare !== before?.fare) {
+      const when = ride.scheduledFor
+        ? new Date(ride.scheduledFor).toLocaleString("fr-CA", { timeZone: "America/Toronto", dateStyle: "short", timeStyle: "short" })
+        : "dès que possible";
+      notifyUser(ride.clientId, {
+        title: `Course validée — ${ride.fare.toFixed(2)} $`,
+        body: `${ride.pickupAddress} → ${ride.destAddress} · ${when}${ride.driver ? ` · chauffeur ${ride.driver.name}` : ""}`,
+        data: { type: "ride:status", rideId: ride.id, status: ride.status },
+      });
+    }
     res.json(ride);
   } catch (e) {
     res.status(404).json({ error: "Course introuvable." });

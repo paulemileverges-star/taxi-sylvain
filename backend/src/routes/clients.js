@@ -110,6 +110,36 @@ router.patch("/:id/notes", async (req, res) => {
   res.json(client);
 });
 
+// Modification d'une fiche client (bouton « Modifier » du Dispatch).
+router.patch("/:id", async (req, res) => {
+  const existing = await prisma.user.findUnique({ where: { id: req.params.id } });
+  if (!existing || existing.role !== "CLIENT") return res.status(404).json({ error: "Client introuvable." });
+
+  const { name, email, phone, address, notes } = req.body;
+  const data = {};
+  if (name !== undefined) data.name = String(name).trim();
+  if (phone !== undefined) data.phone = String(phone).trim();
+  if (address !== undefined) data.address = address ? String(address).trim() : null;
+  if (notes !== undefined) data.notes = notes ? String(notes).trim() : null;
+  if (email !== undefined) {
+    const trimmed = String(email || "").trim();
+    // Courriel vide : on garde le courriel technique existant (jamais affiché) pour l'unicité.
+    if (trimmed && trimmed !== existing.email) {
+      const taken = await prisma.user.findUnique({ where: { email: trimmed } });
+      if (taken) return res.status(409).json({ error: "Ce courriel est déjà utilisé par un autre compte." });
+      data.email = trimmed;
+    }
+  }
+  if (data.name === "" || data.phone === "") return res.status(400).json({ error: "Nom et téléphone sont requis." });
+
+  const client = await prisma.user.update({
+    where: { id: req.params.id },
+    data,
+    select: { id: true, name: true, email: true, phone: true, address: true, ratingAvg: true, createdAt: true, notes: true },
+  });
+  res.json({ ...client, email: realEmailOrNull(client.email) });
+});
+
 // Adresse du client, modifiable depuis la fiche client du Dispatch.
 router.patch("/:id/address", async (req, res) => {
   const { address } = req.body;

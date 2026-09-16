@@ -28,6 +28,7 @@ export default function Courses() {
   const [showCreate, setShowCreate] = useState(false);
   const EMPTY_FORM = {
     pickupAddress: "", pickupLat: null, pickupLng: null,
+    destinationCode: "", // "" = autre adresse, sinon YUL / YHU / REM
     destAddress: "", destLat: null, destLng: null,
     fare: "", driverId: "", clientId: "", flightNumber: "", scheduledFor: "",
     clientName: "", clientPhone: "", clientEmail: "", clientAddress: "", clientNotes: "",
@@ -36,6 +37,59 @@ export default function Courses() {
   const [form, setForm] = useState(EMPTY_FORM);
   const [error, setError] = useState("");
   const [credentials, setCredentials] = useState(null); // { clientTempPassword?, driverTempPassword? }
+  const [destinations, setDestinations] = useState([]);
+  const [quoteInfo, setQuoteInfo] = useState(null); // { price, zoneName } pour la destination choisie
+
+  useEffect(() => { api.listDestinations().then(setDestinations).catch(() => setDestinations([])); }, []);
+
+  // Tarif du catalogue : dès qu'une destination prédéfinie et une adresse de départ sont connues,
+  // le montant est proposé (modifiable) et la municipalité reconnue est affichée.
+  useEffect(() => {
+    if (!showCreate || !form.destinationCode || form.pickupAddress.trim().length < 3) { setQuoteInfo(null); return; }
+    let cancelled = false;
+    const t = setTimeout(async () => {
+      try {
+        const q = await api.priceQuote(form.pickupAddress, form.destinationCode);
+        if (cancelled) return;
+        setQuoteInfo(q);
+        if (q.price != null) setForm((f) => ({ ...f, fare: String(q.price) }));
+      } catch {
+        if (!cancelled) setQuoteInfo(null);
+      }
+    }, 400);
+    return () => { cancelled = true; clearTimeout(t); };
+  }, [showCreate, form.destinationCode, form.pickupAddress]);
+
+  // Adresse de prise en charge par défaut = domicile du client choisi (modifiable).
+  const selectClient = async (clientId) => {
+    const client = clients.find((c) => c.id === clientId);
+    const next = { ...form, clientId };
+    if (client?.address && !form.pickupAddress.trim()) {
+      next.pickupAddress = client.address;
+      next.pickupLat = null;
+      next.pickupLng = null;
+      setForm(next);
+      try {
+        const results = await api.geocodeSearch(client.address);
+        if (results?.[0]) setForm((f) => (f.pickupAddress === client.address ? { ...f, pickupLat: results[0].lat, pickupLng: results[0].lng } : f));
+      } catch { /* sans coordonnées, la distance ne sera simplement pas calculée */ }
+      return;
+    }
+    setForm(next);
+  };
+
+  const selectDestination = (code) => {
+    const preset = destinations.find((d) => d.code === code);
+    setForm((f) => ({
+      ...f,
+      destinationCode: code,
+      destAddress: preset ? preset.address : "",
+      destLat: preset?.lat ?? null,
+      destLng: preset?.lng ?? null,
+      fare: preset ? "" : f.fare,
+    }));
+    setQuoteInfo(null);
+  };
 
   const load = async () => {
     const [r, d, c] = await Promise.all([api.listRides(), api.listDrivers(), api.listClients()]);
@@ -68,6 +122,7 @@ export default function Courses() {
         pickupAddress: form.pickupAddress,
         pickupLat: form.pickupLat ?? undefined,
         pickupLng: form.pickupLng ?? undefined,
+        destinationCode: form.destinationCode || undefined,
         destAddress: form.destAddress,
         destLat: form.destLat ?? undefined,
         destLng: form.destLng ?? undefined,
@@ -162,28 +217,58 @@ export default function Courses() {
         <div className="modal-backdrop">
           <div className="modal">
             <div className="row"><h3>Nouvelle course</h3><button onClick={() => setShowCreate(false)}>✕</button></div>
-            <AddressInput
-              label="Adresse de prise en charge"
-              value={form.pickupAddress}
-              onChange={({ address, lat, lng }) => setForm({ ...form, pickupAddress: address, pickupLat: lat, pickupLng: lng })}
-            />
-            <AddressInput
-              label="Adresse de destination"
-              value={form.destAddress}
-              onChange={({ address, lat, lng }) => setForm({ ...form, destAddress: address, destLat: lat, destLng: lng })}
-            />
+            <label style={{ display: "block" }}>Client (optionnel)</label>
+            <select className="input" value={form.clientId} onChange={(e) => selectClient(e.target.value)}>
+              <option value="">Non spécifié</option>
+              {clients.map((c) => <option key={c.id} value={c.id}>{c.name}{c.address ? ` — ${c.address}` : ""}</option>)}
+              <option value="__new__">+ Nouveau client…</option>
+            </select>
+            <div style={{ marginTop: 8 }}>
+              <AddressInput
+                label="Adresse de prise en charge (domicile du client par défaut)"
+                value={form.pickupAddress}
+                onChange={({ address, lat, lng }) => setForm({ ...form, pickupAddress: address, pickupLat: lat, pickupLng: lng })}
+              />
+            </div>
+            <label style={{ display: "block", marginTop: 8 }}>Destination</label>
+            <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 4 }}>
+              {[...destinations.map((d) => ({ code: d.code, label: d.code })), { code: "", label: "Autre adresse" }].map((opt) => (
+                <button
+                  key={opt.code || "other"}
+                  type="button"
+                  className={`btn ${form.destinationCode === opt.code ? "" : "outline"}`}
+                  onClick={() => selectDestination(opt.code)}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+            {form.destinationCode ? (
+              <div style={{ color: "var(--muted)", fontSize: 13, marginTop: 6 }}>
+                {destinations.find((d) => d.code === form.destinationCode)?.label} — {form.destAddress}
+              </div>
+            ) : (
+              <AddressInput
+                label="Adresse de destination"
+                value={form.destAddress}
+                onChange={({ address, lat, lng }) => setForm({ ...form, destAddress: address, destLat: lat, destLng: lng })}
+              />
+            )}
             <label style={{ display: "block", marginTop: 8 }}>Numéro de vol (optionnel)</label>
             <input className="input" value={form.flightNumber} onChange={(e) => setForm({ ...form, flightNumber: e.target.value })} placeholder="ex. AC1234" />
             <label style={{ display: "block", marginTop: 8 }}>Heure de prise en charge du client (optionnel)</label>
             <input className="input" type="datetime-local" value={form.scheduledFor} onChange={(e) => setForm({ ...form, scheduledFor: e.target.value })} />
             <label style={{ display: "block", marginTop: 8 }}>Montant prévu ($)</label>
             <input className="input" value={form.fare} onChange={(e) => setForm({ ...form, fare: e.target.value })} />
-            <label style={{ display: "block", marginTop: 8 }}>Client (optionnel)</label>
-            <select className="input" value={form.clientId} onChange={(e) => setForm({ ...form, clientId: e.target.value })}>
-              <option value="">Non spécifié</option>
-              {clients.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-              <option value="__new__">+ Nouveau client…</option>
-            </select>
+            {form.destinationCode && (
+              <div style={{ fontSize: 12, marginTop: 4, color: quoteInfo?.price != null ? "#3fa796" : "var(--muted)" }}>
+                {quoteInfo?.price != null
+                  ? `Tarif catalogue appliqué : ${quoteInfo.price.toFixed(2)} $ (${quoteInfo.zoneName || form.destinationCode}) — modifiable.`
+                  : form.pickupAddress.trim().length >= 3
+                    ? "Municipalité non reconnue dans la grille (voir Tarifs) — indiquez le montant."
+                    : "Le tarif du catalogue s'affichera dès que l'adresse de prise en charge est saisie."}
+              </div>
+            )}
             {form.clientId === "__new__" && (
               <>
                 <label style={{ display: "block", marginTop: 8 }}>Nom du nouveau client</label>

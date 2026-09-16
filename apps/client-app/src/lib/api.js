@@ -22,6 +22,7 @@ async function request(path, { method = "GET", body } = {}) {
 
 export const api = {
   login: (email, password) => request("/auth/login", { method: "POST", body: { email, password } }),
+  me: () => request("/auth/me"),
   changePassword: (currentPassword, newPassword) => request("/auth/change-password", { method: "POST", body: { currentPassword, newPassword } }),
   registerPushToken: (token) => request("/auth/push-token", { method: "POST", body: { token } }),
   clearPushToken: () => request("/auth/push-token", { method: "DELETE" }),
@@ -36,6 +37,8 @@ export const api = {
   sendMessage: (rideId, text) => request(`/messages/${rideId}`, { method: "POST", body: { text } }),
   callMasked: (rideId) => request(`/rides/${rideId}/call`, { method: "POST" }),
   driverLocation: (rideId) => request(`/rides/${rideId}/driver-location`),
+  destinations: () => request("/destinations"),
+  priceQuote: (pickupAddress, destinationCode) => request("/pricing/quote", { method: "POST", body: { pickupAddress, destinationCode } }),
   rate: (rideId, toUserId, stars, comment) => request(`/ratings/${rideId}`, { method: "POST", body: { toUserId, stars, comment } }),
   listConversations: () => request("/conversations"),
   conversationMessages: (id) => request(`/conversations/${id}/messages`),
