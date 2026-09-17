@@ -144,9 +144,28 @@ router.get("/:rideId", requireRideParty, async (req, res) => {
   res.json(messages);
 });
 
+// Un chauffeur ne peut écrire au client qu'à l'approche de la course : à partir d'une heure avant
+// l'heure de prise en charge, ou dès que la course est en cours. Avant cela, il passe par Taxi
+// Sylvain. Le client, lui, peut écrire quand il veut.
+const DRIVER_MESSAGE_WINDOW_MS = 60 * 60 * 1000;
+
+export function driverMayMessageClient(ride, now = new Date()) {
+  if (["EN_ROUTE", "STARTED", "COMPLETED"].includes(ride.status)) return true;
+  if (!ride.scheduledFor) return true; // course immédiate : pas d'heure programmée
+  return now.getTime() >= new Date(ride.scheduledFor).getTime() - DRIVER_MESSAGE_WINDOW_MS;
+}
+
 router.post("/:rideId", requireRideParty, async (req, res) => {
   const { text } = req.body;
   if (!text || !text.trim()) return res.status(400).json({ error: "Message vide." });
+
+  if (req.user.role === "DRIVER" && !driverMayMessageClient(req.ride)) {
+    const when = new Date(new Date(req.ride.scheduledFor).getTime() - DRIVER_MESSAGE_WINDOW_MS)
+      .toLocaleString("fr-CA", { timeZone: "America/Toronto", dateStyle: "short", timeStyle: "short" });
+    return res.status(403).json({
+      error: `Vous pourrez écrire au client à partir de ${when} (une heure avant la course). D'ici là, passez par Taxi Sylvain.`,
+    });
+  }
 
   const message = await prisma.message.create({
     data: { rideId: req.params.rideId, senderId: req.user.id, text },

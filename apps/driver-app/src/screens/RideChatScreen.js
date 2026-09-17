@@ -3,6 +3,7 @@ import { View, Text, TextInput, TouchableOpacity, ScrollView, StyleSheet } from 
 import { api } from "../lib/api";
 import { getSocket } from "../lib/socket";
 import { playSound } from "../lib/sound";
+import { showAlert } from "../lib/alert";
 
 export default function RideChatScreen({ rideId, onBack, onRead }) {
   const [messages, setMessages] = useState([]);
@@ -27,9 +28,14 @@ export default function RideChatScreen({ rideId, onBack, onRead }) {
 
   const send = async () => {
     if (!draft.trim()) return;
-    await api.sendMessage(rideId, draft);
-    setDraft("");
-    playSound("action");
+    try {
+      await api.sendMessage(rideId, draft);
+      setDraft("");
+      playSound("action");
+    } catch (e) {
+      // Notamment : écrire au client est ouvert seulement à partir d'une heure avant la course.
+      showAlert("Message non envoyé", e.message);
+    }
   };
 
   return (

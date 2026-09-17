@@ -9,6 +9,15 @@ import SwipeButton from "../components/SwipeButton";
 const NEXT_STATUS = { ACCEPTED: "EN_ROUTE", EN_ROUTE: "STARTED", STARTED: "COMPLETED" };
 const LABEL = { ACCEPTED: "En route pour la course", EN_ROUTE: "Démarrer la course", STARTED: "Terminer la course" };
 
+// Écrire au client n'est ouvert qu'à partir d'une heure avant la course (règle appliquée par le
+// serveur) — ici, c'est uniquement pour l'afficher au chauffeur.
+function canMessageClient(ride) {
+  if (!ride) return false;
+  if (["EN_ROUTE", "STARTED", "COMPLETED"].includes(ride.status)) return true;
+  if (!ride.scheduledFor) return true;
+  return Date.now() >= new Date(ride.scheduledFor).getTime() - 60 * 60 * 1000;
+}
+
 function fmtDate(d) {
   return d ? new Date(d).toLocaleDateString("fr-CA") : "—";
 }
@@ -135,7 +144,8 @@ export default function ActiveRideScreen({ rideId, onCompleted, onCancelled, onO
       <View style={styles.rowBetween}>
         <TouchableOpacity style={[styles.outlineBtn, unreadRide ? { borderColor: "#f5a623" } : null]} onPress={() => onOpenChat(ride.id)}>
           <Text style={[styles.outlineBtnText, unreadRide ? { color: "#f5a623", fontWeight: "700" } : null]}>
-            Message{unreadRide ? ` (${unreadRide} nouveau${unreadRide > 1 ? "x" : ""})` : ""}
+            {canMessageClient(ride) ? "Message au client" : "Message (ouvert 1 h avant)"}
+            {unreadRide ? ` (${unreadRide} nouveau${unreadRide > 1 ? "x" : ""})` : ""}
           </Text>
         </TouchableOpacity>
         <TouchableOpacity style={styles.outlineBtn} onPress={callMasked}>
