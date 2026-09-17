@@ -21,4 +21,10 @@ export async function ensureDefaultDestinations() {
     where: { code: "REM", address: OUTDATED_REM_ADDRESS },
     data: { label: "Station REM (boulevard de Rome)", address: "Boulevard de Rome, Brossard, QC J4X 2A4", lat: 45.4564461, lng: -73.4716479 },
   });
+  // Si l’adresse avait déjà été modifiée à la main, le libellé pouvait rester « Bois-Franc » :
+  // on corrige alors le libellé seul, sans toucher à l’adresse saisie par le Dispatch.
+  await prisma.destination.updateMany({
+    where: { code: "REM", label: { contains: "Bois-Franc" } },
+    data: { label: "Station REM (boulevard de Rome)" },
+  });
 }
