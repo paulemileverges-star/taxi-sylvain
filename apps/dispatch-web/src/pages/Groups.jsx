@@ -9,7 +9,7 @@ function conversationTitle(conv, meId) {
   return others.map((p) => p.name).join(", ") || "Groupe";
 }
 
-export default function Groups() {
+export default function Groups({ unread = {}, onRead }) {
   const [conversations, setConversations] = useState([]);
   const [drivers, setDrivers] = useState([]);
   const [clients, setClients] = useState([]);
@@ -33,20 +33,25 @@ export default function Groups() {
     });
   }, []);
 
+  const markRead = (conversationId) => api.markThreadRead(`group:${conversationId}`).then(() => onRead?.()).catch(() => null);
+
   useEffect(() => {
     if (!activeId) return;
-    api.listConversationMessages(activeId).then(setMessages);
+    api.listConversationMessages(activeId).then(setMessages).then(() => markRead(activeId));
   }, [activeId]);
 
   useEffect(() => {
     const socket = getSocket();
     const onGroup = ({ conversationId, message }) => {
-      if (conversationId === activeId) setMessages((prev) => [...prev, message]);
+      if (conversationId === activeId) {
+        setMessages((prev) => (prev.some((x) => x.id === message.id) ? prev : [...prev, message]));
+        if (message.sender.id !== me?.id) markRead(activeId);
+      }
       api.listConversations().then(setConversations);
     };
     socket.on("message:group", onGroup);
     return () => socket.off("message:group", onGroup);
-  }, [activeId]);
+  }, [activeId, me?.id]);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -94,7 +99,10 @@ export default function Groups() {
                 border: "none", borderRadius: 8, color: "var(--text)", cursor: "pointer", marginBottom: 4,
               }}
             >
-              <div>{conversationTitle(c, me?.id)}</div>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, fontWeight: unread[c.id] ? 700 : 400 }}>
+                <span>{conversationTitle(c, me?.id)}</span>
+                {unread[c.id] ? <span className="unread-badge">{unread[c.id]}</span> : null}
+              </div>
               <div style={{ fontSize: 11, color: "#8b99b5" }}>{c.participants.length} participant(s)</div>
             </button>
           ))}

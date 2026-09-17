@@ -15,11 +15,16 @@ import { api, logout as clearSession } from "./src/lib/api";
 import { playSound } from "./src/lib/sound";
 import * as Notifications from "expo-notifications";
 import { registerForPushNotifications, clearPushToken } from "./src/lib/pushNotifications";
+import { requestWebNotificationPermission, notifyWeb } from "./src/lib/webNotify";
+
+const EMPTY_UNREAD = { direct: { total: 0, byDriver: {} }, groups: { total: 0, byConversation: {} }, rides: { total: 0, byRide: {} }, total: 0 };
 
 export default function App() {
   const [user, setUser] = useState(null);
   const [screen, setScreen] = useState("book");
   const [activeRideId, setActiveRideId] = useState(null);
+  const [unread, setUnread] = useState(EMPTY_UNREAD);
+  const refreshUnread = () => api.unreadMessages().then(setUnread).catch(() => null);
 
   useEffect(() => {
     (async () => {
@@ -54,10 +59,20 @@ export default function App() {
     let sock;
     getSocket().then((s) => {
       sock = s;
-      s.on("message:group", ({ message }) => { if (message.sender.id !== user.id) playSound("notify"); });
+      // Son + badge + notification navigateur pour tout message reçu, quel que soit l'écran ouvert
+      s.on("message:group", ({ message }) => {
+        if (message.sender.id === user.id) return;
+        playSound("notify"); notifyWeb(`${message.sender.name} (groupe)`, message.text); refreshUnread();
+      });
+      s.on("message:ride", (m) => {
+        if (m.sender.id === user.id) return;
+        playSound("notify"); notifyWeb(`Message de ${m.sender.name}`, m.text); refreshUnread();
+      });
     });
     registerForPushNotifications();
-    return () => sock?.off("message:group");
+    requestWebNotificationPermission();
+    refreshUnread();
+    return () => { sock?.off("message:group"); sock?.off("message:ride"); };
   }, [user]);
 
   // Permet de rouvrir directement le bon écran quand on tape sur une notification reçue
@@ -108,6 +123,7 @@ export default function App() {
           onOpenNotifications={() => setScreen("notifications")}
           onOpenRides={() => setScreen("rides")}
           onLogout={logout}
+          unread={unread}
         />
       )}
       {screen === "rides" && (
@@ -117,15 +133,15 @@ export default function App() {
         />
       )}
       {screen === "tracking" && activeRideId && (
-        <TrackingScreen rideId={activeRideId} onOpenChat={() => setScreen("chat")} onBack={() => setScreen("book")} />
+        <TrackingScreen rideId={activeRideId} onOpenChat={() => setScreen("chat")} onBack={() => setScreen("book")} unreadRide={unread.rides.byRide[activeRideId] || 0} />
       )}
       {screen === "chat" && activeRideId && (
-        <ChatScreen rideId={activeRideId} onBack={() => setScreen("tracking")} />
+        <ChatScreen rideId={activeRideId} onBack={() => setScreen("tracking")} onRead={refreshUnread} />
       )}
       {screen === "rate" && activeRideId && (
         <RateScreen rideId={activeRideId} onDone={() => { setActiveRideId(null); setScreen("book"); }} />
       )}
-      {screen === "groups" && <GroupsScreen user={user} onBack={() => setScreen("book")} />}
+      {screen === "groups" && <GroupsScreen user={user} onBack={() => setScreen("book")} unread={unread.groups.byConversation} onRead={refreshUnread} />}
       {screen === "changePassword" && <ChangePasswordScreen onBack={() => setScreen("book")} />}
       {screen === "notifications" && (
         <NotificationSettingsScreen

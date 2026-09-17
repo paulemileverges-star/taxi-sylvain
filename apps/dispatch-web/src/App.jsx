@@ -43,6 +43,8 @@ export default function App() {
   const [screen, setScreen] = useState("dashboard");
   const [notifs, setNotifs] = useState([]);
   const [toasts, setToasts] = useState([]);
+  const [unread, setUnread] = useState({ direct: { total: 0, byDriver: {} }, groups: { total: 0, byConversation: {} }, total: 0 });
+  const refreshUnread = () => api.unreadMessages().then(setUnread).catch(() => null);
   const [showChangePassword, setShowChangePassword] = useState(false);
 
   useEffect(() => {
@@ -71,8 +73,15 @@ export default function App() {
     socket.on("ride:created", (ride) => { push({ text: `Nouvelle course créée : ${ride?.pickupAddress || ""} → ${ride?.destAddress || ""}`, status: ride?.status || "REQUESTED" }); playSound("notify"); });
     socket.on("ride:refused", () => playSound("notify"));
     socket.on("report:generated", () => playSound("notify"));
-    socket.on("message:direct", (m) => { if (m.sender.role !== "DISPATCH") playSound("notify"); });
-    socket.on("message:group", ({ message }) => { if (message.sender.id !== user.id) playSound("notify"); });
+    socket.on("message:direct", (m) => {
+      if (m.sender.id === user.id) return;
+      playSound("notify"); desktopNotify(`${m.sender.name} : ${m.text}`); refreshUnread();
+    });
+    socket.on("message:group", ({ message }) => {
+      if (message.sender.id === user.id) return;
+      playSound("notify"); desktopNotify(`${message.sender.name} (groupe) : ${message.text}`); refreshUnread();
+    });
+    refreshUnread();
     return () => {
       socket.off("ride:notification");
       socket.off("ride:created");
@@ -119,6 +128,8 @@ export default function App() {
               onClick={() => setScreen(n.key)}
             >
               {n.label}
+              {n.key === "messages" && unread.direct.total > 0 && <span className="nav-badge">{unread.direct.total}</span>}
+              {n.key === "groups" && unread.groups.total > 0 && <span className="nav-badge">{unread.groups.total}</span>}
             </button>
           ))}
         </div>
@@ -138,8 +149,8 @@ export default function App() {
         {screen === "drivers" && <Drivers />}
         {screen === "clients" && <Clients />}
         {screen === "reports" && <Reports />}
-        {screen === "messages" && <Messages />}
-        {screen === "groups" && <Groups />}
+        {screen === "messages" && <Messages unread={unread.direct.byDriver} onRead={refreshUnread} />}
+        {screen === "groups" && <Groups unread={unread.groups.byConversation} onRead={refreshUnread} />}
         {screen === "admins" && user.role === "DISPATCH" && <Admins />}
       </div>
       {showChangePassword && <ChangePasswordModal onClose={() => setShowChangePassword(false)} />}

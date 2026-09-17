@@ -28,7 +28,7 @@ function Field({ label, value }) {
   );
 }
 
-export default function ActiveRideScreen({ rideId, onCompleted, onCancelled, onOpenChat, onOpenMessages, onBack }) {
+export default function ActiveRideScreen({ rideId, onCompleted, onCancelled, onOpenChat, onOpenMessages, onBack, unreadRide = 0 }) {
   const [ride, setRide] = useState(null);
 
   const load = async () => {
@@ -147,8 +147,10 @@ export default function ActiveRideScreen({ rideId, onCompleted, onCancelled, onO
         <TouchableOpacity style={styles.outlineBtn} onPress={openGoogleMaps}><Text style={styles.outlineBtnText}>Google Maps</Text></TouchableOpacity>
       </View>
       <View style={styles.rowBetween}>
-        <TouchableOpacity style={styles.outlineBtn} onPress={() => onOpenChat(ride.id)}>
-          <Text style={styles.outlineBtnText}>Message</Text>
+        <TouchableOpacity style={[styles.outlineBtn, unreadRide ? { borderColor: "#f5a623" } : null]} onPress={() => onOpenChat(ride.id)}>
+          <Text style={[styles.outlineBtnText, unreadRide ? { color: "#f5a623", fontWeight: "700" } : null]}>
+            Message{unreadRide ? ` (${unreadRide} nouveau${unreadRide > 1 ? "x" : ""})` : ""}
+          </Text>
         </TouchableOpacity>
         <TouchableOpacity style={styles.outlineBtn} onPress={callMasked}>
           <Text style={styles.outlineBtnText}>Appeler (masqué)</Text>

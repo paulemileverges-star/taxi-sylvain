@@ -1,23 +1,32 @@
 import { Linking, Platform } from "react-native";
 
-// Ouvre Waze ou Google Maps vers une adresse — utilise les coordonnées GPS quand elles sont
-// connues (plus fiable qu'une adresse texte), avec repli sur l'app native puis sur le lien web
-// si l'app n'est pas installée. Sur Android, l'ouverture d'apps externes nécessite que le
-// schéma/le lien soit déclaré dans <queries> (app.json) depuis Android 11 — voir app.json.
-export async function openWaze({ address, lat, lng }) {
-  const hasCoords = typeof lat === "number" && typeof lng === "number";
-  const nativeUrl = hasCoords ? `waze://?ll=${lat},${lng}&navigate=yes` : `waze://?q=${encodeURIComponent(address)}&navigate=yes`;
-  const webUrl = hasCoords
-    ? `https://waze.com/ul?ll=${lat},${lng}&navigate=yes`
-    : `https://waze.com/ul?q=${encodeURIComponent(address)}&navigate=yes`;
-  return openWithFallback(nativeUrl, webUrl);
+// Ouvre Waze ou Google Maps vers l'adresse de la course — l'adresse TEXTE, telle qu'affichée au
+// chauffeur, que Waze et Google Maps savent très bien retrouver. Les coordonnées enregistrées avec
+// la course ne servent qu'au calcul de distance et à la carte : elles peuvent être approximatives
+// (adresse tapée à la main, domicile du client géocodé automatiquement) et envoyaient parfois le
+// chauffeur au mauvais endroit. Elles ne sont utilisées qu'en dernier recours, si l'adresse manque.
+// Sur Android, l'ouverture d'apps externes nécessite que le schéma/le lien soit déclaré dans
+// <queries> (app.json) depuis Android 11 — voir app.json.
+function target({ address, lat, lng }) {
+  const text = String(address || "").trim();
+  if (text) return { kind: "text", value: text };
+  if (typeof lat === "number" && typeof lng === "number") return { kind: "coords", value: `${lat},${lng}` };
+  return null;
 }
 
-export async function openGoogleMaps({ address, lat, lng }) {
-  const hasCoords = typeof lat === "number" && typeof lng === "number";
-  const destination = hasCoords ? `${lat},${lng}` : encodeURIComponent(address);
+export async function openWaze(dest) {
+  const t = target(dest);
+  if (!t) return false;
+  const query = t.kind === "text" ? `q=${encodeURIComponent(t.value)}` : `ll=${t.value}`;
+  return openWithFallback(`waze://?${query}&navigate=yes`, `https://waze.com/ul?${query}&navigate=yes`);
+}
+
+export async function openGoogleMaps(dest) {
+  const t = target(dest);
+  if (!t) return false;
+  const destination = t.kind === "text" ? encodeURIComponent(t.value) : t.value;
   const nativeUrl = Platform.OS === "ios" ? `comgooglemaps://?daddr=${destination}&directionsmode=driving` : `google.navigation:q=${destination}`;
-  const webUrl = `https://www.google.com/maps/dir/?api=1&destination=${destination}`;
+  const webUrl = `https://www.google.com/maps/dir/?api=1&destination=${destination}&travelmode=driving`;
   return openWithFallback(nativeUrl, webUrl);
 }
 

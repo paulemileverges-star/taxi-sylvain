@@ -29,7 +29,14 @@ function Field({ label, value }) {
   );
 }
 
-export default function HomeScreen({ user, onOpenRide, onOpenEarnings, onOpenMessages, onOpenReports, onOpenGroups, onOpenChangePassword, onOpenNotifications, onOpenRides, onLogout, hasNewReport }) {
+function Badge({ count }) {
+  if (!count) return null;
+  return (
+    <View style={styles.badge}><Text style={styles.badgeText}>{count > 99 ? "99+" : count}</Text></View>
+  );
+}
+
+export default function HomeScreen({ user, onOpenRide, onOpenEarnings, onOpenMessages, onOpenReports, onOpenGroups, onOpenChangePassword, onOpenNotifications, onOpenRides, onLogout, hasNewReport, unread }) {
   const [rides, setRides] = useState([]);
   const [schedule, setSchedule] = useState([]);
   const [refreshing, setRefreshing] = useState(false);
@@ -94,9 +101,15 @@ export default function HomeScreen({ user, onOpenRide, onOpenEarnings, onOpenMes
       </View>
       <View style={[styles.headerRow, { marginBottom: 16 }]}>
         <View style={{ flexDirection: "row", gap: 16, flexWrap: "wrap" }}>
-          <TouchableOpacity onPress={onOpenRides}><Text style={styles.link}>Courses</Text></TouchableOpacity>
-          <TouchableOpacity onPress={onOpenMessages}><Text style={styles.link}>Messagerie</Text></TouchableOpacity>
-          <TouchableOpacity onPress={onOpenGroups}><Text style={styles.link}>Groupes</Text></TouchableOpacity>
+          <TouchableOpacity onPress={onOpenRides} style={styles.linkRow}>
+            <Text style={styles.link}>Courses</Text><Badge count={unread?.rides?.total} />
+          </TouchableOpacity>
+          <TouchableOpacity onPress={onOpenMessages} style={styles.linkRow}>
+            <Text style={[styles.link, unread?.direct?.total ? styles.linkUnread : null]}>Messagerie</Text><Badge count={unread?.direct?.total} />
+          </TouchableOpacity>
+          <TouchableOpacity onPress={onOpenGroups} style={styles.linkRow}>
+            <Text style={[styles.link, unread?.groups?.total ? styles.linkUnread : null]}>Groupes</Text><Badge count={unread?.groups?.total} />
+          </TouchableOpacity>
           <TouchableOpacity onPress={onOpenChangePassword}><Text style={styles.link}>Mot de passe</Text></TouchableOpacity>
           <TouchableOpacity onPress={onOpenNotifications}><Text style={styles.link}>Notifications</Text></TouchableOpacity>
           <TouchableOpacity onPress={onOpenReports}>
@@ -170,6 +183,10 @@ const styles = StyleSheet.create({
   headerRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 12 },
   title: { color: "#edeff3", fontSize: 24, fontWeight: "700" },
   link: { color: "#f5a623" },
+  linkRow: { flexDirection: "row", alignItems: "center", gap: 4 },
+  linkUnread: { fontWeight: "700" },
+  badge: { backgroundColor: "#e85d4c", borderRadius: 999, minWidth: 18, height: 18, paddingHorizontal: 5, alignItems: "center", justifyContent: "center" },
+  badgeText: { color: "#fff", fontSize: 11, fontWeight: "700" },
   logoutLink: { color: "#e85d4c", fontWeight: "600" },
   fieldRow: { flexDirection: "row", justifyContent: "space-between", marginBottom: 4 },
   fieldLabel: { color: "#8b99b5", fontSize: 12 },

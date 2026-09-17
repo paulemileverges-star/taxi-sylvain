@@ -27,7 +27,12 @@ function DateTimeFields({ date, time, onDate, onTime }) {
   );
 }
 
-export default function BookScreen({ user, onBooked, onOpenGroups, onOpenChangePassword, onOpenNotifications, onOpenRides, onLogout }) {
+function Badge({ count }) {
+  if (!count) return null;
+  return <View style={styles.badge}><Text style={styles.badgeText}>{count > 99 ? "99+" : count}</Text></View>;
+}
+
+export default function BookScreen({ user, onBooked, onOpenGroups, onOpenChangePassword, onOpenNotifications, onOpenRides, onLogout, unread }) {
   const homeAddress = (user?.address || "").trim();
   const [useHome, setUseHome] = useState(Boolean(homeAddress));
   const [pickup, setPickup] = useState({ address: homeAddress, lat: null, lng: null });
@@ -111,8 +116,12 @@ export default function BookScreen({ user, onBooked, onOpenGroups, onOpenChangeP
         <TouchableOpacity onPress={onLogout}><Text style={styles.logoutLink}>Se déconnecter</Text></TouchableOpacity>
       </View>
       <View style={{ flexDirection: "row", gap: 16, marginBottom: 16, flexWrap: "wrap" }}>
-        <TouchableOpacity onPress={onOpenRides}><Text style={styles.link}>Courses</Text></TouchableOpacity>
-        <TouchableOpacity onPress={onOpenGroups}><Text style={styles.link}>Groupes</Text></TouchableOpacity>
+        <TouchableOpacity onPress={onOpenRides} style={styles.linkRow}>
+          <Text style={[styles.link, unread?.rides?.total ? styles.linkUnread : null]}>Courses</Text><Badge count={unread?.rides?.total} />
+        </TouchableOpacity>
+        <TouchableOpacity onPress={onOpenGroups} style={styles.linkRow}>
+          <Text style={[styles.link, unread?.groups?.total ? styles.linkUnread : null]}>Groupes</Text><Badge count={unread?.groups?.total} />
+        </TouchableOpacity>
         <TouchableOpacity onPress={onOpenChangePassword}><Text style={styles.link}>Mot de passe</Text></TouchableOpacity>
         <TouchableOpacity onPress={onOpenNotifications}><Text style={styles.link}>Notifications</Text></TouchableOpacity>
       </View>
@@ -183,6 +192,10 @@ const styles = StyleSheet.create({
   title: { color: "#edeff3", fontSize: 22, fontWeight: "700" },
   logoutLink: { color: "#e85d4c", fontWeight: "600" },
   link: { color: "#f5a623" },
+  linkRow: { flexDirection: "row", alignItems: "center", gap: 4 },
+  linkUnread: { fontWeight: "700" },
+  badge: { backgroundColor: "#e85d4c", borderRadius: 999, minWidth: 18, height: 18, paddingHorizontal: 5, alignItems: "center", justifyContent: "center" },
+  badgeText: { color: "#fff", fontSize: 11, fontWeight: "700" },
   subtitle: { color: "#edeff3", fontSize: 18, fontWeight: "700", marginBottom: 12 },
   label: { color: "#8b99b5", fontSize: 12, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 6, marginTop: 4 },
   chips: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginBottom: 8 },

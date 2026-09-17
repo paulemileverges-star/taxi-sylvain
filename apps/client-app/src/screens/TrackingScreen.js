@@ -35,7 +35,7 @@ function Field({ label, value }) {
   );
 }
 
-export default function TrackingScreen({ rideId, onOpenChat, onBack }) {
+export default function TrackingScreen({ rideId, onOpenChat, onBack, unreadRide = 0 }) {
   const [ride, setRide] = useState(null);
   const [driverPos, setDriverPos] = useState(null);
 
@@ -119,8 +119,10 @@ export default function TrackingScreen({ rideId, onOpenChat, onBack }) {
             <Image source={{ uri: assetUrl(ride.driver.carPhotoUrl) }} style={styles.carPhoto} />
           )}
           <View style={styles.rowBetween}>
-            <TouchableOpacity style={styles.callBtn} onPress={() => onOpenChat(rideId)}>
-              <Text style={styles.callBtnText}>Message au chauffeur</Text>
+            <TouchableOpacity style={[styles.callBtn, unreadRide ? { borderColor: "#f5a623" } : null]} onPress={() => onOpenChat(rideId)}>
+              <Text style={[styles.callBtnText, unreadRide ? { color: "#f5a623", fontWeight: "700" } : null]}>
+                Message au chauffeur{unreadRide ? ` (${unreadRide} nouveau${unreadRide > 1 ? "x" : ""})` : ""}
+              </Text>
             </TouchableOpacity>
           </View>
         </View>

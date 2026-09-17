@@ -18,6 +18,10 @@ import { logout as clearSession } from "./src/lib/api";
 import { playSound } from "./src/lib/sound";
 import * as Notifications from "expo-notifications";
 import { registerForPushNotifications, clearPushToken } from "./src/lib/pushNotifications";
+import { requestWebNotificationPermission, notifyWeb } from "./src/lib/webNotify";
+import { api } from "./src/lib/api";
+
+const EMPTY_UNREAD = { direct: { total: 0, byDriver: {} }, groups: { total: 0, byConversation: {} }, rides: { total: 0, byRide: {} }, total: 0 };
 
 export default function App() {
   const [user, setUser] = useState(null);
@@ -25,6 +29,11 @@ export default function App() {
   const [activeRideId, setActiveRideId] = useState(null);
   const [newReport, setNewReport] = useState(false);
   const [messageRideContext, setMessageRideContext] = useState(null);
+  const [unread, setUnread] = useState(EMPTY_UNREAD);
+
+  // Compteurs de messages non lus (badges des menus) — rafraîchis à la connexion, à chaque message
+  // reçu et après lecture d'un fil.
+  const refreshUnread = () => api.unreadMessages().then(setUnread).catch(() => null);
 
   useEffect(() => {
     (async () => {
@@ -42,14 +51,30 @@ export default function App() {
       s.on("ride:broadcast", () => playSound("alert"));
       s.on("ride:assigned", (ride) => { playSound("alert"); setActiveRideId(ride.id); setScreen("active"); });
       s.on("report:ready", () => { setNewReport(true); playSound("notify"); });
-      s.on("message:group", ({ message }) => { if (message.sender.id !== user.id) playSound("notify"); });
+      // Son + badge + notification navigateur pour tout message reçu, quel que soit l'écran ouvert
+      s.on("message:group", ({ message }) => {
+        if (message.sender.id === user.id) return;
+        playSound("notify"); notifyWeb(`${message.sender.name} (groupe)`, message.text); refreshUnread();
+      });
+      s.on("message:direct", (m) => {
+        if (m.driverId !== user.id || m.sender.id === user.id) return;
+        playSound("notify"); notifyWeb("Message de Taxi Sylvain", m.text); refreshUnread();
+      });
+      s.on("message:ride", (m) => {
+        if (m.sender.id === user.id) return;
+        playSound("notify"); notifyWeb(`Message de ${m.sender.name}`, m.text); refreshUnread();
+      });
     });
     registerForPushNotifications();
+    requestWebNotificationPermission();
+    refreshUnread();
     return () => {
       sock?.off("ride:broadcast");
       sock?.off("ride:assigned");
       sock?.off("report:ready");
       sock?.off("message:group");
+      sock?.off("message:direct");
+      sock?.off("message:ride");
     };
   }, [user]);
 
@@ -104,6 +129,7 @@ export default function App() {
           onOpenRides={() => setScreen("rides")}
           onLogout={logout}
           hasNewReport={newReport}
+          unread={unread}
         />
       )}
       {screen === "rides" && (
@@ -120,13 +146,14 @@ export default function App() {
           onOpenChat={() => setScreen("rideChat")}
           onOpenMessages={(ride) => { setMessageRideContext(ride || null); setScreen("messages"); }}
           onBack={() => setScreen("home")}
+          unreadRide={unread.rides.byRide[activeRideId] || 0}
         />
       )}
       {screen === "rating" && activeRideId && (
         <RatingScreen rideId={activeRideId} onDone={() => { setActiveRideId(null); setScreen("home"); }} />
       )}
       {screen === "rideChat" && activeRideId && (
-        <RideChatScreen rideId={activeRideId} onBack={() => setScreen("active")} />
+        <RideChatScreen rideId={activeRideId} onBack={() => setScreen("active")} onRead={refreshUnread} />
       )}
       {screen === "earnings" && <EarningsScreen onBack={() => setScreen("home")} />}
       {screen === "messages" && (
@@ -134,10 +161,11 @@ export default function App() {
           user={user}
           onBack={() => setScreen(messageRideContext ? "active" : "home")}
           rideContext={messageRideContext}
+          onRead={refreshUnread}
         />
       )}
       {screen === "reports" && <ReportsScreen onBack={() => setScreen("home")} />}
-      {screen === "groups" && <GroupsScreen user={user} onBack={() => setScreen("home")} />}
+      {screen === "groups" && <GroupsScreen user={user} onBack={() => setScreen("home")} unread={unread.groups.byConversation} onRead={refreshUnread} />}
       {screen === "changePassword" && <ChangePasswordScreen onBack={() => setScreen("home")} />}
       {screen === "notifications" && (
         <NotificationSettingsScreen

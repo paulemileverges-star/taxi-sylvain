@@ -59,6 +59,7 @@ model User {
   // (ex. ["courses","clients"]). Sans effet pour les autres rôles — le Dispatch a toujours
   // accès à tout, un ADMIN uniquement à ce qui est listé ici (besoin #20).
   permissions String[] @default([])
+  readMarkers ReadMarker[]
 
   ridesAsClient   Ride[]         @relation("ClientRides")
   ridesAsDriver   Ride[]         @relation("DriverRides")
@@ -133,6 +134,19 @@ model Rating {
   stars      Int
   comment    String?
   createdAt  DateTime @default(now())
+}
+
+// Dernière lecture d'un fil de discussion par un utilisateur — sert à compter les messages non lus
+// (badges « Messagerie (2) », « Groupes (1) »). threadKey : direct:<driverId>, group:<conversationId>,
+// ride:<rideId>.
+model ReadMarker {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  threadKey String
+  readAt    DateTime @default(now())
+
+  @@unique([userId, threadKey])
 }
 
 // Destinations prédéfinies (YUL, YHU, REM...) avec tarif du catalogue — proposées au Dispatch et

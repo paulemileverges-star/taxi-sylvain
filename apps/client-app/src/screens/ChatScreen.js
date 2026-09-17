@@ -4,21 +4,22 @@ import { api } from "../lib/api";
 import { getSocket } from "../lib/socket";
 import { playSound } from "../lib/sound";
 
-export default function ChatScreen({ rideId, onBack }) {
+export default function ChatScreen({ rideId, onBack, onRead }) {
   const [messages, setMessages] = useState([]);
   const [draft, setDraft] = useState("");
   const scrollRef = useRef(null);
 
   useEffect(() => {
-    api.rideMessages(rideId).then(setMessages);
+    const markRead = () => api.markThreadRead(`ride:${rideId}`).then(() => onRead?.()).catch(() => null);
+    api.rideMessages(rideId).then(setMessages).then(markRead);
     let sock;
     getSocket().then((s) => {
       sock = s;
       s.emit("ride:watch", rideId);
       s.on("message:new", (m) => {
         if (m.rideId !== rideId) return;
-        setMessages((prev) => [...prev, m]);
-        if (m.sender.role !== "CLIENT") playSound("notify");
+        setMessages((prev) => (prev.some((x) => x.id === m.id) ? prev : [...prev, m]));
+        if (m.sender.role !== "CLIENT") markRead();
       });
     });
     return () => sock?.off("message:new");

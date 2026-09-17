@@ -4,20 +4,24 @@ import { api } from "../lib/api";
 import { getSocket } from "../lib/socket";
 import { playSound } from "../lib/sound";
 
-export default function MessagesScreen({ user, onBack, rideContext }) {
+export default function MessagesScreen({ user, onBack, rideContext, onRead }) {
   const [messages, setMessages] = useState([]);
   const [draft, setDraft] = useState("");
   const scrollRef = useRef(null);
 
+  // Fil ouvert = lu : on le signale au serveur à l'ouverture et à chaque message reçu (le badge
+  // du menu se met à jour via onRead).
+  const markRead = () => api.markThreadRead(`direct:${user.id}`).then(() => onRead?.()).catch(() => null);
+
   useEffect(() => {
-    api.dispatchMessages(user.id).then(setMessages);
+    api.dispatchMessages(user.id).then(setMessages).then(markRead);
     let sock;
     getSocket().then((s) => {
       sock = s;
       s.on("message:direct", (m) => {
         if (m.driverId !== user.id) return;
-        setMessages((prev) => [...prev, m]);
-        if (m.sender.role !== "DRIVER") playSound("notify");
+        setMessages((prev) => (prev.some((x) => x.id === m.id) ? prev : [...prev, m]));
+        if (m.sender.role !== "DRIVER") markRead();
       });
     });
     return () => sock?.off("message:direct");

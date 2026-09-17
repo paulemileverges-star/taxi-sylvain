@@ -10,7 +10,7 @@ function conversationTitle(conv, meId) {
   return others.map((p) => p.name).join(", ") || "Groupe";
 }
 
-export default function GroupsScreen({ user, onBack }) {
+export default function GroupsScreen({ user, onBack, unread = {}, onRead }) {
   const [conversations, setConversations] = useState([]);
   const [active, setActive] = useState(null);
   const [messages, setMessages] = useState([]);
@@ -23,14 +23,15 @@ export default function GroupsScreen({ user, onBack }) {
 
   useEffect(() => {
     if (!active) return;
-    api.conversationMessages(active.id).then(setMessages);
+    const markRead = () => api.markThreadRead(`group:${active.id}`).then(() => onRead?.()).catch(() => null);
+    api.conversationMessages(active.id).then(setMessages).then(markRead);
     let sock;
     getSocket().then((s) => {
       sock = s;
       s.on("message:group", ({ conversationId, message }) => {
         if (conversationId !== active.id) return;
-        setMessages((prev) => [...prev, message]);
-        if (message.sender.id !== user.id) playSound("notify");
+        setMessages((prev) => (prev.some((x) => x.id === message.id) ? prev : [...prev, message]));
+        if (message.sender.id !== user.id) markRead();
       });
     });
     return () => sock?.off("message:group");
@@ -87,9 +88,12 @@ export default function GroupsScreen({ user, onBack }) {
         data={conversations}
         keyExtractor={(c) => c.id}
         renderItem={({ item }) => (
-          <TouchableOpacity style={styles.groupCard} onPress={() => setActive(item)}>
-            <Text style={styles.groupTitle}>{conversationTitle(item, user.id)}</Text>
-            <Text style={styles.groupSub}>{item.participants.length} participant(s)</Text>
+          <TouchableOpacity style={[styles.groupCard, unread[item.id] ? styles.groupCardUnread : null]} onPress={() => setActive(item)}>
+            <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
+              <Text style={styles.groupTitle}>{conversationTitle(item, user.id)}</Text>
+              {unread[item.id] ? <View style={styles.badge}><Text style={styles.badgeText}>{unread[item.id]}</Text></View> : null}
+            </View>
+            <Text style={styles.groupSub}>{item.participants.length} participant(s){unread[item.id] ? ` · ${unread[item.id]} nouveau${unread[item.id] > 1 ? "x" : ""} message${unread[item.id] > 1 ? "s" : ""}` : ""}</Text>
           </TouchableOpacity>
         )}
         ListEmptyComponent={<Text style={{ color: "#8b99b5" }}>Aucun groupe pour le moment.</Text>}
@@ -103,6 +107,9 @@ const styles = StyleSheet.create({
   link: { color: "#f5a623" },
   title: { color: "#edeff3", fontSize: 18, fontWeight: "700" },
   groupCard: { backgroundColor: "#16233a", borderRadius: 12, padding: 14, marginBottom: 8, borderWidth: 1, borderColor: "#28395a" },
+  groupCardUnread: { borderColor: "#f5a623" },
+  badge: { backgroundColor: "#e85d4c", borderRadius: 999, minWidth: 20, height: 20, paddingHorizontal: 6, alignItems: "center", justifyContent: "center" },
+  badgeText: { color: "#fff", fontSize: 11, fontWeight: "700" },
   groupTitle: { color: "#edeff3", fontWeight: "700" },
   groupSub: { color: "#8b99b5", fontSize: 12, marginTop: 4 },
   senderName: { color: "#8b99b5", fontSize: 11, marginBottom: 2 },

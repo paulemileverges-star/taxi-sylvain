@@ -4,7 +4,7 @@ import { getSocket } from "../lib/socket.js";
 import { playSound } from "../lib/sound.js";
 import RideEditModal from "../components/RideEditModal.jsx";
 
-export default function Messages() {
+export default function Messages({ unread = {}, onRead }) {
   const [drivers, setDrivers] = useState([]);
   const [activeDriverId, setActiveDriverId] = useState(null);
   const [messages, setMessages] = useState([]);
@@ -15,19 +15,25 @@ export default function Messages() {
   useEffect(() => {
     api.listDrivers().then((d) => {
       setDrivers(d);
-      if (d.length > 0) setActiveDriverId(d[0].id);
+      // Ouvre d'abord le chauffeur qui a des messages non lus, sinon le premier.
+      const firstUnread = d.find((x) => unread[x.id]);
+      if (d.length > 0) setActiveDriverId((firstUnread || d[0]).id);
     });
   }, []);
 
+  const markRead = (driverId) => api.markThreadRead(`direct:${driverId}`).then(() => onRead?.()).catch(() => null);
+
   useEffect(() => {
     if (!activeDriverId) return;
-    api.listDirectMessages(activeDriverId).then(setMessages);
+    api.listDirectMessages(activeDriverId).then(setMessages).then(() => markRead(activeDriverId));
   }, [activeDriverId]);
 
   useEffect(() => {
     const socket = getSocket();
     const onDirect = (msg) => {
-      if (msg.driverId === activeDriverId) setMessages((prev) => [...prev, msg]);
+      if (msg.driverId !== activeDriverId) return;
+      setMessages((prev) => (prev.some((x) => x.id === msg.id) ? prev : [...prev, msg]));
+      if (msg.sender.role === "DRIVER") markRead(activeDriverId);
     };
     socket.on("message:direct", onDirect);
     return () => socket.off("message:direct", onDirect);
@@ -56,12 +62,14 @@ export default function Messages() {
               key={d.id}
               onClick={() => setActiveDriverId(d.id)}
               style={{
-                display: "block", width: "100%", textAlign: "left", padding: "10px 12px",
+                display: "flex", alignItems: "center", justifyContent: "space-between", width: "100%", textAlign: "left", padding: "10px 12px",
                 background: activeDriverId === d.id ? "rgba(245,166,35,0.1)" : "transparent",
                 border: "none", borderRadius: 8, color: "var(--text)", cursor: "pointer", marginBottom: 4,
+                fontWeight: unread[d.id] ? 700 : 400,
               }}
             >
-              {d.name}
+              <span>{d.name}</span>
+              {unread[d.id] ? <span className="unread-badge">{unread[d.id]}</span> : null}
             </button>
           ))}
           {drivers.length === 0 && <div style={{ color: "#8b99b5", fontSize: 13, padding: 8 }}>Aucun chauffeur.</div>}
