@@ -1,8 +1,10 @@
 import React, { useEffect, useRef, useState } from "react";
 import { api } from "../lib/api.js";
 
-// Champ d'adresse avec autocomplétion (Nominatim/OpenStreetMap, via le proxy backend) —
-// saisie debouncée à 350ms pour rester raisonnable vis-à-vis du service gratuit.
+// Champ d'adresse avec autocomplétion. Deux sources, dans cet ordre : d'abord les adresses que la
+// base connaît déjà (domiciles des clients, départs et destinations de courses passées), puis les
+// suggestions cartographiques (Nominatim/OpenStreetMap, via le proxy backend). Saisie debouncée à
+// 350 ms pour rester raisonnable vis-à-vis du service gratuit.
 export default function AddressInput({ label, value, onChange, placeholder }) {
   const [suggestions, setSuggestions] = useState([]);
   const [open, setOpen] = useState(false);
@@ -29,9 +31,26 @@ export default function AddressInput({ label, value, onChange, placeholder }) {
     debounceRef.current = setTimeout(async () => {
       setLoading(true);
       try {
-        const results = await api.geocodeSearch(text);
-        setSuggestions(results);
-        setOpen(results.length > 0);
+        const [known, geocoded] = await Promise.all([
+          api.suggest("address", text).catch(() => []),
+          api.geocodeSearch(text).catch(() => []),
+        ]);
+        const seen = new Set();
+        const merged = [];
+        for (const k of known) {
+          const key = k.value.trim().toLowerCase();
+          if (seen.has(key)) continue;
+          seen.add(key);
+          merged.push({ label: k.value, lat: k.data?.lat ?? null, lng: k.data?.lng ?? null, known: true });
+        }
+        for (const g of geocoded) {
+          const key = g.label.trim().toLowerCase();
+          if (seen.has(key)) continue;
+          seen.add(key);
+          merged.push({ ...g, known: false });
+        }
+        setSuggestions(merged);
+        setOpen(merged.length > 0);
       } catch {
         setSuggestions([]);
       } finally {
@@ -74,6 +93,7 @@ export default function AddressInput({ label, value, onChange, placeholder }) {
               onMouseDown={(e) => e.preventDefault()}
             >
               {s.label}
+              {s.known && <span style={{ color: "var(--amber)", fontSize: 11, marginLeft: 6 }}>déjà utilisée</span>}
             </div>
           ))}
         </div>

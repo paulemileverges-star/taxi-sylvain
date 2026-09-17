@@ -4,27 +4,38 @@ import * as TaskManager from "expo-task-manager";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { getSocket } from "./socket";
 
-// Diffuse la position GPS du chauffeur pendant qu'il est en route pour prendre en charge le
-// client ou qu'il l'amène à destination (statuts EN_ROUTE / STARTED), pour que le Dispatch (et
-// le client, sur sa propre course) puissent le suivre en direct sur la carte.
+// Diffuse la position GPS du chauffeur pendant qu'il est en route pour prendre en charge le client
+// ou qu'il l'amène à destination (statuts EN_ROUTE / STARTED), pour que le Dispatch et le client
+// puissent le suivre en direct sur la carte.
 //
-// Sur Android/iOS, le suivi continue quand l'app passe en arrière-plan — indispensable puisque le
-// chauffeur navigue avec Waze ou Google Maps au premier plan : une tâche de fond (expo-task-
-// manager) reçoit les positions et une notification persistante Android maintient le service
-// actif. Sur le web, on retombe sur un simple suivi au premier plan.
+// Le contexte de la course est gardé en mémoire (`context`) ET dans AsyncStorage : la mémoire sert
+// au suivi normal, le stockage sert à la tâche de fond native qui s'exécute dans un autre contexte
+// JavaScript. Attention : `startTrackingLocation` ne doit jamais appeler `stopTrackingLocation`,
+// qui efface ce contexte — c'était le bug qui empêchait toute position de partir sur le web.
 const TASK = "taxi-sylvain-location";
 const CONTEXT_KEY = "ts_tracking_context";
 
+let context = null; // { rideId, status }
 let webWatcher = null;
-let trackedKey = null;
+let started = false;
+
+async function currentContext() {
+  if (context) return context;
+  const raw = await AsyncStorage.getItem(CONTEXT_KEY);
+  return raw ? JSON.parse(raw) : null;
+}
 
 async function emitPosition(coords) {
-  const raw = await AsyncStorage.getItem(CONTEXT_KEY);
-  if (!raw) return;
-  const { rideId, status } = JSON.parse(raw);
+  const ctx = await currentContext();
+  if (!ctx || !coords) return;
   try {
     const sock = await getSocket();
-    sock.emit("driver:location", { rideId, status, lat: coords.latitude, lng: coords.longitude });
+    sock.emit("driver:location", {
+      rideId: ctx.rideId,
+      status: ctx.status,
+      lat: coords.latitude,
+      lng: coords.longitude,
+    });
   } catch {
     // Pas de réseau ou socket pas encore prêt — la prochaine position réessaiera.
   }
@@ -33,27 +44,32 @@ async function emitPosition(coords) {
 if (Platform.OS !== "web") {
   TaskManager.defineTask(TASK, async ({ data, error }) => {
     if (error || !data?.locations?.length) return;
-    const last = data.locations[data.locations.length - 1];
-    await emitPosition(last.coords);
+    await emitPosition(data.locations[data.locations.length - 1].coords);
   });
 }
 
+// Envoie une position tout de suite, sans attendre le premier relevé du suivi continu.
+function sendCurrentPosition() {
+  Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High })
+    .then((loc) => emitPosition(loc.coords))
+    .catch(() => null);
+}
+
 export async function startTrackingLocation(rideId, rideStatus) {
-  const key = `${rideId}:${rideStatus}`;
-  await AsyncStorage.setItem(CONTEXT_KEY, JSON.stringify({ rideId, status: rideStatus }));
-  if (trackedKey === key) return true;
+  context = { rideId, status: rideStatus };
+  await AsyncStorage.setItem(CONTEXT_KEY, JSON.stringify(context));
 
   const { status: foreground } = await Location.requestForegroundPermissionsAsync();
   if (foreground !== "granted") return false;
 
+  if (started) {
+    sendCurrentPosition(); // changement d'étape : on repart avec une position fraîche
+    return true;
+  }
+
   if (Platform.OS === "web") {
-    await stopTrackingLocation();
-    trackedKey = key;
-    // Première position tout de suite (sans attendre le premier « tick » du suivi) pour que le
-    // chauffeur apparaisse sur la carte dès qu'il glisse « En route ».
-    Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High })
-      .then((loc) => emitPosition(loc.coords))
-      .catch(() => null);
+    started = true;
+    sendCurrentPosition();
     webWatcher = await Location.watchPositionAsync(
       { accuracy: Location.Accuracy.High, timeInterval: 4000, distanceInterval: 10 },
       (loc) => emitPosition(loc.coords)
@@ -62,16 +78,16 @@ export async function startTrackingLocation(rideId, rideStatus) {
     return true;
   }
 
-  // La permission "en arrière-plan" est facultative : sans elle, le suivi s'arrête quand l'app
+  // La permission « en arrière-plan » est facultative : sans elle, le suivi s'arrête quand l'app
   // n'est plus à l'écran, mais reprend dès qu'elle revient au premier plan.
   await Location.requestBackgroundPermissionsAsync().catch(() => null);
 
   const alreadyRunning = await Location.hasStartedLocationUpdatesAsync(TASK).catch(() => false);
   if (!alreadyRunning) {
     await Location.startLocationUpdatesAsync(TASK, {
-      accuracy: Location.Accuracy.Balanced,
-      timeInterval: 6000,
-      distanceInterval: 20,
+      accuracy: Location.Accuracy.High,
+      timeInterval: 5000,
+      distanceInterval: 15,
       showsBackgroundLocationIndicator: true,
       foregroundService: {
         notificationTitle: "Taxi Sylvain — course en cours",
@@ -80,7 +96,8 @@ export async function startTrackingLocation(rideId, rideStatus) {
       },
     });
   }
-  trackedKey = key;
+  started = true;
+  sendCurrentPosition();
   return true;
 }
 
@@ -97,7 +114,7 @@ async function requestWakeLock() {
       wakeLock.addEventListener?.("release", () => { wakeLock = null; });
     }
   } catch {
-    // Non supporté ou refusé — le suivi continue simplement tant que l'onglet reste actif.
+    // Non supporté ou refusé — le suivi continue simplement tant que l'onglet est actif.
   }
 }
 
@@ -106,11 +123,9 @@ function startWebKeepAlive() {
   requestWakeLock();
   if (!visibilityHandler) {
     visibilityHandler = () => {
-      if (document.visibilityState !== "visible" || !trackedKey) return;
+      if (document.visibilityState !== "visible" || !started) return;
       requestWakeLock();
-      Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High })
-        .then((loc) => emitPosition(loc.coords))
-        .catch(() => null);
+      sendCurrentPosition();
     };
     document.addEventListener("visibilitychange", visibilityHandler);
   }
@@ -125,7 +140,8 @@ function stopWebKeepAlive() {
 }
 
 export async function stopTrackingLocation() {
-  trackedKey = null;
+  context = null;
+  started = false;
   await AsyncStorage.removeItem(CONTEXT_KEY);
   if (webWatcher) {
     webWatcher.remove();

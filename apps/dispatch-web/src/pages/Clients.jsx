@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { api } from "../lib/api.js";
 import { playSound } from "../lib/sound.js";
+import AddressInput from "../components/AddressInput.jsx";
 
 function ClientCard({ client, onDelete, onEdit }) {
   const [notes, setNotes] = useState(client.notes || "");
@@ -41,6 +42,26 @@ function ClientCard({ client, onDelete, onEdit }) {
       <div className="field-row" style={{ marginTop: 10 }}>
         <span className="field-label">Adresse (domicile) :</span>
         <span>{client.address || <em style={{ color: "var(--muted)" }}>non renseignée — bouton Modifier</em>}</span>
+      </div>
+
+      {/* Tarifs depuis le domicile du client vers les trois destinations habituelles */}
+      <div className="price-tiles">
+        {["YUL", "YHU", "REM"].map((code) => {
+          const price = client.prices?.[code];
+          return (
+            <div key={code} className={`price-tile ${price != null ? "has-price" : ""}`}>
+              <div className="price-tile-code">{code}</div>
+              <div className="price-tile-value">{price != null ? `${price.toFixed(2)} $` : "—"}</div>
+            </div>
+          );
+        })}
+      </div>
+      <div style={{ fontSize: 12, color: "var(--muted)", marginTop: 4 }}>
+        {client.address
+          ? client.zoneName
+            ? `Tarifs depuis ${client.zoneName} (grille Tarifs).`
+            : "Municipalité non reconnue dans la grille — voir la page Tarifs."
+          : "Renseignez l'adresse du client pour afficher ses tarifs."}
       </div>
       <label style={{ display: "block", marginTop: 10, fontSize: 12, color: "var(--muted)", textTransform: "uppercase", letterSpacing: 0.5 }}>
         Mémo et préférences (visible uniquement par le Dispatch)
@@ -178,8 +199,11 @@ export default function Clients() {
             <input className="input" type="email" value={editForm.email} onChange={(e) => setEditForm({ ...editForm, email: e.target.value })} placeholder="(aucun)" />
             <label style={{ display: "block", marginTop: 8 }}>Téléphone</label>
             <input className="input" value={editForm.phone} onChange={(e) => setEditForm({ ...editForm, phone: e.target.value })} />
-            <label style={{ display: "block", marginTop: 8 }}>Adresse (domicile — prise en charge par défaut)</label>
-            <input className="input" value={editForm.address} onChange={(e) => setEditForm({ ...editForm, address: e.target.value })} />
+            <AddressInput
+              label="Adresse (domicile — prise en charge par défaut)"
+              value={editForm.address}
+              onChange={({ address }) => setEditForm({ ...editForm, address })}
+            />
             <label style={{ display: "block", marginTop: 8 }}>Mémo et préférences</label>
             <textarea className="input" style={{ minHeight: 60, fontFamily: "inherit" }} value={editForm.notes} onChange={(e) => setEditForm({ ...editForm, notes: e.target.value })} />
             {editError && <div style={{ color: "#e85d4c", fontSize: 13, marginTop: 8 }}>{editError}</div>}
@@ -199,8 +223,12 @@ export default function Clients() {
             <input className="input" type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
             <label style={{ display: "block", marginTop: 8 }}>Téléphone</label>
             <input className="input" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} placeholder="+15145551234" />
-            <label style={{ display: "block", marginTop: 8 }}>Adresse (optionnel)</label>
-            <input className="input" value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} placeholder="ex. 123 rue Principale, Montréal, QC" />
+            <AddressInput
+              label="Adresse (optionnel)"
+              value={form.address}
+              onChange={({ address }) => setForm({ ...form, address })}
+              placeholder="ex. 12 Rue Bourgogne, Chambly, QC"
+            />
             <label style={{ display: "block", marginTop: 8 }}>Préférences ou mémo (optionnel)</label>
             <textarea className="input" style={{ minHeight: 60, fontFamily: "inherit" }} value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} />
             {error && <div style={{ color: "#e85d4c", fontSize: 13, marginTop: 8 }}>{error}</div>}

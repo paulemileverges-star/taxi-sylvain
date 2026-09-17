@@ -2,14 +2,12 @@ import React, { useEffect, useState } from "react";
 import { View, Text, TouchableOpacity, StyleSheet, Linking } from "react-native";
 import { api } from "../lib/api";
 import { playSound } from "../lib/sound";
-import { startTrackingLocation, stopTrackingLocation } from "../lib/locationTracker";
 import { showAlert } from "../lib/alert";
 import { openWaze as openWazeTo, openGoogleMaps as openGoogleMapsTo } from "../lib/navigation";
 import SwipeButton from "../components/SwipeButton";
 
 const NEXT_STATUS = { ACCEPTED: "EN_ROUTE", EN_ROUTE: "STARTED", STARTED: "COMPLETED" };
 const LABEL = { ACCEPTED: "En route pour la course", EN_ROUTE: "Démarrer la course", STARTED: "Terminer la course" };
-const TRACKED_STATUSES = ["EN_ROUTE", "STARTED"];
 
 function fmtDate(d) {
   return d ? new Date(d).toLocaleDateString("fr-CA") : "—";
@@ -28,7 +26,7 @@ function Field({ label, value }) {
   );
 }
 
-export default function ActiveRideScreen({ rideId, onCompleted, onCancelled, onOpenChat, onOpenMessages, onBack, unreadRide = 0 }) {
+export default function ActiveRideScreen({ rideId, onCompleted, onCancelled, onOpenChat, onOpenMessages, onBack, unreadRide = 0, onRideState }) {
   const [ride, setRide] = useState(null);
 
   const load = async () => {
@@ -38,23 +36,11 @@ export default function ActiveRideScreen({ rideId, onCompleted, onCancelled, onO
 
   useEffect(() => { load(); }, [rideId]);
 
-  // Diffuse la position GPS tant que la course est en route vers le client ou vers la
-  // destination ; s'arrête automatiquement en dehors de ces statuts ou en quittant l'écran.
+  // Le suivi GPS est piloté au niveau de l'application (App.js) et non ici : il doit continuer
+  // quand le chauffeur revient à l'accueil, ouvre la messagerie ou bascule dans Waze.
   useEffect(() => {
-    if (ride && TRACKED_STATUSES.includes(ride.status)) {
-      startTrackingLocation(rideId, ride.status).then((granted) => {
-        if (!granted) {
-          showAlert(
-            "Position désactivée",
-            "Le Dispatch et le client ne peuvent pas suivre votre déplacement sans l'accès à votre position. Activez la localisation pour Taxi Sylvain dans les réglages de votre téléphone."
-          );
-        }
-      });
-    } else {
-      stopTrackingLocation();
-    }
-    return () => stopTrackingLocation();
-  }, [ride?.status, rideId]);
+    if (ride) onRideState?.({ id: ride.id, status: ride.status });
+  }, [ride?.id, ride?.status]);
 
   const advance = async () => {
     if (!ride) return;

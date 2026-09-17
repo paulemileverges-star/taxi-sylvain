@@ -1,8 +1,7 @@
 import { prisma } from "./prisma.js";
 
 // Reconnaît la municipalité de prise en charge dans une adresse (saisie libre ou suggestion
-// OpenStreetMap « 123, Rue X, Chambly, Montérégie, Québec, J3L 1A1, Canada ») et renvoie le tarif
-// du catalogue vers la destination demandée.
+// OpenStreetMap) et renvoie le tarif du catalogue vers la destination demandée.
 export function normalize(s) {
   return String(s || "")
     .toLowerCase()
@@ -39,17 +38,30 @@ export function matchZone(address, zones) {
   return best ? best.zone : null;
 }
 
+// Tarif d'une zone vers une destination. Le prix fixe de la destination sert de repli quand la
+// grille n'a pas de tarif pour cette municipalité.
+export function priceFor(destination, zone) {
+  if (!destination) return null;
+  const byCode = { YUL: zone?.priceYUL, YHU: zone?.priceYHU, REM: zone?.priceREM };
+  return byCode[destination.code] ?? destination.price ?? null;
+}
+
+// Tarifs d'une adresse de départ vers toutes les destinations d'un coup (données déjà chargées) —
+// utilisé pour afficher les 3 prix sur chaque fiche client sans multiplier les requêtes.
+export function quoteAll(pickupAddress, destinations, zones) {
+  const zone = matchZone(pickupAddress, zones);
+  const prices = {};
+  for (const d of destinations) prices[d.code] = priceFor(d, zone);
+  return { prices, zoneName: zone?.name || null };
+}
+
 // Renvoie { price, zoneName, destination } — price null si aucun tarif ne s'applique.
 export async function quote({ pickupAddress, destinationCode }) {
   if (!destinationCode) return { price: null, zoneName: null, destination: null };
   const destination = await prisma.destination.findUnique({ where: { code: String(destinationCode) } });
   if (!destination) return { price: null, zoneName: null, destination: null };
 
-  if (destination.code === "YUL" || destination.code === "YHU") {
-    const zones = await prisma.priceZone.findMany();
-    const zone = matchZone(pickupAddress, zones);
-    const price = zone ? (destination.code === "YUL" ? zone.priceYUL : zone.priceYHU) : null;
-    return { price: price ?? null, zoneName: zone?.name || null, destination };
-  }
-  return { price: destination.price ?? null, zoneName: null, destination };
+  const zones = await prisma.priceZone.findMany();
+  const zone = matchZone(pickupAddress, zones);
+  return { price: priceFor(destination, zone), zoneName: zone?.name || null, destination };
 }

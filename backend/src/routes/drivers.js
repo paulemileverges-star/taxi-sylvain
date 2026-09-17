@@ -2,8 +2,8 @@ import { Router } from "express";
 import bcrypt from "bcryptjs";
 import multer from "multer";
 import path from "path";
-import { fileURLToPath } from "url";
 import { prisma } from "../lib/prisma.js";
+import { uploadsDir } from "../lib/uploads.js";
 import { requireAuth, requirePermission } from "../middleware/auth.js";
 import { deleteUserCascade } from "../lib/deleteUser.js";
 import { getOnlineDriverIds } from "../lib/onlineDrivers.js";
@@ -38,9 +38,6 @@ export async function createDriverAccount({ name, email, phone, password, carMod
   });
   return { driver, tempPassword };
 }
-
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const uploadsDir = path.join(__dirname, "..", "..", "uploads");
 
 const storage = multer.diskStorage({
   destination: (req, file, cb) => cb(null, uploadsDir),

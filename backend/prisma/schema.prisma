@@ -169,6 +169,7 @@ model PriceZone {
   name      String @unique
   priceYUL  Float?
   priceYHU  Float?
+  priceREM  Float?
   sortOrder Int    @default(0)
 }
 

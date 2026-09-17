@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, ActivityIndicator, Image } from "react-native";
-import { api, assetUrl } from "../lib/api";
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, ActivityIndicator } from "react-native";
+import { api } from "../lib/api";
+import { DriverAvatar, CarPhoto } from "../components/DriverPhotos";
 import { playSound } from "../lib/sound";
 import { showAlert } from "../lib/alert";
 
@@ -42,11 +43,9 @@ export default function RateScreen({ rideId, onDone }) {
       ) : (
         <>
           <View style={styles.driverRow}>
-            <View style={styles.avatar}>
-              {driver.photoUrl ? <Image source={{ uri: assetUrl(driver.photoUrl) }} style={styles.avatarImg} /> : <Text style={styles.avatarInitial}>{driver.name?.[0]}</Text>}
-            </View>
-            {driver.carPhotoUrl ? <Image source={{ uri: assetUrl(driver.carPhotoUrl) }} style={styles.carThumb} /> : null}
-            <Text style={styles.driverInfo}>{driver.carModel || ""}{driver.plate ? ` · ${driver.plate}` : ""}</Text>
+            <DriverAvatar driver={driver} size={48} />
+            <CarPhoto driver={driver} height={44} style={{ width: 64 }} />
+            <Text style={styles.driverInfo}>{[driver.carModel, driver.plate].filter(Boolean).join(" · ")}</Text>
           </View>
           <View style={styles.stars}>
             {[1, 2, 3, 4, 5].map((n) => (

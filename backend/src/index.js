@@ -20,8 +20,10 @@ import geocodeRoutes from "./routes/geocode.js";
 import adminRoutes from "./routes/admins.js";
 import destinationRoutes from "./routes/destinations.js";
 import pricingRoutes from "./routes/pricing.js";
+import suggestionRoutes from "./routes/suggestions.js";
 import { ensureDefaultDestinations } from "./lib/seedDestinations.js";
 import { ensureDefaultPriceZones } from "./lib/seedPricing.js";
+import { ensureUploadsDir, uploadsDir } from "./lib/uploads.js";
 import { registerSocketHandlers } from "./sockets/index.js";
 import { generateWeeklyReports } from "./jobs/weeklyReport.js";
 import { sendRideReminders } from "./jobs/rideReminders.js";
@@ -39,8 +41,8 @@ const corsOrigin =
 app.use(cors({ origin: corsOrigin }));
 app.use(express.json({ limit: "1mb" }));
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-app.use("/uploads", express.static(path.join(__dirname, "..", "uploads")));
+ensureUploadsDir();
+app.use("/uploads", express.static(uploadsDir, { fallthrough: true }));
 
 app.get("/health", (req, res) => res.json({ ok: true }));
 app.use("/api/auth", authRoutes);
@@ -56,6 +58,7 @@ app.use("/api/geocode", geocodeRoutes);
 app.use("/api/admins", adminRoutes);
 app.use("/api/destinations", destinationRoutes);
 app.use("/api/pricing", pricingRoutes);
+app.use("/api/suggestions", suggestionRoutes);
 ensureDefaultDestinations().catch((e) => console.error("Destinations par défaut :", e.message));
 ensureDefaultPriceZones().catch((e) => console.error("Grille tarifaire par défaut :", e.message));
 

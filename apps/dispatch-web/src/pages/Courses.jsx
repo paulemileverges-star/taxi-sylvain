@@ -3,6 +3,7 @@ import { api } from "../lib/api.js";
 import { getSocket } from "../lib/socket.js";
 import { playSound } from "../lib/sound.js";
 import AddressInput from "../components/AddressInput.jsx";
+import Suggest from "../components/Suggest.jsx";
 import { STATUS_LABEL, statusClass, localInputToIso } from "../lib/status.js";
 
 function fmtDate(d) {
@@ -254,8 +255,14 @@ export default function Courses() {
                 onChange={({ address, lat, lng }) => setForm({ ...form, destAddress: address, destLat: lat, destLng: lng })}
               />
             )}
-            <label style={{ display: "block", marginTop: 8 }}>Numéro de vol (optionnel)</label>
-            <input className="input" value={form.flightNumber} onChange={(e) => setForm({ ...form, flightNumber: e.target.value })} placeholder="ex. AC1234" />
+            <Suggest
+              field="flight"
+              label="Numéro de vol (optionnel)"
+              value={form.flightNumber}
+              onChange={(v) => setForm({ ...form, flightNumber: v })}
+              placeholder="ex. AC1234"
+              style={{ marginTop: 8 }}
+            />
             <label style={{ display: "block", marginTop: 8 }}>Heure de prise en charge du client (optionnel)</label>
             <input className="input" type="datetime-local" value={form.scheduledFor} onChange={(e) => setForm({ ...form, scheduledFor: e.target.value })} />
             <label style={{ display: "block", marginTop: 8 }}>Montant prévu ($)</label>
@@ -271,10 +278,39 @@ export default function Courses() {
             )}
             {form.clientId === "__new__" && (
               <>
-                <label style={{ display: "block", marginTop: 8 }}>Nom du nouveau client</label>
-                <input className="input" value={form.clientName} onChange={(e) => setForm({ ...form, clientName: e.target.value })} />
-                <label style={{ display: "block", marginTop: 8 }}>Téléphone du nouveau client</label>
-                <input className="input" value={form.clientPhone} onChange={(e) => setForm({ ...form, clientPhone: e.target.value })} placeholder="+15145551234" />
+                <Suggest
+                  field="client"
+                  label="Nom du nouveau client"
+                  value={form.clientName}
+                  onChange={(v) => setForm({ ...form, clientName: v })}
+                  onSelect={(item) => setForm((f) => ({
+                    ...f,
+                    clientId: item.data.id, // client déjà connu : on l'utilise au lieu d'en créer un doublon
+                    clientName: item.data.name,
+                    clientPhone: item.data.phone || "",
+                    clientEmail: item.data.email || "",
+                    clientAddress: item.data.address || "",
+                    pickupAddress: f.pickupAddress || item.data.address || "",
+                  }))}
+                  placeholder="Commencez à taper : les clients connus s'affichent"
+                  style={{ marginTop: 8 }}
+                />
+                <Suggest
+                  field="client"
+                  label="Téléphone du nouveau client"
+                  value={form.clientPhone}
+                  onChange={(v) => setForm({ ...form, clientPhone: v })}
+                  onSelect={(item) => setForm((f) => ({
+                    ...f,
+                    clientId: item.data.id,
+                    clientName: item.data.name,
+                    clientPhone: item.data.phone || "",
+                    clientEmail: item.data.email || "",
+                    clientAddress: item.data.address || "",
+                  }))}
+                  placeholder="+15145551234"
+                  style={{ marginTop: 8 }}
+                />
                 <label style={{ display: "block", marginTop: 8 }}>Courriel du nouveau client (optionnel)</label>
                 <input className="input" type="email" value={form.clientEmail} onChange={(e) => setForm({ ...form, clientEmail: e.target.value })} />
                 <label style={{ display: "block", marginTop: 8 }}>Adresse du nouveau client (domicile — par défaut, l'adresse de prise en charge)</label>
@@ -295,8 +331,15 @@ export default function Courses() {
             </select>
             {form.driverId === "__new__" && (
               <>
-                <label style={{ display: "block", marginTop: 8 }}>Nom du nouveau chauffeur</label>
-                <input className="input" value={form.newDriverName} onChange={(e) => setForm({ ...form, newDriverName: e.target.value })} />
+                <Suggest
+                  field="driver"
+                  label="Nom du nouveau chauffeur"
+                  value={form.newDriverName}
+                  onChange={(v) => setForm({ ...form, newDriverName: v })}
+                  onSelect={(item) => setForm((f) => ({ ...f, driverId: item.data.id }))} // chauffeur déjà connu : on l'affecte directement
+                  placeholder="Commencez à taper : les chauffeurs connus s'affichent"
+                  style={{ marginTop: 8 }}
+                />
                 <label style={{ display: "block", marginTop: 8 }}>Courriel du nouveau chauffeur</label>
                 <input className="input" type="email" value={form.newDriverEmail} onChange={(e) => setForm({ ...form, newDriverEmail: e.target.value })} />
                 <label style={{ display: "block", marginTop: 8 }}>Téléphone du nouveau chauffeur</label>

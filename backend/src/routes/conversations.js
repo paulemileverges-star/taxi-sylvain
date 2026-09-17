@@ -91,4 +91,29 @@ router.post("/:id/messages", async (req, res) => {
   res.status(201).json(message);
 });
 
+// Supprimer un groupe de discussion (et tous ses messages) — Dispatch uniquement.
+router.delete("/:id", requirePermission("groups"), async (req, res) => {
+  const conversation = await prisma.conversation.findUnique({ where: { id: req.params.id } });
+  if (!conversation) return res.status(404).json({ error: "Groupe introuvable." });
+
+  const participants = await prisma.conversationParticipant.findMany({
+    where: { conversationId: conversation.id },
+    include: { user: { select: { id: true, role: true } } },
+  });
+
+  await prisma.$transaction(async (tx) => {
+    await tx.groupMessage.deleteMany({ where: { conversationId: conversation.id } });
+    await tx.conversationParticipant.deleteMany({ where: { conversationId: conversation.id } });
+    await tx.readMarker.deleteMany({ where: { threadKey: `group:${conversation.id}` } });
+    await tx.conversation.delete({ where: { id: conversation.id } });
+  });
+
+  const io = req.app.get("io");
+  if (io) {
+    const rooms = new Set(participants.map((p) => personalRoom(p.user)).filter(Boolean));
+    for (const room of rooms) io.to(room).emit("conversation:deleted", { conversationId: conversation.id });
+  }
+  res.status(204).end();
+});
+
 export default router;

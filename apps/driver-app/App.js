@@ -19,7 +19,11 @@ import { playSound } from "./src/lib/sound";
 import * as Notifications from "expo-notifications";
 import { registerForPushNotifications, clearPushToken } from "./src/lib/pushNotifications";
 import { requestWebNotificationPermission, notifyWeb } from "./src/lib/webNotify";
+import { startTrackingLocation, stopTrackingLocation } from "./src/lib/locationTracker";
+import { showAlert } from "./src/lib/alert";
 import { api } from "./src/lib/api";
+
+const TRACKED_STATUSES = ["EN_ROUTE", "STARTED"];
 
 const EMPTY_UNREAD = { direct: { total: 0, byDriver: {} }, groups: { total: 0, byConversation: {} }, rides: { total: 0, byRide: {} }, total: 0 };
 
@@ -30,6 +34,7 @@ export default function App() {
   const [newReport, setNewReport] = useState(false);
   const [messageRideContext, setMessageRideContext] = useState(null);
   const [unread, setUnread] = useState(EMPTY_UNREAD);
+  const [trackedRide, setTrackedRide] = useState(null); // { id, status } — course dont on diffuse la position
 
   // Compteurs de messages non lus (badges des menus) — rafraîchis à la connexion, à chaque message
   // reçu et après lecture d'un fil.
@@ -78,6 +83,34 @@ export default function App() {
     };
   }, [user]);
 
+  // Suivi GPS piloté ici (et non dans l'écran de course) pour qu'il continue quand le chauffeur
+  // revient à l'accueil, ouvre la messagerie ou bascule dans Waze.
+  useEffect(() => {
+    if (trackedRide && TRACKED_STATUSES.includes(trackedRide.status)) {
+      startTrackingLocation(trackedRide.id, trackedRide.status).then((granted) => {
+        if (!granted) {
+          showAlert(
+            "Position désactivée",
+            "Le Dispatch et le client ne peuvent pas vous suivre sans l'accès à votre position. Autorisez la localisation pour Taxi Sylvain."
+          );
+        }
+      });
+    } else {
+      stopTrackingLocation();
+    }
+  }, [trackedRide?.id, trackedRide?.status]);
+
+  // Après un rechargement de page ou une reconnexion, on reprend le suivi de la course en cours.
+  useEffect(() => {
+    if (!user) return;
+    api.myRides()
+      .then((rides) => {
+        const active = rides.find((r) => r.driverId === user.id && TRACKED_STATUSES.includes(r.status));
+        if (active) setTrackedRide({ id: active.id, status: active.status });
+      })
+      .catch(() => null);
+  }, [user?.id]);
+
   // Permet de rouvrir directement la bonne course quand on tape sur une notification
   // reçue app fermée ou en arrière-plan.
   useEffect(() => {
@@ -96,6 +129,8 @@ export default function App() {
   }, []);
 
   const logout = async () => {
+    setTrackedRide(null);
+    await stopTrackingLocation();
     resetSocket();
     await clearPushToken();
     await clearSession();
@@ -141,12 +176,13 @@ export default function App() {
       {screen === "active" && activeRideId && (
         <ActiveRideScreen
           rideId={activeRideId}
-          onCompleted={() => setScreen("rating")}
-          onCancelled={() => { setActiveRideId(null); setScreen("home"); }}
+          onCompleted={() => { setTrackedRide(null); setScreen("rating"); }}
+          onCancelled={() => { setTrackedRide(null); setActiveRideId(null); setScreen("home"); }}
           onOpenChat={() => setScreen("rideChat")}
           onOpenMessages={(ride) => { setMessageRideContext(ride || null); setScreen("messages"); }}
           onBack={() => setScreen("home")}
           unreadRide={unread.rides.byRide[activeRideId] || 0}
+          onRideState={setTrackedRide}
         />
       )}
       {screen === "rating" && activeRideId && (

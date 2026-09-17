@@ -18,11 +18,15 @@ function PriceInput({ value, onChange }) {
 }
 
 function ZoneRow({ zone, onSaved, onDeleted }) {
-  const [draft, setDraft] = useState({ name: zone.name, priceYUL: zone.priceYUL ?? "", priceYHU: zone.priceYHU ?? "" });
-  const dirty = draft.name !== zone.name || String(draft.priceYUL) !== String(zone.priceYUL ?? "") || String(draft.priceYHU) !== String(zone.priceYHU ?? "");
+  const [draft, setDraft] = useState({ name: zone.name, priceYUL: zone.priceYUL ?? "", priceYHU: zone.priceYHU ?? "", priceREM: zone.priceREM ?? "" });
+  const dirty =
+    draft.name !== zone.name ||
+    String(draft.priceYUL) !== String(zone.priceYUL ?? "") ||
+    String(draft.priceYHU) !== String(zone.priceYHU ?? "") ||
+    String(draft.priceREM) !== String(zone.priceREM ?? "");
 
   const save = async () => {
-    await api.updatePriceZone(zone.id, { name: draft.name, priceYUL: draft.priceYUL, priceYHU: draft.priceYHU });
+    await api.updatePriceZone(zone.id, { name: draft.name, priceYUL: draft.priceYUL, priceYHU: draft.priceYHU, priceREM: draft.priceREM });
     playSound("action");
     onSaved();
   };
@@ -32,6 +36,7 @@ function ZoneRow({ zone, onSaved, onDeleted }) {
       <td><input className="input" style={{ marginTop: 0 }} value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })} /></td>
       <td><PriceInput value={draft.priceYUL} onChange={(v) => setDraft({ ...draft, priceYUL: v })} /></td>
       <td><PriceInput value={draft.priceYHU} onChange={(v) => setDraft({ ...draft, priceYHU: v })} /></td>
+      <td><PriceInput value={draft.priceREM} onChange={(v) => setDraft({ ...draft, priceREM: v })} /></td>
       <td style={{ whiteSpace: "nowrap" }}>
         <button className="btn outline" disabled={!dirty} onClick={save}>Enregistrer</button>{" "}
         <button className="btn red" onClick={() => { if (window.confirm(`Retirer ${zone.name} de la grille ?`)) onDeleted(zone); }}>✕</button>
@@ -44,7 +49,7 @@ export default function Pricing() {
   const [destinations, setDestinations] = useState([]);
   const [zones, setZones] = useState([]);
   const [filter, setFilter] = useState("");
-  const [newZone, setNewZone] = useState({ name: "", priceYUL: "", priceYHU: "" });
+  const [newZone, setNewZone] = useState({ name: "", priceYUL: "", priceYHU: "", priceREM: "" });
   const [remPrice, setRemPrice] = useState("");
   const [message, setMessage] = useState("");
 
@@ -61,7 +66,7 @@ export default function Pricing() {
     setMessage("");
     try {
       await api.createPriceZone(newZone);
-      setNewZone({ name: "", priceYUL: "", priceYHU: "" });
+      setNewZone({ name: "", priceYUL: "", priceYHU: "", priceREM: "" });
       playSound("action");
       load();
     } catch (e) {
@@ -101,7 +106,7 @@ export default function Pricing() {
             </div>
             {d.code === "REM" ? (
               <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                <span style={{ fontSize: 13, color: "var(--muted)" }}>Prix fixe ($)</span>
+                <span style={{ fontSize: 13, color: "var(--muted)" }}>Prix par défaut ($)</span>
                 <PriceInput value={remPrice} onChange={setRemPrice} />
                 <button className="btn outline" onClick={saveRem}>Enregistrer</button>
               </div>
@@ -120,6 +125,7 @@ export default function Pricing() {
         </div>
         <div><label>Vers YUL ($)</label><PriceInput value={newZone.priceYUL} onChange={(v) => setNewZone({ ...newZone, priceYUL: v })} /></div>
         <div><label>Vers YHU ($)</label><PriceInput value={newZone.priceYHU} onChange={(v) => setNewZone({ ...newZone, priceYHU: v })} /></div>
+        <div><label>Vers REM ($)</label><PriceInput value={newZone.priceREM} onChange={(v) => setNewZone({ ...newZone, priceREM: v })} /></div>
         <button className="btn" disabled={!newZone.name.trim()} onClick={addZone}>Ajouter</button>
       </div>
       {message && <div style={{ color: "#e85d4c", fontSize: 13, marginBottom: 8 }}>{message}</div>}
@@ -132,6 +138,7 @@ export default function Pricing() {
               <th style={{ padding: "6px 8px" }}>Municipalité</th>
               <th style={{ padding: "6px 8px" }}>Vers YUL</th>
               <th style={{ padding: "6px 8px" }}>Vers YHU</th>
+              <th style={{ padding: "6px 8px" }}>Vers REM</th>
               <th />
             </tr>
           </thead>

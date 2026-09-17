@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from "react";
-import { View, Text, TouchableOpacity, StyleSheet, FlatList, ActivityIndicator, Image } from "react-native";
-import { api, assetUrl } from "../lib/api";
+import { View, Text, TouchableOpacity, StyleSheet, FlatList, ActivityIndicator } from "react-native";
+import { api } from "../lib/api";
 import { showAlert } from "../lib/alert";
+import { DriverAvatar, CarPhoto } from "../components/DriverPhotos";
 
 const STATUS_LABEL = {
   REQUESTED: "En attente de validation", BROADCAST: "Recherche d'un chauffeur", ACCEPTED: "Confirmée",
@@ -68,10 +69,8 @@ export default function RidesScreen({ onOpenRide, onBack }) {
               <Text style={styles.addr}>{item.pickupAddress} → {item.destAddress}</Text>
               {item.driver?.name && (
                 <View style={styles.driverRow}>
-                  <View style={styles.avatar}>
-                    {item.driver.photoUrl ? <Image source={{ uri: assetUrl(item.driver.photoUrl) }} style={styles.avatarImg} /> : <Text style={styles.avatarInitial}>{item.driver.name[0]}</Text>}
-                  </View>
-                  {item.driver.carPhotoUrl ? <Image source={{ uri: assetUrl(item.driver.carPhotoUrl) }} style={styles.carThumb} /> : null}
+                  <DriverAvatar driver={item.driver} size={32} />
+                  <CarPhoto driver={item.driver} height={32} style={{ width: 48 }} />
                   <Text style={styles.driver}>{item.driver.name}{item.driver.carModel ? ` · ${item.driver.carModel}` : ""}{item.driver.plate ? ` · ${item.driver.plate}` : ""}</Text>
                 </View>
               )}

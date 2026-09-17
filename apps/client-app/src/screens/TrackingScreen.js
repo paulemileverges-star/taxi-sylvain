@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
-import { View, Text, Image, TouchableOpacity, Linking, StyleSheet } from "react-native";
-import { api, assetUrl } from "../lib/api";
+import { View, Text, TouchableOpacity, Linking, StyleSheet } from "react-native";
+import { api } from "../lib/api";
+import { DriverAvatar, CarPhoto } from "../components/DriverPhotos";
 import { playSound } from "../lib/sound";
 import { getSocket } from "../lib/socket";
 import DriverMap from "../components/DriverMap";
@@ -102,22 +103,14 @@ export default function TrackingScreen({ rideId, onOpenChat, onBack, unreadRide 
       {ride?.driver && (
         <View style={styles.card}>
           <View style={styles.driverRow}>
-            <View style={styles.avatar}>
-              {ride.driver.photoUrl ? (
-                <Image source={{ uri: assetUrl(ride.driver.photoUrl) }} style={styles.avatarImg} />
-              ) : (
-                <Text style={styles.avatarInitial}>{ride.driver.name?.[0]}</Text>
-              )}
-            </View>
+            <DriverAvatar driver={ride.driver} />
             <View style={{ flex: 1 }}>
               <Text style={styles.driverName}>{ride.driver.name}</Text>
-              <Text style={styles.driverInfo}>{ride.driver.carModel} · {ride.driver.plate}</Text>
+              <Text style={styles.driverInfo}>{[ride.driver.carModel, ride.driver.plate].filter(Boolean).join(" · ")}</Text>
               <Text style={styles.driverInfo}>★ {ride.driver.ratingAvg?.toFixed(1) ?? "5.0"}</Text>
             </View>
           </View>
-          {ride.driver.carPhotoUrl && (
-            <Image source={{ uri: assetUrl(ride.driver.carPhotoUrl) }} style={styles.carPhoto} />
-          )}
+          <CarPhoto driver={ride.driver} style={{ marginTop: 12 }} />
           <View style={styles.rowBetween}>
             <TouchableOpacity style={[styles.callBtn, unreadRide ? { borderColor: "#f5a623" } : null]} onPress={() => onOpenChat(rideId)}>
               <Text style={[styles.callBtnText, unreadRide ? { color: "#f5a623", fontWeight: "700" } : null]}>

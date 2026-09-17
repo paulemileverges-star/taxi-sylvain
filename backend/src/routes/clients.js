@@ -8,6 +8,7 @@ import { deleteUserCascade } from "../lib/deleteUser.js";
 import { streamListPdf, streamListXlsx } from "../lib/exportReport.js";
 import { realEmailOrNull, generateTempPassword } from "../lib/placeholderEmail.js";
 import { parseImportFile, pick } from "../lib/bulkImport.js";
+import { quoteAll } from "../lib/pricing.js";
 
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024 } });
 
@@ -37,13 +38,25 @@ async function createClientAccount({ name, email, phone, address, notes, passwor
   return { client, tempPassword };
 }
 
+// Liste des clients, avec pour chacun le prix d'une course depuis son adresse vers les trois
+// destinations habituelles (YUL, YHU, REM) — calculé à partir de la grille tarifaire.
 router.get("/", async (req, res) => {
-  const clients = await prisma.user.findMany({
-    where: { role: "CLIENT" },
-    select: { id: true, name: true, email: true, phone: true, address: true, ratingAvg: true, createdAt: true, notes: true },
-    orderBy: { createdAt: "desc" },
-  });
-  res.json(clients.map((c) => ({ ...c, email: realEmailOrNull(c.email) })));
+  const [clients, destinations, zones] = await Promise.all([
+    prisma.user.findMany({
+      where: { role: "CLIENT" },
+      select: { id: true, name: true, email: true, phone: true, address: true, ratingAvg: true, createdAt: true, notes: true },
+      orderBy: { createdAt: "desc" },
+    }),
+    prisma.destination.findMany({ orderBy: { sortOrder: "asc" } }),
+    prisma.priceZone.findMany(),
+  ]);
+
+  res.json(
+    clients.map((c) => {
+      const { prices, zoneName } = quoteAll(c.address, destinations, zones);
+      return { ...c, email: realEmailOrNull(c.email), prices, zoneName };
+    })
+  );
 });
 
 // Créer un compte client indépendamment d'une course — pour bâtir une base de clients que le

@@ -64,6 +64,17 @@ export default function Groups({ unread = {}, onRead }) {
     playSound("action");
   };
 
+  const removeGroup = async (conversation) => {
+    if (!window.confirm(`Supprimer le groupe « ${conversationTitle(conversation, me?.id)} » et tous ses messages ? Cette action est définitive.`)) return;
+    await api.deleteConversation(conversation.id);
+    playSound("action");
+    const remaining = conversations.filter((c) => c.id !== conversation.id);
+    setConversations(remaining);
+    setActiveId(remaining[0]?.id || null);
+    setMessages([]);
+    onRead?.();
+  };
+
   const toggleSelected = (id) => {
     setSelectedIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
   };
@@ -85,7 +96,10 @@ export default function Groups({ unread = {}, onRead }) {
     <div>
       <div className="row">
         <h1>Groupes de discussion</h1>
-        <button className="btn" onClick={() => setShowCreate(true)}>Nouveau groupe</button>
+        <div style={{ display: "flex", gap: 8 }}>
+          {active && <button className="btn red" onClick={() => removeGroup(active)}>Supprimer ce groupe</button>}
+          <button className="btn" onClick={() => setShowCreate(true)}>Nouveau groupe</button>
+        </div>
       </div>
       <div className="messages-layout">
         <div className="card messages-driverlist" style={{ padding: 8, overflowY: "auto" }}>

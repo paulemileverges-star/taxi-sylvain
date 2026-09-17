@@ -38,6 +38,21 @@ body { margin: 0; background: var(--bg); color: var(--text); font-family: Inter,
 .toast { display: flex; align-items: center; gap: 10px; background: var(--surface); border: 1px solid var(--status); border-left-width: 5px; border-radius: 12px; padding: 10px 14px; font-size: 14px; box-shadow: 0 8px 24px rgba(0,0,0,0.35); cursor: pointer; animation: toast-in 0.25s ease-out; }
 @keyframes toast-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
 @media (prefers-reduced-motion: reduce) { .toast { animation: none; } }
+/* Saisie intuitive : liste de propositions issues de la base */
+.suggest-list { position: absolute; z-index: 30; left: 0; right: 0; margin-top: 2px; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; overflow: hidden; max-height: 240px; overflow-y: auto; box-shadow: 0 10px 24px rgba(0,0,0,0.35); }
+.suggest-item { display: flex; flex-direction: column; gap: 2px; width: 100%; text-align: left; padding: 8px 12px; background: none; border: none; border-bottom: 1px solid var(--border); color: var(--text); cursor: pointer; font-size: 14px; }
+.suggest-item:last-child { border-bottom: none; }
+.suggest-item:hover { background: rgba(245,166,35,0.12); }
+.suggest-detail { font-size: 12px; color: var(--muted); }
+
+/* Tarifs du client vers YUL / YHU / REM, sur sa fiche */
+.price-tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 8px; margin-top: 10px; }
+.price-tile { background: #1d2c46; border: 1px solid var(--border); border-radius: 10px; padding: 8px 10px; }
+.price-tile.has-price { border-color: var(--amber); }
+.price-tile-code { font-size: 11px; letter-spacing: 0.08em; color: var(--muted); text-transform: uppercase; }
+.price-tile-value { font-size: 18px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.price-tile.has-price .price-tile-value { color: var(--amber); }
+
 .messages-layout { display: flex; gap: 16px; height: 560px; }
 .messages-driverlist { width: 240px; flex-shrink: 0; }
 .modal-backdrop { position: fixed; inset: 0; background: rgba(5,10,20,0.6); display: flex; align-items: center; justify-content: center; padding: 16px; overflow-y: auto; }

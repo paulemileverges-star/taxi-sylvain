@@ -31,7 +31,13 @@ router.post("/zones", requirePermission("courses"), async (req, res) => {
   if (existing) return res.status(409).json({ error: "Cette municipalité existe déjà." });
   const last = await prisma.priceZone.aggregate({ _max: { sortOrder: true } });
   const zone = await prisma.priceZone.create({
-    data: { name, priceYUL: parsePrice(req.body.priceYUL), priceYHU: parsePrice(req.body.priceYHU), sortOrder: (last._max.sortOrder || 0) + 1 },
+    data: {
+      name,
+      priceYUL: parsePrice(req.body.priceYUL),
+      priceYHU: parsePrice(req.body.priceYHU),
+      priceREM: parsePrice(req.body.priceREM),
+      sortOrder: (last._max.sortOrder || 0) + 1,
+    },
   });
   res.status(201).json(zone);
 });
@@ -41,6 +47,7 @@ router.put("/zones/:id", requirePermission("courses"), async (req, res) => {
   if (req.body.name !== undefined) data.name = String(req.body.name).trim();
   if (req.body.priceYUL !== undefined) data.priceYUL = parsePrice(req.body.priceYUL);
   if (req.body.priceYHU !== undefined) data.priceYHU = parsePrice(req.body.priceYHU);
+  if (req.body.priceREM !== undefined) data.priceREM = parsePrice(req.body.priceREM);
   try {
     res.json(await prisma.priceZone.update({ where: { id: req.params.id }, data }));
   } catch {

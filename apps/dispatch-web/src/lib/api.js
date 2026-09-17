@@ -113,6 +113,8 @@ export const api = {
   sendDirectMessage: (driverId, text) => request(`/messages/direct/${driverId}`, { method: "POST", body: { text } }),
   listConversations: () => request("/conversations"),
   createConversation: (payload) => request("/conversations", { method: "POST", body: payload }),
+  deleteConversation: (id) => request(`/conversations/${id}`, { method: "DELETE" }),
+  suggest: (field, q) => request(`/suggestions?field=${field}&q=${encodeURIComponent(q)}`),
   listConversationMessages: (id) => request(`/conversations/${id}/messages`),
   sendConversationMessage: (id, text) => request(`/conversations/${id}/messages`, { method: "POST", body: { text } }),
   uploadDriverPhotos: async (driverId, { photo, carPhoto }) => {
