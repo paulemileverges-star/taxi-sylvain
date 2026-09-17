@@ -10,6 +10,7 @@ import { generateTempPassword } from "../lib/placeholderEmail.js";
 import { computeDistanceKm, geocodeAddress } from "../lib/distance.js";
 import { clearDriverLocation, getDriverLocation } from "../lib/driverLocations.js";
 import { quote } from "../lib/pricing.js";
+import { sendRideConfirmation, sendRideCancellation, loadRideForEmail } from "../lib/rideEmails.js";
 
 // Réservation par téléphone (besoin #5) : le Dispatch peut créer une course pour un client sans
 // compte — on retrouve son compte existant par téléphone, ou on lui en crée un à la volée. Si le
@@ -173,6 +174,8 @@ router.post("/", requirePermission("courses", "CLIENT"), async (req, res) => {
       body: `${ride.pickupAddress} → ${ride.destAddress}`,
       data: { type: "ride:assigned", rideId: ride.id },
     });
+    // Course confirmée dès sa création : courriel + invitation d'agenda au chauffeur et au client.
+    sendRideConfirmation(ride.id);
   } else if (broadcastAll) {
     broadcast(req, "drivers", "ride:broadcast", ride);
     notifyAllDrivers({
@@ -187,11 +190,21 @@ router.post("/", requirePermission("courses", "CLIENT"), async (req, res) => {
 // Affecter / réaffecter un chauffeur (Dispatch)
 router.post("/:id/assign", requirePermission("courses"), async (req, res) => {
   const { driverId } = req.body; // null pour retirer l'affectation
+  const previous = await loadRideForEmail(req.params.id);
   const ride = await prisma.ride.update({
     where: { id: req.params.id },
     data: { driverId, status: driverId ? "ACCEPTED" : "REQUESTED" },
     include: { driver: { select: { name: true, carModel: true, plate: true } } },
   });
+
+  // Changement de chauffeur : l'ancien voit la course disparaître de son agenda, le nouveau la
+  // reçoit. Sans changement (réenregistrement du même chauffeur), on n'envoie rien.
+  const driverChanged = previous?.driverId !== driverId;
+  if (driverChanged && previous?.driverId && previous.driver) {
+    sendRideCancellation(previous, [{ person: previous.driver, audience: "driver" }]);
+  }
+  if (driverChanged && driverId) sendRideConfirmation(ride.id);
+
   if (driverId) {
     broadcast(req, `driver:${driverId}`, "ride:assigned", ride);
     notifyUser(driverId, {
@@ -255,6 +268,7 @@ router.post("/:id/accept", requireRole("DRIVER"), async (req, res) => {
   });
   broadcast(req, "drivers", "ride:taken", { id: result.id }); // pour retirer la course chez les autres chauffeurs
   broadcast(req, `ride:${result.id}`, "ride:status", result);
+  sendRideConfirmation(result.id); // le chauffeur qui prend la course la reçoit dans son agenda
   res.json(result);
 });
 
@@ -307,6 +321,10 @@ router.post("/:id/status", requireRole("DRIVER"), async (req, res) => {
     return res.status(409).json({ error: `Étape invalide : la course est actuellement « ${current.status} ».` });
   }
 
+  // Annulation par le chauffeur : on garde la course complète sous la main pour pouvoir retirer
+  // l'évènement de son agenda après la mise à jour (la course ne lui sera plus rattachée).
+  const previous = status === "CANCELLED" ? await loadRideForEmail(req.params.id) : null;
+
   const ride = await prisma.ride.update({
     where: { id: req.params.id },
     data:
@@ -314,6 +332,10 @@ router.post("/:id/status", requireRole("DRIVER"), async (req, res) => {
         ? { status, cancelledAt: new Date(), driverId: null }
         : { status, [allowed[status]]: new Date() },
   });
+
+  if (status === "CANCELLED" && previous?.driver) {
+    sendRideCancellation(previous, [{ person: previous.driver, audience: "driver" }]);
+  }
 
   const labels = {
     EN_ROUTE: `${req.user.name} est en route pour récupérer le client.`,
@@ -394,7 +416,7 @@ router.patch("/:id", requirePermission("courses"), async (req, res) => {
       const merged = { ...current, ...data };
       data.distanceKm = await computeDistanceKm({ lat: merged.pickupLat, lng: merged.pickupLng }, { lat: merged.destLat, lng: merged.destLng });
     }
-    const before = await prisma.ride.findUnique({ where: { id: req.params.id }, select: { fare: true } });
+    const before = await loadRideForEmail(req.params.id);
     const ride = await prisma.ride.update({
       where: { id: req.params.id },
       data,
@@ -403,6 +425,17 @@ router.patch("/:id", requirePermission("courses"), async (req, res) => {
     broadcast(req, "dispatch", "ride:updated", ride);
     broadcast(req, `ride:${ride.id}`, "ride:status", ride);
     if (ride.driverId) broadcast(req, `driver:${ride.driverId}`, "ride:assigned", ride);
+
+    // Un détail qui figure dans l'agenda a changé : on renvoie l'invitation mise à jour, qui
+    // remplace l'évènement déjà présent chez le chauffeur et le client.
+    const AGENDA_FIELDS = ["scheduledFor", "pickupAddress", "destAddress", "fare", "flightNumber"];
+    const agendaChanged = AGENDA_FIELDS.some((field) => {
+      if (data[field] === undefined || !before) return false;
+      const a = before[field] instanceof Date ? before[field].getTime() : before[field];
+      const b = ride[field] instanceof Date ? ride[field].getTime() : ride[field];
+      return a !== b;
+    });
+    if (agendaChanged && (ride.driverId || ride.clientId)) sendRideConfirmation(ride.id);
 
     // Taxi Sylvain vient de fixer (ou corriger) le montant : le client reçoit le récapitulatif.
     if (ride.clientId && data.fare !== undefined && ride.fare > 0 && ride.fare !== before?.fare) {
@@ -424,10 +457,18 @@ router.patch("/:id", requirePermission("courses"), async (req, res) => {
 // Supprimer une course erronée (Dispatch)
 router.delete("/:id", requirePermission("courses"), async (req, res) => {
   try {
+    // Chargée avant la suppression : les courriels d'annulation ont encore besoin de ses détails.
+    const previous = await loadRideForEmail(req.params.id);
     await prisma.$transaction(async (tx) => {
       await tx.rating.deleteMany({ where: { rideId: req.params.id } });
       await tx.ride.delete({ where: { id: req.params.id } });
     });
+    if (previous) {
+      sendRideCancellation(previous, [
+        previous.driver ? { person: previous.driver, audience: "driver" } : null,
+        previous.client ? { person: previous.client, audience: "client" } : null,
+      ]);
+    }
     res.status(204).end();
   } catch (e) {
     res.status(404).json({ error: "Course introuvable." });

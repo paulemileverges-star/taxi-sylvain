@@ -24,6 +24,7 @@ import suggestionRoutes from "./routes/suggestions.js";
 import { ensureDefaultDestinations } from "./lib/seedDestinations.js";
 import { ensureDefaultPriceZones } from "./lib/seedPricing.js";
 import { ensureUploadsDir, uploadsDir } from "./lib/uploads.js";
+import { mailStatusLine } from "./lib/mailer.js";
 import { registerSocketHandlers } from "./sockets/index.js";
 import { generateWeeklyReports } from "./jobs/weeklyReport.js";
 import { sendRideReminders } from "./jobs/rideReminders.js";
@@ -42,6 +43,7 @@ app.use(cors({ origin: corsOrigin }));
 app.use(express.json({ limit: "1mb" }));
 
 ensureUploadsDir();
+console.log(mailStatusLine());
 app.use("/uploads", express.static(uploadsDir, { fallthrough: true }));
 
 app.get("/health", (req, res) => res.json({ ok: true }));

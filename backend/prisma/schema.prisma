@@ -98,6 +98,10 @@ model Ride {
   // Chauffeurs ayant refusé cette course diffusée — elle ne leur est plus proposée, mais reste
   // disponible pour les autres (besoin #6 / correction #17).
   refusedBy     String[]   @default([])
+  // Numéro de version de l'invitation d'agenda envoyée par courriel (SEQUENCE du fichier .ics).
+  // Il augmente à chaque confirmation ou modification pour que l'agenda du chauffeur mette à jour
+  // l'évènement existant au lieu d'en ajouter un deuxième.
+  calendarSeq   Int        @default(0)
 
   clientId String?
   client   User?   @relation("ClientRides", fields: [clientId], references: [id])

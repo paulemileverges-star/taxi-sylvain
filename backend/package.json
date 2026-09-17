@@ -9,7 +9,8 @@
     "start": "prisma migrate deploy && node src/index.js",
     "prisma:migrate": "prisma migrate dev",
     "prisma:studio": "prisma studio",
-    "seed": "node prisma/seed.js"
+    "seed": "node prisma/seed.js",
+    "test": "node --test \"test/**/*.test.js\""
   },
   "dependencies": {
     "@prisma/client": "^5.18.0",

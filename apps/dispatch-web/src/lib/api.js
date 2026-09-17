@@ -134,6 +134,8 @@ export const api = {
   createAdmin: (payload) => request("/admins", { method: "POST", body: payload }),
   updateAdminPermissions: (id, permissions) => request(`/admins/${id}/permissions`, { method: "PATCH", body: { permissions } }),
   deleteAdmin: (id) => request(`/admins/${id}`, { method: "DELETE" }),
+  emailStatus: () => request("/admins/email-status"),
+  sendTestEmail: (to) => request("/admins/email-test", { method: "POST", body: to ? { to } : {} }),
   setToken: (t) => localStorage.setItem("ts_token", t),
   logout: () => {
     localStorage.removeItem("ts_token");

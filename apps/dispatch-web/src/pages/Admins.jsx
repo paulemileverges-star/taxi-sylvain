@@ -57,6 +57,53 @@ function PermissionEditor({ admin, onSaved }) {
 
 const EMPTY_FORM = { name: "", email: "", phone: "", permissions: [] };
 
+// Courriels automatiques de course : état de la configuration et essai d'envoi, pour vérifier
+// soi-même que la clé du fournisseur est bien en place, sans lire les journaux du serveur.
+function EmailSettings() {
+  const [status, setStatus] = useState(null);
+  const [sending, setSending] = useState(false);
+  const [result, setResult] = useState("");
+
+  useEffect(() => {
+    api.emailStatus().then(setStatus).catch(() => setStatus({ configured: false, unavailable: true }));
+  }, []);
+
+  const test = async () => {
+    setSending(true);
+    setResult("");
+    try {
+      const { to } = await api.sendTestEmail();
+      playSound("action");
+      setResult(`Courriel de test envoyé à ${to}. Vérifiez la boîte de réception, et les indésirables.`);
+    } catch (e) {
+      setResult(e.message);
+    } finally {
+      setSending(false);
+    }
+  };
+
+  if (!status) return null;
+
+  return (
+    <div className="card">
+      <div className="row">
+        <div>
+          <div>Courriels automatiques de course</div>
+          <div style={{ color: "var(--muted)", fontSize: 13 }}>
+            {status.configured
+              ? `Actifs via ${status.provider}, expéditeur ${status.from}. Chaque course confirmée part par courriel avec l'invitation d'agenda.`
+              : "Inactifs : aucune clé de fournisseur n'est encore renseignée sur le serveur. Les courses ne partent pas par courriel."}
+          </div>
+        </div>
+        <button className="btn outline" disabled={sending || !status.configured} onClick={test}>
+          {sending ? "Envoi…" : "Envoyer un courriel de test"}
+        </button>
+      </div>
+      {result && <div style={{ fontSize: 13, marginTop: 8, color: result.startsWith("Courriel de test") ? "#3fa796" : "#e85d4c" }}>{result}</div>}
+    </div>
+  );
+}
+
 export default function Admins() {
   const [admins, setAdmins] = useState([]);
   const [showAdd, setShowAdd] = useState(false);
@@ -104,6 +151,8 @@ export default function Admins() {
       <div style={{ color: "var(--muted)", fontSize: 13, marginBottom: 14 }}>
         Donnez à un collaborateur son propre accès à la console Taxi Sylvain, limité aux fonctionnalités que vous choisissez.
       </div>
+
+      <EmailSettings />
 
       {admins.map((admin) => (
         <div key={admin.id} className="card">
