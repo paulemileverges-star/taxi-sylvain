@@ -112,7 +112,9 @@ router.post("/", requirePermission("courses", "CLIENT"), async (req, res) => {
   let clientId = req.user.role === "CLIENT" ? req.user.id : req.body.clientId ?? null;
   let clientTempPassword = null;
   if (!clientId && isStaff && clientName && clientPhone) {
-    const result = await findOrCreateClientByPhone(clientName, clientPhone, clientEmail, clientAddress, clientNotes);
+    // Nouveau client créé pendant la réservation : sans adresse de domicile explicite, on retient
+    // l'adresse de prise en charge (c'est presque toujours chez lui) — les deux écrans concordent.
+    const result = await findOrCreateClientByPhone(clientName, clientPhone, clientEmail, clientAddress || pickupAddress, clientNotes);
     clientId = result.id;
     clientTempPassword = result.tempPassword;
   }

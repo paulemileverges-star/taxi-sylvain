@@ -4,18 +4,19 @@ import { playSound } from "../lib/sound.js";
 
 function ClientCard({ client, onDelete, onEdit }) {
   const [notes, setNotes] = useState(client.notes || "");
-  const [address, setAddress] = useState(client.address || "");
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
-  const dirty = notes !== (client.notes || "") || address !== (client.address || "");
+  const dirty = notes !== (client.notes || "");
+
+  // La fiche est recréée à chaque rechargement de la liste : on resynchronise le mémo avec la
+  // valeur du serveur, sinon un ancien texte encore affiché pouvait écraser une modification faite
+  // ailleurs (bouton Modifier, import). L'adresse, elle, ne se modifie plus que par « Modifier ».
+  useEffect(() => { setNotes(client.notes || ""); }, [client.notes]);
 
   const save = async () => {
     setSaving(true);
     try {
-      await Promise.all([
-        api.updateClientNotes(client.id, notes.trim() || null),
-        api.updateClientAddress(client.id, address.trim() || null),
-      ]);
+      await api.updateClientNotes(client.id, notes.trim() || null);
       playSound("action");
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
@@ -37,16 +38,10 @@ function ClientCard({ client, onDelete, onEdit }) {
           <button className="btn red" onClick={() => onDelete(client)}>Supprimer</button>
         </div>
       </div>
-      <label style={{ display: "block", marginTop: 12, fontSize: 12, color: "var(--muted)", textTransform: "uppercase", letterSpacing: 0.5 }}>
-        Adresse
-      </label>
-      <input
-        className="input"
-        style={{ marginTop: 6 }}
-        placeholder="ex. 123 rue Principale, Montréal, QC"
-        value={address}
-        onChange={(e) => setAddress(e.target.value)}
-      />
+      <div className="field-row" style={{ marginTop: 10 }}>
+        <span className="field-label">Adresse (domicile) :</span>
+        <span>{client.address || <em style={{ color: "var(--muted)" }}>non renseignée — bouton Modifier</em>}</span>
+      </div>
       <label style={{ display: "block", marginTop: 10, fontSize: 12, color: "var(--muted)", textTransform: "uppercase", letterSpacing: 0.5 }}>
         Mémo et préférences (visible uniquement par le Dispatch)
       </label>
@@ -62,7 +57,7 @@ function ClientCard({ client, onDelete, onEdit }) {
           {saved ? "Enregistré." : dirty ? "Modifications non enregistrées." : ""}
         </span>
         <button className="btn outline" disabled={!dirty || saving} onClick={save}>
-          {saving ? "Enregistrement…" : "Enregistrer"}
+          {saving ? "Enregistrement…" : "Enregistrer le mémo"}
         </button>
       </div>
     </div>
