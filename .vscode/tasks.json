@@ -1,0 +1,52 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Tests du serveur",
+      "type": "shell",
+      "command": "npm test",
+      "options": { "cwd": "${workspaceFolder}/backend" },
+      "group": { "kind": "test", "isDefault": true },
+      "problemMatcher": []
+    },
+    {
+      "label": "Vérifier la version en ligne",
+      "type": "shell",
+      "command": "node scripts/verifier-mise-en-ligne.mjs",
+      "options": { "cwd": "${workspaceFolder}" },
+      "problemMatcher": []
+    },
+    {
+      "label": "Lancer l'API en local",
+      "type": "shell",
+      "command": "npm run dev",
+      "options": { "cwd": "${workspaceFolder}/backend" },
+      "isBackground": true,
+      "problemMatcher": []
+    },
+    {
+      "label": "Lancer la console Dispatch en local",
+      "type": "shell",
+      "command": "npm run dev",
+      "options": { "cwd": "${workspaceFolder}/apps/dispatch-web" },
+      "isBackground": true,
+      "problemMatcher": []
+    },
+    {
+      "label": "Lancer l'app Chauffeur (Expo)",
+      "type": "shell",
+      "command": "npx expo start",
+      "options": { "cwd": "${workspaceFolder}/apps/driver-app" },
+      "isBackground": true,
+      "problemMatcher": []
+    },
+    {
+      "label": "Lancer l'app Client (Expo)",
+      "type": "shell",
+      "command": "npx expo start",
+      "options": { "cwd": "${workspaceFolder}/apps/client-app" },
+      "isBackground": true,
+      "problemMatcher": []
+    }
+  ]
+}

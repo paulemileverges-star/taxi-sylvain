@@ -1,6 +1,8 @@
 # Taxi Sylvain — Plateforme Dispatch / Chauffeur / Client
 
-Monorepo contenant le code source de départ pour les 3 applications demandées :
+> **Reprise du projet** : lire `AGENTS.md` puis `docs/PASSATION.md` avant toute modification.
+
+Monorepo contenant le code des 3 applications :
 
 - `backend/` — API REST + temps réel (Node.js, Express, Prisma, PostgreSQL, Socket.io)
 - `apps/dispatch-web/` — console web pour Taxi Sylvain (React + Vite)
@@ -25,7 +27,7 @@ Intégrations optionnelles qui dépendent d'un compte fournisseur (voir `docs/AR
 cd backend
 cp .env.example .env   # renseigner DATABASE_URL, JWT_SECRET
 npm install
-npx prisma migrate dev --name init
+npx prisma migrate dev
 npm run dev             # démarre l'API sur http://localhost:4000
 
 # 2. Console Dispatch (web)
