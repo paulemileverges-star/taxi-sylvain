@@ -1,14 +1,20 @@
 import jwt from "jsonwebtoken";
 import { prisma } from "../lib/prisma.js";
+import { makeAssignmentCheck } from "../lib/rideTracking.js";
 import { markDriverOnline, markDriverOffline } from "../lib/onlineDrivers.js";
 import { setDriverLocation, getAllDriverLocations } from "../lib/driverLocations.js";
 
+// Le chauffeur qui envoie sa position est-il toujours celui de la course ? (voir lib/rideTracking.js)
+const isCurrentDriver = makeAssignmentCheck((rideId) =>
+  prisma.ride.findUnique({ where: { id: rideId }, select: { driverId: true, status: true } })
+);
+
 // Chaque utilisateur rejoint des "rooms" selon son rôle, pour recevoir uniquement
 // les événements qui le concernent :
-// - DISPATCH rejoint "dispatch"
+// - DISPATCH et ADMIN rejoignent "dispatch"
 // - DRIVER rejoint "drivers" (diffusion générale) + "driver:{id}" (personnel)
 // - CLIENT rejoint "client:{id}" (personnel — messages directs, groupes de discussion)
-// - Tout le monde peut rejoindre "ride:{id}" quand une course est ouverte à l'écran
+// - "ride:{id}" (suivi d'une course) : réservé au client et au chauffeur de la course et à l'équipe
 export function registerSocketHandlers(io) {
   // Même règle que requireAuth : le compte doit encore exister, et son rôle vient de la base.
   io.use(async (socket, next) => {
@@ -67,12 +73,18 @@ export function registerSocketHandlers(io) {
     // Position GPS d'un chauffeur en route (besoin: suivi en direct sur carte pour le Dispatch,
     // et pour le client pendant sa propre course — voir besoin #13). Relais uniquement, pas de
     // persistance : la position n'a de sens qu'en direct pendant une course active.
-    socket.on("driver:location", ({ rideId, status, lat, lng }) => {
+    socket.on("driver:location", async (data) => {
+      const { rideId, status, lat, lng } = data || {};
       if (role !== "DRIVER" || typeof lat !== "number" || typeof lng !== "number") return;
       const payload = { driverId: id, name: socket.user.name, rideId: rideId || null, status, lat, lng, at: Date.now() };
       setDriverLocation(id, payload);
       io.to("dispatch").emit("driver:location", payload);
-      if (rideId) io.to(`ride:${rideId}`).emit("driver:location", payload);
+      // Vers le client de la course : seulement si ce chauffeur est toujours celui de la course.
+      try {
+        if (rideId && (await isCurrentDriver(rideId, id))) io.to(`ride:${rideId}`).emit("driver:location", payload);
+      } catch (e) {
+        console.error("Relais de position impossible :", e.message);
+      }
     });
   });
 }
