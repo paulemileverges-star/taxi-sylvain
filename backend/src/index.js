@@ -21,6 +21,7 @@ import adminRoutes from "./routes/admins.js";
 import destinationRoutes from "./routes/destinations.js";
 import pricingRoutes from "./routes/pricing.js";
 import suggestionRoutes from "./routes/suggestions.js";
+import publicRoutes from "./routes/public.js";
 import { ensureDefaultDestinations } from "./lib/seedDestinations.js";
 import { ensureDefaultPriceZones } from "./lib/seedPricing.js";
 import { ensureUploadsDir, uploadsDir } from "./lib/uploads.js";
@@ -47,6 +48,9 @@ console.log(mailStatusLine());
 app.use("/uploads", express.static(uploadsDir, { fallthrough: true }));
 
 app.get("/health", (req, res) => res.json({ ok: true }));
+// Pages publiques (suppression de compte, confidentialité, conditions) exigées par Google Play et
+// Apple : elles s'ouvrent à la racine, dans un navigateur, sans compte ni application installée.
+app.use(publicRoutes);
 app.use("/api/auth", authRoutes);
 app.use("/api/rides", rideRoutes);
 app.use("/api/messages", messageRoutes);

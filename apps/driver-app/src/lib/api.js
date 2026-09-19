@@ -25,6 +25,7 @@ export async function reportDownloadUrl(format, weekStart, weekEnd) {
 export const api = {
   login: (email, password) => request("/auth/login", { method: "POST", body: { email, password } }),
   changePassword: (currentPassword, newPassword) => request("/auth/change-password", { method: "POST", body: { currentPassword, newPassword } }),
+  deleteAccount: (password) => request("/auth/delete-account", { method: "POST", body: { password } }),
   registerPushToken: (token) => request("/auth/push-token", { method: "POST", body: { token } }),
   clearPushToken: () => request("/auth/push-token", { method: "DELETE" }),
   updateNotificationPrefs: (offsets) => request("/auth/notification-prefs", { method: "PATCH", body: { offsets } }),

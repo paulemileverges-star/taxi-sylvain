@@ -8,6 +8,7 @@ import RateScreen from "./src/screens/RateScreen";
 import ChatScreen from "./src/screens/ChatScreen";
 import GroupsScreen from "./src/screens/GroupsScreen";
 import ChangePasswordScreen from "./src/screens/ChangePasswordScreen";
+import DeleteAccountScreen from "./src/screens/DeleteAccountScreen";
 import NotificationSettingsScreen from "./src/screens/NotificationSettingsScreen";
 import RidesScreen from "./src/screens/RidesScreen";
 import { getSocket, resetSocket } from "./src/lib/socket";
@@ -120,6 +121,7 @@ export default function App() {
           onBooked={(rideId) => { setActiveRideId(rideId); setScreen("tracking"); }}
           onOpenGroups={() => setScreen("groups")}
           onOpenChangePassword={() => setScreen("changePassword")}
+          onOpenDeleteAccount={() => setScreen("deleteAccount")}
           onOpenNotifications={() => setScreen("notifications")}
           onOpenRides={() => setScreen("rides")}
           onLogout={logout}
@@ -143,6 +145,11 @@ export default function App() {
       )}
       {screen === "groups" && <GroupsScreen user={user} onBack={() => setScreen("book")} unread={unread.groups.byConversation} onRead={refreshUnread} />}
       {screen === "changePassword" && <ChangePasswordScreen onBack={() => setScreen("book")} />}
+      {/* Après la suppression, le jeton ne vaut plus rien : logout() efface quand même la session
+          locale, car clearPushToken() avale l'échec de son appel serveur. */}
+      {screen === "deleteAccount" && (
+        <DeleteAccountScreen onBack={() => setScreen("book")} onDeleted={logout} />
+      )}
       {screen === "notifications" && (
         <NotificationSettingsScreen
           user={user}

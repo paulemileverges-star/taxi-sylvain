@@ -291,9 +291,9 @@ concernés par CORS.
 
 ### À développer
 
-1. **Suppression de compte dans les apps** et page web équivalente : obligatoire pour Google Play et l'App Store. Inexistante aujourd'hui.
-2. **Politique de confidentialité** publiée en ligne : obligatoire pour les deux magasins. Inexistante.
-3. **Préparation des magasins** : déclaration de localisation en arrière-plan, compte de démonstration pour Apple, formulaire de sécurité des données Google, captures d'écran.
+1. **Suppression de compte dans les apps** et page web équivalente : **écrite et vérifiée le 19 septembre, pas encore en ligne.** `POST /api/auth/delete-account` (connecté) et `POST /api/auth/delete-account-web` (public, exigé par Google Play), règles dans `lib/accountDeletion.js`, 11 tests dans `test/accountDeletion.test.js`, écran « Supprimer mon compte » dans les deux apps, page publique `/suppression-compte`. Reste à faire : déployer, puis vérifier les adresses publiques en production.
+2. **Politique de confidentialité et conditions d'utilisation** : **écrites, pas encore en ligne.** Pages publiques `/confidentialite` et `/conditions` (+ alias `/privacy` et `/terms`), servies par `routes/public.js` depuis `src/public/`. Rédigées à partir du code réel (position jamais stockée, téléphone jamais transmis, fournisseurs listés, Loi 25 et LPRPDE). Aucune adresse courriel de contact : le propriétaire n'a pas encore de domaine. **À faire relire par un conseiller juridique.**
+3. **Préparation des magasins** : voir `docs/CONFORMITE-MAGASINS.md`, qui contient les réponses prêtes au formulaire « Sécurité des données », la justification de localisation en arrière-plan, le scénario de la vidéo Google, la marche à suivre pour le compte de démonstration Apple et les textes de fiche. **Manque encore dans le code** : un profil de compilation « production » produisant un `.aab` — `eas.json` ne sait produire qu'un APK d'essai, que Google Play refuse.
 4. **Tests de bout en bout** : créer une course, l'affecter, la suivre sur la carte, écrire un message, noter.
 5. **Environnement de test séparé** : deuxième service et deuxième base sur Railway, données fictives.
 6. **Alerte d'erreurs** : Sentry en version gratuite sur l'API et les trois interfaces.
@@ -347,6 +347,8 @@ concernés par CORS.
 | 17 sept. | Date et heure de réservation côté client | Fait, web |
 | 17 sept. | Messages du chauffeur reçus par le client ; règle d'une heure | Fait, web |
 | 17 et 18 sept. | Courriels automatiques avec ajout à l'agenda du chauffeur pour chaque course confirmée | Fait ; en attente du compte Brevo et du domaine |
+| 19 sept. | Suppression de compte et conformité magasins : suppression dans les deux apps, page web publique de suppression, politique de confidentialité, conditions d'utilisation, dossier Google Play / App Store | **Écrit et vérifié, pas encore en ligne.** 11 tests + scénario complet sur base locale (24 vérifications). Suite passée de 41 à 52 tests |
+| 19 sept. | Revue complète du projet demandée par le propriétaire, à partir de ses textes d'origine : chaque demande vérifiée dans le code, puis contestée par un second passage | En cours — voir `docs/ETAT-DU-PROJET.md` |
 
 ---
 

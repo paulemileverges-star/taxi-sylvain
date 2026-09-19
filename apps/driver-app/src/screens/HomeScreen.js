@@ -36,7 +36,7 @@ function Badge({ count }) {
   );
 }
 
-export default function HomeScreen({ user, onOpenRide, onOpenEarnings, onOpenMessages, onOpenReports, onOpenGroups, onOpenChangePassword, onOpenNotifications, onOpenRides, onLogout, hasNewReport, unread }) {
+export default function HomeScreen({ user, onOpenRide, onOpenEarnings, onOpenMessages, onOpenReports, onOpenGroups, onOpenChangePassword, onOpenNotifications, onOpenRides, onOpenDeleteAccount, onLogout, hasNewReport, unread }) {
   const [rides, setRides] = useState([]);
   const [schedule, setSchedule] = useState([]);
   const [refreshing, setRefreshing] = useState(false);
@@ -116,6 +116,8 @@ export default function HomeScreen({ user, onOpenRide, onOpenEarnings, onOpenMes
             <Text style={styles.link}>Mes rapports{hasNewReport ? " 🔴" : ""}</Text>
           </TouchableOpacity>
           <TouchableOpacity onPress={onOpenEarnings}><Text style={styles.link}>Mes revenus</Text></TouchableOpacity>
+          {/* Apple et Google exigent que la suppression du compte soit accessible depuis l'app. */}
+          <TouchableOpacity onPress={onOpenDeleteAccount}><Text style={styles.dangerLink}>Supprimer mon compte</Text></TouchableOpacity>
         </View>
       </View>
       <FlatList
@@ -183,6 +185,7 @@ const styles = StyleSheet.create({
   headerRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 12 },
   title: { color: "#edeff3", fontSize: 24, fontWeight: "700" },
   link: { color: "#f5a623" },
+  dangerLink: { color: "#e85d4c" },
   linkRow: { flexDirection: "row", alignItems: "center", gap: 4 },
   linkUnread: { fontWeight: "700" },
   badge: { backgroundColor: "#e85d4c", borderRadius: 999, minWidth: 18, height: 18, paddingHorizontal: 5, alignItems: "center", justifyContent: "center" },

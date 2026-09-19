@@ -32,7 +32,7 @@ function Badge({ count }) {
   return <View style={styles.badge}><Text style={styles.badgeText}>{count > 99 ? "99+" : count}</Text></View>;
 }
 
-export default function BookScreen({ user, onBooked, onOpenGroups, onOpenChangePassword, onOpenNotifications, onOpenRides, onLogout, unread }) {
+export default function BookScreen({ user, onBooked, onOpenGroups, onOpenChangePassword, onOpenNotifications, onOpenRides, onOpenDeleteAccount, onLogout, unread }) {
   const homeAddress = (user?.address || "").trim();
   const [useHome, setUseHome] = useState(Boolean(homeAddress));
   const [pickup, setPickup] = useState({ address: homeAddress, lat: null, lng: null });
@@ -124,6 +124,8 @@ export default function BookScreen({ user, onBooked, onOpenGroups, onOpenChangeP
         </TouchableOpacity>
         <TouchableOpacity onPress={onOpenChangePassword}><Text style={styles.link}>Mot de passe</Text></TouchableOpacity>
         <TouchableOpacity onPress={onOpenNotifications}><Text style={styles.link}>Notifications</Text></TouchableOpacity>
+        {/* Apple et Google exigent que la suppression du compte soit accessible depuis l'app. */}
+        <TouchableOpacity onPress={onOpenDeleteAccount}><Text style={styles.dangerLink}>Supprimer mon compte</Text></TouchableOpacity>
       </View>
 
       <Text style={styles.subtitle}>Où allez-vous ?</Text>
@@ -192,6 +194,7 @@ const styles = StyleSheet.create({
   title: { color: "#edeff3", fontSize: 22, fontWeight: "700" },
   logoutLink: { color: "#e85d4c", fontWeight: "600" },
   link: { color: "#f5a623" },
+  dangerLink: { color: "#e85d4c" },
   linkRow: { flexDirection: "row", alignItems: "center", gap: 4 },
   linkUnread: { fontWeight: "700" },
   badge: { backgroundColor: "#e85d4c", borderRadius: 999, minWidth: 18, height: 18, paddingHorizontal: 5, alignItems: "center", justifyContent: "center" },
