@@ -55,9 +55,23 @@ function invalidPhone(qui) {
   const err = new Error(
     `Le numéro de téléphone ${qui} n'est pas valide pour l'appel masqué. Taxi Sylvain doit le corriger dans sa fiche.`
   );
+  // Code propre à notre application : les erreurs de Twilio ont elles aussi un champ « status »,
+  // qui ne doit pas faire afficher leur message technique en anglais à l'utilisateur.
+  err.code = "NUMERO_INVALIDE";
   err.status = 400;
   return err;
 }
+
+// L'appel masqué n'a de sens que pour une course confirmée ou en cours : pas pour une course
+// terminée depuis des semaines, ni pour une course diffusée que personne n'a encore acceptée.
+export const CALL_STATUSES = ["ACCEPTED", "EN_ROUTE", "STARTED"];
+export function callAllowedForStatus(status) {
+  return CALL_STATUSES.includes(status);
+}
+
+// Durée de vie d'une session d'appel masqué après la dernière activité : le numéro relais ne doit
+// pas relier indéfiniment un client et un chauffeur une fois la course passée.
+export const SESSION_TTL_SECONDS = 4 * 60 * 60;
 
 // Crée (ou réutilise, si déjà ouverte) la session Proxy pour cette course, avec le client et le
 // chauffeur comme participants, et renvoie le numéro masqué à composer.
@@ -72,11 +86,19 @@ export async function getOrCreateCallSession(ride) {
   const service = getClient().proxy.v1.services(process.env.TWILIO_PROXY_SERVICE_SID);
   const uniqueName = `ride-${ride.id}`;
 
-  let session;
+  let session = null;
   try {
     session = await service.sessions(uniqueName).fetch();
   } catch {
-    session = await service.sessions.create({ uniqueName, mode: "voice-only" });
+    session = null;
+  }
+  // Une session expirée ou fermée ne peut plus relier d'appel : on la retire et on en ouvre une neuve.
+  if (session && !["open", "in-progress"].includes(session.status)) {
+    await service.sessions(session.sid).remove().catch(() => null);
+    session = null;
+  }
+  if (!session) {
+    session = await service.sessions.create({ uniqueName, mode: "voice-only", ttl: SESSION_TTL_SECONDS });
   }
 
   await ensureParticipant(service, session.sid, clientPhone, ride.client.name, "CLIENT");

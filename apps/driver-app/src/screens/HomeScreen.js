@@ -100,7 +100,7 @@ export default function HomeScreen({ user, onOpenRide, onOpenEarnings, onOpenMes
         <TouchableOpacity onPress={onLogout}><Text style={styles.logoutLink}>Se déconnecter</Text></TouchableOpacity>
       </View>
       <View style={[styles.headerRow, { marginBottom: 16 }]}>
-        <View style={{ flexDirection: "row", gap: 16, flexWrap: "wrap" }}>
+        <View style={{ flexDirection: "row", gap: 16, flexWrap: "wrap", flex: 1, flexShrink: 1 }}>
           <TouchableOpacity onPress={onOpenRides} style={styles.linkRow}>
             <Text style={styles.link}>Courses</Text><Badge count={unread?.rides?.total} />
           </TouchableOpacity>

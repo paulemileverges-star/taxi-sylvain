@@ -6,9 +6,16 @@ const router = Router();
 router.use(requireAuth);
 
 // Cédule d'appel de la semaine (besoin #5) — Taxi Sylvain affecte des créneaux aux chauffeurs.
-// Le dispatch voit toute la cédule ; un chauffeur ne voit que la sienne.
+// Le dispatch voit toute la cédule ; un chauffeur ne voit que la sienne. Un client n'y a pas accès,
+// et un administrateur seulement avec la permission « Cédule » (avant le 19 septembre 2026, tout
+// compte connecté, client compris, pouvait lire la cédule de tous les chauffeurs).
 router.get("/", async (req, res) => {
-  const where = req.user.role === "DRIVER" ? { driverId: req.user.id } : {};
+  const { role } = req.user;
+  if (role === "CLIENT") return res.status(403).json({ error: "Accès refusé." });
+  if (role === "ADMIN" && !req.user.permissions?.includes("schedule")) {
+    return res.status(403).json({ error: "Accès refusé : cette fonctionnalité n'est pas autorisée pour votre compte." });
+  }
+  const where = role === "DRIVER" ? { driverId: req.user.id } : {};
   const { from, to } = req.query;
   if (from || to) {
     where.startsAt = {

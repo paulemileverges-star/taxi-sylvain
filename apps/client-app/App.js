@@ -37,7 +37,14 @@ export default function App() {
         const fresh = await api.me();
         await AsyncStorage.setItem("ts_user", JSON.stringify(fresh));
         setUser(fresh);
-      } catch { /* hors ligne ou session expirée : on garde la copie locale */ }
+      } catch (e) {
+        // Compte supprimé (par exemple depuis la page web) ou session refusée : on ferme la session
+        // locale. Hors ligne (status 0), on garde la copie locale.
+        if (e.status === 401 || e.status === 404) {
+          await clearSession();
+          setUser(null);
+        }
+      }
     })();
   }, []);
 
@@ -94,9 +101,11 @@ export default function App() {
     return () => sub.remove();
   }, []);
 
-  const logout = async () => {
+  // server: false après une suppression de compte : le compte n'existe plus, il n'y a rien à
+  // retirer côté serveur (l'ancien appel faisait même planter le serveur).
+  const logout = async ({ server = true } = {}) => {
     resetSocket();
-    await clearPushToken();
+    if (server) await clearPushToken();
     await clearSession();
     setUser(null);
     setScreen("book");
@@ -145,10 +154,9 @@ export default function App() {
       )}
       {screen === "groups" && <GroupsScreen user={user} onBack={() => setScreen("book")} unread={unread.groups.byConversation} onRead={refreshUnread} />}
       {screen === "changePassword" && <ChangePasswordScreen onBack={() => setScreen("book")} />}
-      {/* Après la suppression, le jeton ne vaut plus rien : logout() efface quand même la session
-          locale, car clearPushToken() avale l'échec de son appel serveur. */}
+      {/* Après la suppression, le compte n'existe plus : déconnexion locale, sans appel au serveur. */}
       {screen === "deleteAccount" && (
-        <DeleteAccountScreen onBack={() => setScreen("book")} onDeleted={logout} />
+        <DeleteAccountScreen onBack={() => setScreen("book")} onDeleted={() => logout({ server: false })} />
       )}
       {screen === "notifications" && (
         <NotificationSettingsScreen

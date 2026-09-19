@@ -43,7 +43,7 @@ router.get("/search", async (req, res) => {
 
   try {
     const response = await fetch(`https://nominatim.openstreetmap.org/search?${params}`, {
-      headers: { "User-Agent": "TaxiSylvain/1.0 (dispatch@taxi-sylvain.com)" },
+      headers: { "User-Agent": "TaxiSylvain/1.0 (+https://taxisylvain.ca)" },
     });
     if (!response.ok) return res.status(502).json({ error: "Service de suggestions indisponible." });
     const results = await response.json();

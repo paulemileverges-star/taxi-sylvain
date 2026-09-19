@@ -4,7 +4,7 @@ import crypto from "crypto";
 import multer from "multer";
 import { prisma } from "../lib/prisma.js";
 import { requireAuth, requirePermission } from "../middleware/auth.js";
-import { deleteUserCascade } from "../lib/deleteUser.js";
+import { deleteUserCascade, announceDeletion } from "../lib/deleteUser.js";
 import { streamListPdf, streamListXlsx } from "../lib/exportReport.js";
 import { realEmailOrNull, generateTempPassword } from "../lib/placeholderEmail.js";
 import { parseImportFile, pick } from "../lib/bulkImport.js";
@@ -204,13 +204,14 @@ router.get("/export", async (req, res) => {
   }
 });
 
+// Suppression d'un client depuis la console. Seul un compte CLIENT peut être visé ici : cette
+// route ne doit jamais pouvoir effacer le compte Dispatch, un administrateur ou un chauffeur.
 router.delete("/:id", async (req, res) => {
-  try {
-    await deleteUserCascade(req.params.id);
-    res.status(204).end();
-  } catch (e) {
-    res.status(404).json({ error: "Client introuvable." });
-  }
+  const target = await prisma.user.findUnique({ where: { id: String(req.params.id) }, select: { role: true, name: true } });
+  if (!target || target.role !== "CLIENT") return res.status(404).json({ error: "Client introuvable." });
+  const result = await deleteUserCascade(req.params.id);
+  announceDeletion(req.app.get("io"), result, target.name);
+  res.status(204).end();
 });
 
 export default router;

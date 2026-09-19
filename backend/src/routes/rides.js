@@ -3,7 +3,7 @@ import bcrypt from "bcryptjs";
 import crypto from "crypto";
 import { prisma } from "../lib/prisma.js";
 import { requireAuth, requireRole, requirePermission } from "../middleware/auth.js";
-import { isConfigured as isCallMaskingConfigured, getOrCreateCallSession } from "../lib/twilioProxy.js";
+import { isConfigured as isCallMaskingConfigured, getOrCreateCallSession, callAllowedForStatus } from "../lib/twilioProxy.js";
 import { notifyUser, notifyAllDrivers } from "../lib/push.js";
 import { createDriverAccount } from "./drivers.js";
 import { generateTempPassword } from "../lib/placeholderEmail.js";
@@ -378,6 +378,9 @@ router.post("/:id/call", async (req, res) => {
   if (!ride.client || !ride.driver) {
     return res.status(400).json({ error: "La course doit avoir un client et un chauffeur affectés." });
   }
+  if (!callAllowedForStatus(ride.status)) {
+    return res.status(409).json({ error: "L'appel masqué n'est possible que pour une course confirmée ou en cours." });
+  }
   if (!isCallMaskingConfigured()) {
     return res.status(503).json({
       error: "Le masquage d'appel n'est pas configuré. Utilisez la messagerie interne en attendant, ou renseignez TWILIO_ACCOUNT_SID / TWILIO_AUTH_TOKEN / TWILIO_PROXY_SERVICE_SID dans backend/.env (voir .env.example).",
@@ -389,7 +392,8 @@ router.post("/:id/call", async (req, res) => {
     res.json({ proxyNumber });
   } catch (err) {
     // Numéro mal saisi dans une fiche : message clair, sans révéler le numéro de l'autre partie.
-    if (err.status === 400) return res.status(400).json({ error: err.message });
+    // Seulement notre propre erreur : celles de Twilio restent génériques et sont journalisées.
+    if (err.code === "NUMERO_INVALIDE") return res.status(400).json({ error: err.message });
     console.error("Erreur Twilio Proxy:", err.message);
     res.status(502).json({ error: "Impossible de créer l'appel masqué pour le moment." });
   }

@@ -21,7 +21,7 @@ export async function geocodeAddress(address) {
   try {
     const params = new URLSearchParams({ q: address, format: "jsonv2", limit: "1", countrycodes: "ca,us" });
     const res = await fetch(`https://nominatim.openstreetmap.org/search?${params}`, {
-      headers: { "User-Agent": "TaxiSylvain/1.0 (dispatch@taxi-sylvain.com)" },
+      headers: { "User-Agent": "TaxiSylvain/1.0 (+https://taxisylvain.ca)" },
       signal: AbortSignal.timeout(4000),
     });
     if (!res.ok) return null;
@@ -36,7 +36,7 @@ export async function computeDistanceKm(pickup, dest) {
   if (!hasCoords(pickup) || !hasCoords(dest)) return null;
   try {
     const url = `https://router.project-osrm.org/route/v1/driving/${pickup.lng},${pickup.lat};${dest.lng},${dest.lat}?overview=false`;
-    const res = await fetch(url, { headers: { "User-Agent": "TaxiSylvain/1.0 (dispatch@taxi-sylvain.com)" }, signal: AbortSignal.timeout(4000) });
+    const res = await fetch(url, { headers: { "User-Agent": "TaxiSylvain/1.0 (+https://taxisylvain.ca)" }, signal: AbortSignal.timeout(4000) });
     if (res.ok) {
       const data = await res.json();
       const meters = data?.routes?.[0]?.distance;

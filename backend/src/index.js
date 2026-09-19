@@ -1,4 +1,6 @@
 import "dotenv/config";
+// En tout premier, avant les routes : voir lib/httpSafety.js.
+import { installErrorHandler, installProcessGuards } from "./lib/httpSafety.js";
 import express from "express";
 import cors from "cors";
 import http from "http";
@@ -45,12 +47,27 @@ app.use(express.json({ limit: "1mb" }));
 
 ensureUploadsDir();
 console.log(mailStatusLine());
-app.use("/uploads", express.static(uploadsDir, { fallthrough: true }));
+// Photos servies en lecture seule : jamais interprétées comme une page (nosniff) ni exécutées
+// (sandbox), même si un fichier piégé avait été déposé avant le verrouillage de l'envoi.
+app.use(
+  "/uploads",
+  express.static(uploadsDir, {
+    fallthrough: true,
+    setHeaders: (res) => {
+      res.setHeader("X-Content-Type-Options", "nosniff");
+      res.setHeader("Content-Security-Policy", "default-src 'none'; img-src 'self'; sandbox");
+    },
+  })
+);
 
 app.get("/health", (req, res) => res.json({ ok: true }));
 // Pages publiques (suppression de compte, confidentialité, conditions) exigées par Google Play et
 // Apple : elles s'ouvrent à la racine, dans un navigateur, sans compte ni application installée.
-app.use(publicRoutes);
+// Pages publiques : mises en ligne seulement une fois leurs textes rendus exacts. La relecture du
+// 19 septembre 2026 y a trouvé des affirmations contraires au code (ce que voient les
+// collaborateurs, GPS, adresses conservées, chauffeurs). Mettre PUBLIC_PAGES=on dans Railway, ou
+// retirer cette condition, une fois les textes corrigés et vérifiés.
+if (process.env.PUBLIC_PAGES === "on") app.use(publicRoutes);
 app.use("/api/auth", authRoutes);
 app.use("/api/rides", rideRoutes);
 app.use("/api/messages", messageRoutes);
@@ -67,6 +84,10 @@ app.use("/api/pricing", pricingRoutes);
 app.use("/api/suggestions", suggestionRoutes);
 ensureDefaultDestinations().catch((e) => console.error("Destinations par défaut :", e.message));
 ensureDefaultPriceZones().catch((e) => console.error("Grille tarifaire par défaut :", e.message));
+
+// Après toutes les routes : une erreur imprévue donne une réponse 500 au lieu d'arrêter le serveur.
+installErrorHandler(app);
+installProcessGuards();
 
 const server = http.createServer(app);
 const io = new Server(server, { cors: { origin: corsOrigin } });

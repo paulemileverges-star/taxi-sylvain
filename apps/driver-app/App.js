@@ -44,7 +44,20 @@ export default function App() {
   useEffect(() => {
     (async () => {
       const raw = await AsyncStorage.getItem("ts_user");
-      if (raw) setUser(JSON.parse(raw));
+      if (!raw) return;
+      setUser(JSON.parse(raw));
+      // Le compte existe-t-il encore ? S'il a été supprimé par Taxi Sylvain, on ferme la session
+      // au lieu de laisser l'application échouer sur chaque écran.
+      try {
+        const fresh = await api.me();
+        await AsyncStorage.setItem("ts_user", JSON.stringify(fresh));
+        setUser(fresh);
+      } catch (e) {
+        if (e.status === 401 || e.status === 404) {
+          await clearSession();
+          setUser(null);
+        }
+      }
     })();
   }, []);
 
@@ -129,11 +142,13 @@ export default function App() {
     return () => sub.remove();
   }, []);
 
-  const logout = async () => {
+  // server: false après une suppression de compte : le compte n'existe plus, il n'y a rien à
+  // retirer côté serveur (l'ancien appel faisait même planter le serveur).
+  const logout = async ({ server = true } = {}) => {
     setTrackedRide(null);
     await stopTrackingLocation();
     resetSocket();
-    await clearPushToken();
+    if (server) await clearPushToken();
     await clearSession();
     setUser(null);
     setScreen("home");
@@ -205,10 +220,9 @@ export default function App() {
       {screen === "reports" && <ReportsScreen onBack={() => setScreen("home")} />}
       {screen === "groups" && <GroupsScreen user={user} onBack={() => setScreen("home")} unread={unread.groups.byConversation} onRead={refreshUnread} />}
       {screen === "changePassword" && <ChangePasswordScreen onBack={() => setScreen("home")} />}
-      {/* Après la suppression, le jeton ne vaut plus rien : logout() efface quand même la session
-          locale, car clearPushToken() avale l'échec de son appel serveur. */}
+      {/* Après la suppression, le compte n'existe plus : déconnexion locale, sans appel au serveur. */}
       {screen === "deleteAccount" && (
-        <DeleteAccountScreen onBack={() => setScreen("home")} onDeleted={logout} />
+        <DeleteAccountScreen onBack={() => setScreen("home")} onDeleted={() => logout({ server: false })} />
       )}
       {screen === "notifications" && (
         <NotificationSettingsScreen

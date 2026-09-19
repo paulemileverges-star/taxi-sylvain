@@ -1,4 +1,5 @@
 import jwt from "jsonwebtoken";
+import { prisma } from "../lib/prisma.js";
 import { markDriverOnline, markDriverOffline } from "../lib/onlineDrivers.js";
 import { setDriverLocation, getAllDriverLocations } from "../lib/driverLocations.js";
 
@@ -9,11 +10,17 @@ import { setDriverLocation, getAllDriverLocations } from "../lib/driverLocations
 // - CLIENT rejoint "client:{id}" (personnel — messages directs, groupes de discussion)
 // - Tout le monde peut rejoindre "ride:{id}" quand une course est ouverte à l'écran
 export function registerSocketHandlers(io) {
-  io.use((socket, next) => {
+  // Même règle que requireAuth : le compte doit encore exister, et son rôle vient de la base.
+  io.use(async (socket, next) => {
     try {
       const token = socket.handshake.auth?.token;
       const payload = jwt.verify(token, process.env.JWT_SECRET);
-      socket.user = payload;
+      const user = await prisma.user.findUnique({
+        where: { id: payload.id },
+        select: { id: true, role: true, name: true, permissions: true },
+      });
+      if (!user) return next(new Error("unauthorized"));
+      socket.user = { id: user.id, role: user.role, name: user.name, permissions: user.permissions || [] };
       next();
     } catch {
       next(new Error("unauthorized"));
@@ -42,7 +49,19 @@ export function registerSocketHandlers(io) {
       });
     }
 
-    socket.on("ride:watch", (rideId) => socket.join(`ride:${rideId}`));
+    // Suivi d'une course (position GPS, messages, étapes) : réservé à son client, à son chauffeur
+    // et à l'équipe Taxi Sylvain. Avant le 19 septembre 2026, n'importe quel compte connecté
+    // pouvait s'abonner à n'importe quelle course.
+    socket.on("ride:watch", async (rideId) => {
+      try {
+        if (typeof rideId !== "string" || !rideId) return;
+        if (role === "DISPATCH" || role === "ADMIN") return socket.join(`ride:${rideId}`);
+        const ride = await prisma.ride.findUnique({ where: { id: rideId }, select: { clientId: true, driverId: true } });
+        if (ride && (ride.clientId === id || ride.driverId === id)) socket.join(`ride:${rideId}`);
+      } catch (e) {
+        console.error("Abonnement au suivi de course impossible :", e.message);
+      }
+    });
     socket.on("ride:unwatch", (rideId) => socket.leave(`ride:${rideId}`));
 
     // Position GPS d'un chauffeur en route (besoin: suivi en direct sur carte pour le Dispatch,

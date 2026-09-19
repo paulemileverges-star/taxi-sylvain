@@ -1,5 +1,4 @@
 import { Router } from "express";
-import jwt from "jsonwebtoken";
 import { prisma } from "../lib/prisma.js";
 import { requireAuth, requireRole, requirePermission } from "../middleware/auth.js";
 import { generateWeeklyReports, previousWeekRange, mondayOf } from "../jobs/weeklyReport.js";
@@ -10,15 +9,12 @@ const router = Router();
 // Accepte le token soit dans l'en-tête Authorization, soit en query (?token=...) — nécessaire
 // pour un lien de téléchargement direct (ex. ouvert depuis l'app Chauffeur via Linking.openURL).
 function authFromHeaderOrQuery(req, res, next) {
-  const header = req.headers.authorization || "";
-  const token = header.startsWith("Bearer ") ? header.slice(7) : req.query.token;
-  if (!token) return res.status(401).json({ error: "Authentification requise." });
-  try {
-    req.user = jwt.verify(token, process.env.JWT_SECRET);
-    next();
-  } catch {
-    return res.status(401).json({ error: "Session invalide ou expirée." });
+  // Même contrôle que partout ailleurs (compte encore existant, rôle à jour) : le jeton passé dans
+  // l'adresse est simplement recopié dans l'en-tête avant l'appel à requireAuth.
+  if (!req.headers.authorization && typeof req.query.token === "string") {
+    req.headers.authorization = `Bearer ${req.query.token}`;
   }
+  return requireAuth(req, res, next);
 }
 
 router.use((req, res, next) => (req.path === "/export" ? authFromHeaderOrQuery(req, res, next) : requireAuth(req, res, next)));

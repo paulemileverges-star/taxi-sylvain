@@ -1,11 +1,12 @@
 import { Router } from "express";
 import bcrypt from "bcryptjs";
 import multer from "multer";
+import fs from "fs";
 import path from "path";
 import { prisma } from "../lib/prisma.js";
 import { uploadsDir } from "../lib/uploads.js";
 import { requireAuth, requirePermission } from "../middleware/auth.js";
-import { deleteUserCascade } from "../lib/deleteUser.js";
+import { deleteUserCascade, announceDeletion } from "../lib/deleteUser.js";
 import { getOnlineDriverIds } from "../lib/onlineDrivers.js";
 import { streamListPdf, streamListXlsx } from "../lib/exportReport.js";
 import { generateTempPassword } from "../lib/placeholderEmail.js";
@@ -39,17 +40,64 @@ export async function createDriverAccount({ name, email, phone, password, carMod
   return { driver, tempPassword };
 }
 
+// Envoi des photos, verrouillé après la relecture du 19 septembre 2026. Avant : l'extension venait
+// du nom du fichier envoyé (un « .html » passait), l'identifiant de l'adresse entrait tel quel dans
+// le nom du fichier (« ..%2F » permettait d'écrire hors du dossier), et le fichier était écrit
+// AVANT la vérification des droits. Désormais : identifiant vérifié, droits vérifiés avant toute
+// écriture, nom de fichier fabriqué par le serveur avec une extension d'image choisie par lui.
+const PHOTO_TYPES = { "image/jpeg": ".jpg", "image/png": ".png", "image/webp": ".webp" };
+const PHOTO_FIELDS = ["photo", "carPhoto"];
+
+// Identifiant de compte (cuid) : lettres et chiffres seulement.
+export function isSafeId(id) {
+  return typeof id === "string" && /^[a-z0-9]{8,40}$/i.test(id);
+}
+
+// Nom du fichier enregistré, ou null si l'envoi doit être refusé.
+export function photoFileName(id, field, mimetype, now = Date.now()) {
+  const ext = PHOTO_TYPES[mimetype];
+  if (!ext || !isSafeId(id) || !PHOTO_FIELDS.includes(field)) return null;
+  return `${id}-${field}-${now}${ext}`;
+}
+
 const storage = multer.diskStorage({
   destination: (req, file, cb) => cb(null, uploadsDir),
   filename: (req, file, cb) => {
-    cb(null, `${req.params.id}-${file.fieldname}-${Date.now()}${path.extname(file.originalname)}`);
+    const name = photoFileName(req.params.id, file.fieldname, file.mimetype);
+    if (!name) return cb(new Error("Fichier refusé."));
+    cb(null, name);
   },
 });
 const upload = multer({
   storage,
   limits: { fileSize: 15 * 1024 * 1024 },
-  fileFilter: (req, file, cb) => cb(null, /^image\//.test(file.mimetype)),
+  fileFilter: (req, file, cb) => cb(null, Boolean(PHOTO_TYPES[file.mimetype]) && PHOTO_FIELDS.includes(file.fieldname)),
 });
+
+// Vérifié AVANT que multer n'écrive quoi que ce soit sur le disque.
+async function canEditPhotos(req, res, next) {
+  const { id } = req.params;
+  if (!isSafeId(id)) return res.status(404).json({ error: "Chauffeur introuvable." });
+  const isAdminWithAccess = req.user.role === "ADMIN" && req.user.permissions?.includes("drivers");
+  if (req.user.role !== "DISPATCH" && !isAdminWithAccess && req.user.id !== id) {
+    return res.status(403).json({ error: "Accès refusé." });
+  }
+  const target = await prisma.user.findUnique({ where: { id }, select: { role: true, photoUrl: true, carPhotoUrl: true } });
+  if (!target || target.role !== "DRIVER") return res.status(404).json({ error: "Chauffeur introuvable." });
+  req.previousPhotos = target;
+  next();
+}
+
+// Efface une ancienne photo remplacée (fichier servi publiquement). Jamais bloquant.
+async function removeReplacedPhoto(url) {
+  const name = typeof url === "string" ? path.basename(url) : "";
+  if (!name) return;
+  try {
+    await fs.promises.unlink(path.join(uploadsDir, name));
+  } catch (e) {
+    if (e.code !== "ENOENT") console.error(`Ancienne photo non effacée (${name}) :`, e.message);
+  }
+}
 
 const router = Router();
 router.use(requireAuth);
@@ -73,13 +121,14 @@ router.post("/", requirePermission("drivers"), async (req, res) => {
   }
 });
 
+// Suppression d'un chauffeur depuis la console. Seul un compte CHAUFFEUR peut être visé ici :
+// cette route ne doit jamais pouvoir effacer le compte Dispatch ou un administrateur.
 router.delete("/:id", requirePermission("drivers"), async (req, res) => {
-  try {
-    await deleteUserCascade(req.params.id);
-    res.status(204).end();
-  } catch (e) {
-    res.status(404).json({ error: "Chauffeur introuvable." });
-  }
+  const target = await prisma.user.findUnique({ where: { id: String(req.params.id) }, select: { role: true, name: true } });
+  if (!target || target.role !== "DRIVER") return res.status(404).json({ error: "Chauffeur introuvable." });
+  const result = await deleteUserCascade(req.params.id);
+  announceDeletion(req.app.get("io"), result, target.name);
+  res.status(204).end();
 });
 
 // Import en masse depuis un fichier .xlsx ou .csv (besoin #2) — colonnes reconnues : Nom,
@@ -176,14 +225,10 @@ router.get("/export", requirePermission("drivers"), async (req, res) => {
 // les siennes, le dispatch peut mettre à jour celles de n'importe quel chauffeur.
 router.post(
   "/:id/photos",
+  canEditPhotos,
   upload.fields([{ name: "photo", maxCount: 1 }, { name: "carPhoto", maxCount: 1 }]),
   async (req, res) => {
     const { id } = req.params;
-    const isAdminWithAccess = req.user.role === "ADMIN" && req.user.permissions?.includes("drivers");
-    if (req.user.role !== "DISPATCH" && !isAdminWithAccess && req.user.id !== id) {
-      return res.status(403).json({ error: "Accès refusé." });
-    }
-
     const data = {};
     if (req.files?.photo?.[0]) data.photoUrl = `/uploads/${req.files.photo[0].filename}`;
     if (req.files?.carPhoto?.[0]) data.carPhotoUrl = `/uploads/${req.files.carPhoto[0].filename}`;
@@ -194,6 +239,9 @@ router.post(
       data,
       select: { id: true, name: true, photoUrl: true, carPhotoUrl: true },
     });
+    // Les anciennes versions ne restent pas en ligne.
+    if (data.photoUrl) await removeReplacedPhoto(req.previousPhotos?.photoUrl);
+    if (data.carPhotoUrl) await removeReplacedPhoto(req.previousPhotos?.carPhotoUrl);
     res.json(driver);
   }
 );

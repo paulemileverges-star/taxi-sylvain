@@ -7,8 +7,13 @@
 // client ou son chauffeur en cours de route. Tant qu'il en reste une, la suppression est refusée.
 export const RIDE_STATUSES_BLOQUANTS = ["ACCEPTED", "EN_ROUTE", "STARTED"];
 
-// Seuls les clients et les chauffeurs gèrent eux-mêmes la suppression de leur compte.
-const ROLES_AUTORISES = ["CLIENT", "DRIVER"];
+// Seuls les clients suppriment eux-mêmes leur compte pour l'instant.
+//
+// Chauffeurs : supprimer le compte efface aussi les récapitulatifs de la redevance de 10 % qu'il
+// doit à Taxi Sylvain (relecture du 19 septembre 2026). En attendant la décision du propriétaire
+// (anonymiser le compte plutôt que l'effacer, ou exiger que la redevance soit réglée), la demande
+// passe par Taxi Sylvain, qui supprime le compte depuis la console une fois les comptes réglés.
+const ROLES_AUTORISES = ["CLIENT"];
 
 // Renvoie null si ce rôle a le droit de supprimer son compte, sinon le message français à
 // afficher à la personne.
@@ -19,6 +24,10 @@ export function motifDeRefus(role) {
   // l'entreprise (plus de tableau des courses, plus d'attribution de chauffeur).
   if (role === "DISPATCH") {
     return "Le compte Dispatch ne peut pas être supprimé : c'est le compte principal de Taxi Sylvain.";
+  }
+
+  if (role === "DRIVER") {
+    return "Pour supprimer un compte chauffeur, appelez Taxi Sylvain au 438-499-1120 : la redevance de vos courses doit d'abord être réglée. Votre compte sera ensuite supprimé.";
   }
 
   // Un compte administrateur est créé par Taxi Sylvain avec des permissions choisies : c'est le

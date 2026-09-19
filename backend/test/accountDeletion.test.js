@@ -17,8 +17,11 @@ test("un client peut supprimer son compte", () => {
   assert.equal(motifDeRefus("CLIENT"), null);
 });
 
-test("un chauffeur peut supprimer son compte", () => {
-  assert.equal(motifDeRefus("DRIVER"), null);
+test("un chauffeur est renvoyé vers Taxi Sylvain, pour ne pas effacer la redevance qu'il doit", () => {
+  const motif = motifDeRefus("DRIVER");
+  assert.ok(motif, "la suppression d'un chauffeur ne doit pas être faite seul pour l'instant");
+  assert.match(motif, /438-499-1120/);
+  assert.match(motif, /redevance/);
 });
 
 test("le compte Dispatch ne peut jamais être supprimé, avec un message clair", () => {

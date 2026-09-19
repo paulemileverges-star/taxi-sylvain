@@ -2,7 +2,14 @@
 // saisis librement dans les fiches doivent être convertis, sinon l'appel échoue sans explication.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { getOrCreateCallSession, toE164 } from "../src/lib/twilioProxy.js";
+import { callAllowedForStatus, getOrCreateCallSession, toE164 } from "../src/lib/twilioProxy.js";
+
+test("l'appel masqué n'est possible que pour une course confirmée ou en cours", () => {
+  for (const s of ["ACCEPTED", "EN_ROUTE", "STARTED"]) assert.equal(callAllowedForStatus(s), true, s);
+  for (const s of ["REQUESTED", "BROADCAST", "COMPLETED", "CANCELLED", "REFUSED", undefined]) {
+    assert.equal(callAllowedForStatus(s), false, `appel permis à tort pour ${s}`);
+  }
+});
 
 test("les formats de saisie courants au Québec deviennent un numéro international", () => {
   for (const saisie of [
@@ -52,6 +59,8 @@ test("un numéro invalide donne un message clair, sans révéler le numéro de l
   };
   await assert.rejects(getOrCreateCallSession(ride), (err) => {
     assert.equal(err.status, 400);
+    // Ce code distingue notre message d'une erreur de Twilio, qui a elle aussi un « status ».
+    assert.equal(err.code, "NUMERO_INVALIDE");
     assert.match(err.message, /numéro de téléphone du client/);
     assert.ok(!err.message.includes("9876"), "le message ne doit jamais contenir le numéro");
     return true;

@@ -10,13 +10,28 @@ export function assetUrl(relativePath) {
 
 async function request(path, { method = "GET", body } = {}) {
   const token = await AsyncStorage.getItem("ts_token");
-  const res = await fetch(`${BASE_URL}${path}`, {
-    method,
-    headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) },
-    body: body ? JSON.stringify(body) : undefined,
-  });
+  let res;
+  try {
+    res = await fetch(`${BASE_URL}${path}`, {
+      method,
+      headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+      body: body ? JSON.stringify(body) : undefined,
+    });
+  } catch {
+    // Pas de réponse du tout (téléphone hors ligne, serveur injoignable) : message en français
+    // plutôt que l'erreur technique du navigateur.
+    const err = new Error("Connexion impossible. Vérifiez votre accès Internet et réessayez.");
+    err.status = 0;
+    throw err;
+  }
   const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(data.error || "Erreur réseau");
+  if (!res.ok) {
+    // Le code HTTP accompagne le message : 401 ou 404 sur /auth/me veut dire que le compte n'existe
+    // plus (supprimé), et l'application doit alors fermer la session.
+    const err = new Error(data.error || "Erreur réseau");
+    err.status = res.status;
+    throw err;
+  }
   return data;
 }
 
