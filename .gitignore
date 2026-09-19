@@ -8,3 +8,6 @@ backend/uploads/*
 *.log
 .DS_Store
 .vercel
+google-services.json
+GoogleService-Info.plist
+firebase-service-account.json
