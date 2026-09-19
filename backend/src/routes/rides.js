@@ -388,6 +388,8 @@ router.post("/:id/call", async (req, res) => {
     const { proxyNumber } = await getOrCreateCallSession(ride);
     res.json({ proxyNumber });
   } catch (err) {
+    // Numéro mal saisi dans une fiche : message clair, sans révéler le numéro de l'autre partie.
+    if (err.status === 400) return res.status(400).json({ error: err.message });
     console.error("Erreur Twilio Proxy:", err.message);
     res.status(502).json({ error: "Impossible de créer l'appel masqué pour le moment." });
   }

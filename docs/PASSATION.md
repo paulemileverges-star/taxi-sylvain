@@ -312,7 +312,7 @@ sinon l'application s'affiche mais ne peut plus se connecter. Les APK ne sont pa
 | Expo Starter ou 1er octobre | activer le forfait sur l'équipe `taxisylvains-team` | recompiler les deux APK |
 | Apple Developer | inscription, idéalement comme entreprise avec numéro D-U-N-S | builds iOS, TestFlight |
 | Google Play | compte d'entreprise, 25 USD | fiches des applications |
-| Twilio | compte, numéro, service Proxy | appel masqué |
+| Twilio | **compte créé le 19 septembre** ; reste : passer le compte en payant, acheter un numéro canadien, créer un service Proxy avec ce numéro, puis coller `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN` et `TWILIO_PROXY_SERVICE_SID` dans Railway | mise en ligne du serveur et essai d'un vrai appel |
 | Prix REM | saisir les montants dans la page Tarifs | aucun code à écrire |
 | Plattsburgh | dire comment tarifer ce cas qui dépend du départ | modéliser |
 
@@ -379,6 +379,7 @@ sinon l'application s'affiche mais ne peut plus se connecter. Les APK ne sont pa
 | 19 sept. | Prendre en compte le domaine `taxisylvain.ca` acheté par le propriétaire | **Fait et vérifié en production.** Adresses `dispatch.`, `chauffeur.`, `client.`, `www.` et racine rattachées aux sites, `api.` au serveur, certificats valides ; CORS et liens des courriels mis à jour dans Railway sans redéployer de code ; futurs APK réglés sur `api.taxisylvain.ca`. Le script de vérification contrôle désormais les 8 adresses web et leur autorisation par le serveur |
 | 19 sept. | Firebase : ranger les fichiers et brancher les notifications | **Fichiers rangés et vérifiés** ; trou corrigé : Expo n'emporte pas les fichiers exclus de Git, d'où `app.config.js` qui les lit depuis des variables EAS de type fichier (5 tests). Dépôt de ces variables et de la clé FCM en attente de la connexion au compte Expo |
 | 19 sept. | Sauvegarder le code sur GitHub | **Fait et vérifié** : historique vérifié sans aucun secret avant l'envoi, puis 40 enregistrements identiques sur GitHub et sur le PC |
+| 19 sept. | Préparer l'appel masqué Twilio | **Corrigé avant la mise en service** : les numéros saisis librement (« 514-555-1234 ») sont convertis au format international exigé par Twilio, un numéro invalide donne un message clair sans révéler le numéro de l'autre partie (5 tests). Pas encore en ligne : partira avec la prochaine mise en ligne du serveur |
 
 ---
 
