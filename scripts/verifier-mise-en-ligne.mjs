@@ -137,8 +137,22 @@ async function verifierSite(site) {
   console.log(`${OK} ${site.nom} : ${site.adressePublique.replace("https://", "")} à jour (${fichierPublic}) et autorisé par le serveur.`);
 }
 
+// Pages légales exigées par Google Play, Apple et la Loi 25 : elles doivent toujours répondre.
+async function verifierPagesLegales() {
+  for (const page of ["/confidentialite", "/conditions", "/suppression-compte"]) {
+    const { status, text, error } = await fetchText(`${API_DOMAINE}${page}`);
+    if (status === 200 && /Taxi Sylvain/.test(text)) {
+      console.log(`${OK} Page ${page} : en ligne.`);
+    } else {
+      console.log(`${KO} Page ${page} : absente (${error || `code ${status}`}).`);
+      problemes.push(`Page légale ${page} introuvable : les magasins et la Loi 25 l'exigent.`);
+    }
+  }
+}
+
 console.log("Vérification de la version en ligne de Taxi Sylvain\n");
 await verifierApi();
+await verifierPagesLegales();
 for (const site of SITES) await verifierSite(site);
 
 // Contrôle inverse : une adresse inconnue doit toujours être refusée par le serveur.
