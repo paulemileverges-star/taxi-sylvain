@@ -304,7 +304,7 @@ sinon l'application s'affiche mais ne peut plus se connecter. Les APK ne sont pa
 
 | Élément | Ce qu'il doit faire | Ce qui se fait ensuite |
 |---|---|---|
-| GitHub | créer un compte et un dépôt privé | pousser le code : **aujourd'hui il n'existe que sur son PC** |
+| GitHub | **fait le 19 septembre** : dépôt privé `paulemileverges-star/taxi-sylvain`, branche `master` suivie par `origin` | envoyer chaque enregistrement avec `git push` ; l'écrasement forcé est interdit dans `.claude/settings.local.json` |
 | Nom de domaine | **fait le 19 septembre : `taxisylvain.ca`**, rattaché aux trois sites et à l'API | DNS pour Brevo et courriel pro exigé par Apple, dès l'ouverture de ces comptes |
 | Numéro D-U-N-S | **demande envoyée le 19 septembre**, confirmation attendue de Dun & Bradstreet | comptes d'entreprise Google Play et Apple |
 | Brevo | créer le compte, vérifier le domaine, mettre `BREVO_API_KEY` et `MAIL_FROM` dans Railway | tester avec le bouton de la page Administrateurs |
@@ -378,6 +378,7 @@ sinon l'application s'affiche mais ne peut plus se connecter. Les APK ne sont pa
 | 19 sept. | Revue complète du projet demandée par le propriétaire, à partir de ses textes d'origine : chaque demande vérifiée dans le code, puis contestée par un second passage | En cours — voir `docs/ETAT-DU-PROJET.md` |
 | 19 sept. | Prendre en compte le domaine `taxisylvain.ca` acheté par le propriétaire | **Fait et vérifié en production.** Adresses `dispatch.`, `chauffeur.`, `client.`, `www.` et racine rattachées aux sites, `api.` au serveur, certificats valides ; CORS et liens des courriels mis à jour dans Railway sans redéployer de code ; futurs APK réglés sur `api.taxisylvain.ca`. Le script de vérification contrôle désormais les 8 adresses web et leur autorisation par le serveur |
 | 19 sept. | Firebase : ranger les fichiers et brancher les notifications | **Fichiers rangés et vérifiés** ; trou corrigé : Expo n'emporte pas les fichiers exclus de Git, d'où `app.config.js` qui les lit depuis des variables EAS de type fichier (5 tests). Dépôt de ces variables et de la clé FCM en attente de la connexion au compte Expo |
+| 19 sept. | Sauvegarder le code sur GitHub | **Fait et vérifié** : historique vérifié sans aucun secret avant l'envoi, puis 40 enregistrements identiques sur GitHub et sur le PC |
 
 ---
 
