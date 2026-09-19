@@ -4,16 +4,24 @@
 // PostgreSQL, et elles sont écrites une seule fois pour la route de l'app et pour la route web.
 
 // Une course dans ces états est commencée ou sur le point de l'être : elle ne peut pas perdre son
-// client ou son chauffeur en cours de route. Tant qu'il en reste une, la suppression est refusée.
+// client en cours de route. Tant qu'il en reste une, le client ne peut pas supprimer son compte.
 export const RIDE_STATUSES_BLOQUANTS = ["ACCEPTED", "EN_ROUTE", "STARTED"];
 
-// Seuls les clients suppriment eux-mêmes leur compte pour l'instant.
+// Clients et chauffeurs suppriment eux-mêmes leur compte.
 //
-// Chauffeurs : supprimer le compte efface aussi les récapitulatifs de la redevance de 10 % qu'il
-// doit à Taxi Sylvain (relecture du 19 septembre 2026). En attendant la décision du propriétaire
-// (anonymiser le compte plutôt que l'effacer, ou exiger que la redevance soit réglée), la demande
-// passe par Taxi Sylvain, qui supprime le compte depuis la console une fois les comptes réglés.
-const ROLES_AUTORISES = ["CLIENT"];
+// Chauffeurs : décision du propriétaire du 19 septembre 2026, la suppression est automatique,
+// sans aucune vérification préalable (ni redevance réglée, ni course en cours). Conséquence
+// acceptée : ses récapitulatifs hebdomadaires sont effacés avec le compte, et ses courses ne sont
+// plus reliées à son nom.
+const ROLES_AUTORISES = ["CLIENT", "DRIVER"];
+
+// Une course en cours bloque-t-elle la suppression faite par la personne elle-même ?
+// - Client : oui. Un chauffeur est peut-être déjà en route pour le prendre.
+// - Chauffeur : non (décision du propriétaire). Ses courses non terminées repartent chez le
+//   Dispatch, qui reçoit une alerte pour les confier à un autre chauffeur.
+export function courseEnCoursBloque(role) {
+  return role === "CLIENT";
+}
 
 // Renvoie null si ce rôle a le droit de supprimer son compte, sinon le message français à
 // afficher à la personne.
@@ -24,10 +32,6 @@ export function motifDeRefus(role) {
   // l'entreprise (plus de tableau des courses, plus d'attribution de chauffeur).
   if (role === "DISPATCH") {
     return "Le compte Dispatch ne peut pas être supprimé : c'est le compte principal de Taxi Sylvain.";
-  }
-
-  if (role === "DRIVER") {
-    return "Pour supprimer un compte chauffeur, appelez Taxi Sylvain au 438-499-1120 : la redevance de vos courses doit d'abord être réglée. Votre compte sera ensuite supprimé.";
   }
 
   // Un compte administrateur est créé par Taxi Sylvain avec des permissions choisies : c'est le

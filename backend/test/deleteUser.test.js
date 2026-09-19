@@ -144,3 +144,70 @@ test("seules les photos du compte supprimé sont effacées du disque", async () 
   assert.equal(await removeUserUploads("", dir), 0);
   await fs.rm(dir, { recursive: true, force: true });
 });
+
+// Décision du propriétaire du 19 septembre 2026 : un chauffeur supprime son compte lui-même,
+// automatiquement, sans aucune vérification (ni redevance, ni course en cours).
+const { courseEnCoursBloque } = await import("../src/lib/accountDeletion.js");
+const { announceDeletion, envoyerAnnulationsAgenda } = await import("../src/lib/deleteUser.js");
+
+test("un chauffeur qui supprime son compte n'est jamais bloqué : ses courses repartent chez le Dispatch", async () => {
+  const { db, state } = fakeDb({
+    users: [{ id: "drv3", role: "DRIVER" }],
+    rides: [
+      ride("s1", "STARTED", { driverId: "drv3", clientId: "c1" }),
+      ride("s2", "EN_ROUTE", { driverId: "drv3", clientId: "c2" }),
+      ride("s3", "ACCEPTED", { driverId: "drv3", clientId: "c3" }),
+    ],
+  });
+  const result = await deleteUserCascade("drv3", { db, removeFiles: async () => 0, refuseIfActive: courseEnCoursBloque("DRIVER") });
+  assert.equal(state.users.length, 0, "le compte est supprimé");
+  for (const r of state.rides) {
+    assert.equal(r.status, "REQUESTED", `${r.id} doit repartir en attente d'un chauffeur`);
+    assert.equal(r.driverId, null);
+  }
+  assert.deepEqual(result.aReaffecter.map((r) => r.id).sort(), ["s1", "s2", "s3"]);
+});
+
+test("un client avec une course en cours reste bloqué, lui", async () => {
+  const { db, state } = fakeDb({
+    users: [{ id: "cli3", role: "CLIENT" }],
+    rides: [ride("t1", "ACCEPTED", { clientId: "cli3", driverId: "d1" })],
+  });
+  await assert.rejects(
+    deleteUserCascade("cli3", { db, removeFiles: async () => 0, refuseIfActive: courseEnCoursBloque("CLIENT") }),
+    (e) => e.code === "COURSE_EN_COURS"
+  );
+  assert.equal(state.users.length, 1);
+});
+
+test("les courses retirées ou annulées par une suppression sortent de l'agenda de leur chauffeur", () => {
+  const envois = [];
+  const send = (course, personnes) => envois.push({ id: course.id, personnes });
+  const chauffeur = { id: "d1", name: "Chauffeur", email: "chauffeur@exemple.ca" };
+  envoyerAnnulationsAgenda(
+    {
+      annulees: [{ id: "x1", driver: chauffeur }, { id: "x2", driver: null }],
+      aReaffecter: [{ id: "y1", driver: chauffeur }],
+    },
+    { send }
+  );
+  assert.deepEqual(envois.map((e) => e.id), ["x1", "y1"], "une course sans chauffeur n'envoie rien");
+  for (const e of envois) assert.deepEqual(e.personnes, [{ person: chauffeur, audience: "driver" }]);
+  assert.deepEqual(envoyerAnnulationsAgenda(null, { send }), []);
+});
+
+test("après la suppression d'un chauffeur, le client et le Dispatch voient la course en attente", () => {
+  const emis = [];
+  const salle = (room) => ({
+    emit: (evenement, donnees) => emis.push({ room, evenement, donnees }),
+    disconnectSockets: () => emis.push({ room, evenement: "deconnexion" }),
+    socketsLeave: () => {},
+  });
+  const io = { to: salle, in: salle };
+  announceDeletion(io, { userId: "drv4", role: "DRIVER", annulees: [], aReaffecter: [{ id: "z1", driver: null }] }, "Jean");
+  const vers = (room, evenement) => emis.find((e) => e.room === room && e.evenement === evenement);
+  assert.ok(vers("user:drv4", "deconnexion"), "le chauffeur supprimé est déconnecté");
+  assert.equal(vers("ride:z1", "ride:status")?.donnees.status, "REQUESTED", "le client est prévenu");
+  assert.equal(vers("dispatch", "ride:updated")?.donnees.status, "REQUESTED");
+  assert.match(vers("dispatch", "ride:notification")?.donnees.text, /chauffeur de Jean.*1 course\(s\) à réaffecter/);
+});

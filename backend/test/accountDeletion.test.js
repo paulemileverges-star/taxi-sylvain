@@ -9,6 +9,7 @@ import assert from "node:assert/strict";
 import {
   RIDE_STATUSES_BLOQUANTS,
   courseEnCours,
+  courseEnCoursBloque,
   messageCourseEnCours,
   motifDeRefus,
 } from "../src/lib/accountDeletion.js";
@@ -17,11 +18,14 @@ test("un client peut supprimer son compte", () => {
   assert.equal(motifDeRefus("CLIENT"), null);
 });
 
-test("un chauffeur est renvoyé vers Taxi Sylvain, pour ne pas effacer la redevance qu'il doit", () => {
-  const motif = motifDeRefus("DRIVER");
-  assert.ok(motif, "la suppression d'un chauffeur ne doit pas être faite seul pour l'instant");
-  assert.match(motif, /438-499-1120/);
-  assert.match(motif, /redevance/);
+// Décision du propriétaire du 19 septembre 2026 : suppression automatique, sans vérification.
+test("un chauffeur peut supprimer son compte lui-même", () => {
+  assert.equal(motifDeRefus("DRIVER"), null);
+});
+
+test("une course en cours bloque la suppression d'un client, jamais celle d'un chauffeur", () => {
+  assert.equal(courseEnCoursBloque("CLIENT"), true);
+  assert.equal(courseEnCoursBloque("DRIVER"), false);
 });
 
 test("le compte Dispatch ne peut jamais être supprimé, avec un message clair", () => {

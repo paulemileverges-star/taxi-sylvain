@@ -5,7 +5,7 @@ import { prisma } from "../lib/prisma.js";
 import { requireAuth } from "../middleware/auth.js";
 import { rateLimit } from "../middleware/rateLimit.js";
 import { deleteUserCascade, announceDeletion } from "../lib/deleteUser.js";
-import { motifDeRefus } from "../lib/accountDeletion.js";
+import { motifDeRefus, courseEnCoursBloque } from "../lib/accountDeletion.js";
 
 const router = Router();
 
@@ -161,7 +161,8 @@ router.patch("/notification-prefs", requireAuth, async (req, res) => {
 });
 
 // Parcours commun aux deux routes de suppression (application et page web) pour que les règles ne
-// se dédoublent pas : mot de passe, rôle autorisé, aucune course en cours, puis effacement.
+// se dédoublent pas : mot de passe, rôle autorisé, aucune course en cours (client seulement),
+// puis effacement.
 // « erreurMotDePasse » change selon la route : côté web, il ne doit rien révéler sur le courriel.
 async function supprimerCompte(req, res, user, password, erreurMotDePasse) {
   const valid = await bcrypt.compare(password, user.passwordHash);
@@ -172,8 +173,9 @@ async function supprimerCompte(req, res, user, password, erreurMotDePasse) {
 
   let result;
   try {
-    // La présence d'une course en cours est vérifiée dans la transaction même de la suppression.
-    result = await deleteUserCascade(user.id, { refuseIfActive: true });
+    // Client : la présence d'une course en cours est vérifiée dans la transaction même de la
+    // suppression. Chauffeur : aucune vérification, ses courses repartent chez le Dispatch.
+    result = await deleteUserCascade(user.id, { refuseIfActive: courseEnCoursBloque(user.role) });
   } catch (e) {
     if (e.code === "COURSE_EN_COURS" || e.code === "COMPTE_PROTEGE") return res.status(e.status).json({ error: e.message });
     if (e.code === "COMPTE_INTROUVABLE") return res.status(401).json({ error: erreurMotDePasse });

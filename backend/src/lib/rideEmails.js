@@ -14,7 +14,7 @@ const TZ = "America/Toronto";
 const DRIVER_APP_URL = process.env.DRIVER_APP_URL || "https://taxi-sylvain-driver.vercel.app";
 const CLIENT_APP_URL = process.env.CLIENT_APP_URL || "https://taxi-sylvain-client.vercel.app";
 
-const RIDE_INCLUDE = {
+export const RIDE_INCLUDE = {
   client: { select: { id: true, name: true, email: true, phone: true } },
   driver: { select: { id: true, name: true, email: true, carModel: true, plate: true } },
 };

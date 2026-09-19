@@ -4,6 +4,7 @@ import { prisma } from "./prisma.js";
 import { uploadsDir } from "./uploads.js";
 import { RIDE_STATUSES_BLOQUANTS, messageCourseEnCours } from "./accountDeletion.js";
 import { clearDriverLocation } from "./driverLocations.js";
+import { RIDE_INCLUDE, sendRideCancellation } from "./rideEmails.js";
 
 // Courses pas encore terminées, et courses déjà confiées à un chauffeur.
 const NON_TERMINEES = ["REQUESTED", "BROADCAST", "ACCEPTED", "EN_ROUTE", "STARTED"];
@@ -71,9 +72,11 @@ export async function deleteUserCascade(userId, { db = prisma, removeFiles = rem
       if (enCours) throw erreur("COURSE_EN_COURS", messageCourseEnCours(), 409);
     }
 
+    // Courses lues avec leur client et leur chauffeur : il faut encore leurs coordonnées après la
+    // suppression pour retirer la course de l'agenda du chauffeur (voir envoyerAnnulationsAgenda).
     const annulees = await tx.ride.findMany({
       where: { clientId: userId, status: { in: NON_TERMINEES } },
-      select: { id: true, driverId: true },
+      include: RIDE_INCLUDE,
     });
     if (annulees.length > 0) {
       await tx.ride.updateMany({
@@ -84,7 +87,7 @@ export async function deleteUserCascade(userId, { db = prisma, removeFiles = rem
 
     const aReaffecter = await tx.ride.findMany({
       where: { driverId: userId, status: { in: AFFECTEES } },
-      select: { id: true },
+      include: RIDE_INCLUDE,
     });
     if (aReaffecter.length > 0) {
       await tx.ride.updateMany({
@@ -121,10 +124,23 @@ export async function deleteUserCascade(userId, { db = prisma, removeFiles = rem
   return result;
 }
 
-// Prévient la console Dispatch et les chauffeurs des courses touchées par une suppression, pour
-// qu'aucune liste n'affiche une course annulée ou sans chauffeur. Jamais bloquant.
+// Agendas : une course annulée par la suppression d'un client disparaît de l'agenda de son
+// chauffeur ; un chauffeur supprimé voit disparaître de son agenda les courses qu'on lui retire
+// (elles portent le nom et l'adresse des clients). Même règle que quand le Dispatch retire un
+// chauffeur d'une course. Jamais bloquant : sendRideCancellation n'échoue jamais.
+export function envoyerAnnulationsAgenda(result, { send = sendRideCancellation } = {}) {
+  const courses = [...(result?.annulees || []), ...(result?.aReaffecter || [])];
+  return courses
+    .filter((ride) => ride?.driver)
+    .map((ride) => send(ride, [{ person: ride.driver, audience: "driver" }]));
+}
+
+// Prévient la console Dispatch, les chauffeurs et les clients des courses touchées par une
+// suppression, pour qu'aucune liste n'affiche une course annulée ou sans chauffeur. Jamais bloquant.
 export function announceDeletion(io, result, nom) {
-  if (!io || !result) return;
+  if (!result) return;
+  envoyerAnnulationsAgenda(result);
+  if (!io) return;
   try {
     // Le compte n'existe plus : ses connexions en temps réel encore ouvertes sont coupées.
     if (result.userId) io.in(`user:${result.userId}`).disconnectSockets(true);
@@ -143,6 +159,8 @@ export function announceDeletion(io, result, nom) {
       io.to("dispatch").emit("ride:updated", { id: ride.id, status: "CANCELLED" });
     }
     for (const ride of result.aReaffecter) {
+      // Le client suit peut-être sa course : son écran repasse « en attente d'un chauffeur ».
+      io.to(`ride:${ride.id}`).emit("ride:status", { id: ride.id, status: "REQUESTED", driverId: null });
       io.to("dispatch").emit("ride:updated", { id: ride.id, status: "REQUESTED", driverId: null });
     }
     const total = result.annulees.length + result.aReaffecter.length;
