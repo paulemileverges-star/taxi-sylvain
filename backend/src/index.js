@@ -63,11 +63,10 @@ app.use(
 app.get("/health", (req, res) => res.json({ ok: true }));
 // Pages publiques (suppression de compte, confidentialité, conditions) exigées par Google Play et
 // Apple : elles s'ouvrent à la racine, dans un navigateur, sans compte ni application installée.
-// Pages publiques : mises en ligne seulement une fois leurs textes rendus exacts. La relecture du
-// 19 septembre 2026 y a trouvé des affirmations contraires au code (ce que voient les
-// collaborateurs, GPS, adresses conservées, chauffeurs). Mettre PUBLIC_PAGES=on dans Railway, ou
-// retirer cette condition, une fois les textes corrigés et vérifiés.
-if (process.env.PUBLIC_PAGES === "on") app.use(publicRoutes);
+// Pages publiques (suppression de compte, confidentialité, conditions) exigées par Google Play,
+// Apple et la Loi 25. Textes réécrits le 19 septembre 2026 pour correspondre au code, puis vérifiés
+// phrase par phrase contre le code par des relecteurs indépendants.
+app.use(publicRoutes);
 app.use("/api/auth", authRoutes);
 app.use("/api/rides", rideRoutes);
 app.use("/api/messages", messageRoutes);

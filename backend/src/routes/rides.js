@@ -204,6 +204,7 @@ router.post("/:id/assign", requirePermission("courses"), async (req, res) => {
     sendRideCancellation(previous, [{ person: previous.driver, audience: "driver" }]);
   }
   if (driverChanged && driverId) sendRideConfirmation(ride.id);
+  if (driverChanged && previous?.driverId) leaveRideRoom(req, previous.driverId, ride.id);
 
   if (driverId) {
     broadcast(req, `driver:${driverId}`, "ride:assigned", ride);
@@ -227,10 +228,13 @@ router.post("/:id/assign", requirePermission("courses"), async (req, res) => {
 
 // Diffuser une course de dernière minute à tous les chauffeurs
 router.post("/:id/broadcast", requirePermission("courses"), async (req, res) => {
+  const before = await prisma.ride.findUnique({ where: { id: req.params.id }, select: { driverId: true } });
+  if (!before) return res.status(404).json({ error: "Course introuvable." });
   const ride = await prisma.ride.update({
     where: { id: req.params.id },
     data: { status: "BROADCAST", driverId: null },
   });
+  if (before.driverId) leaveRideRoom(req, before.driverId, ride.id);
   broadcast(req, "drivers", "ride:broadcast", ride);
   notifyAllDrivers({
     title: "Course de dernière minute",
@@ -336,6 +340,7 @@ router.post("/:id/status", requireRole("DRIVER"), async (req, res) => {
   if (status === "CANCELLED" && previous?.driver) {
     sendRideCancellation(previous, [{ person: previous.driver, audience: "driver" }]);
   }
+  if (status === "CANCELLED") leaveRideRoom(req, req.user.id, ride.id);
 
   const labels = {
     EN_ROUTE: `${req.user.name} est en route pour récupérer le client.`,
@@ -469,6 +474,8 @@ router.delete("/:id", requirePermission("courses"), async (req, res) => {
       await tx.rating.deleteMany({ where: { rideId: req.params.id } });
       await tx.ride.delete({ where: { id: req.params.id } });
     });
+    // La course n'existe plus : plus personne ne reste abonné à son suivi.
+    req.app.get("io")?.socketsLeave(`ride:${req.params.id}`);
     if (previous) {
       sendRideCancellation(previous, [
         previous.driver ? { person: previous.driver, audience: "driver" } : null,
@@ -487,6 +494,14 @@ function sanitizeRide(ride, requester) {
   if (out.client) out.client = { id: out.client.id, name: out.client.name };
   if (out.driver) out.driver = { id: out.driver.id, name: out.driver.name, carModel: out.driver.carModel, plate: out.driver.plate, ratingAvg: out.driver.ratingAvg, photoUrl: out.driver.photoUrl, carPhotoUrl: out.driver.carPhotoUrl };
   return out;
+}
+
+// Retire toutes les connexions d'un compte du suivi d'une course : position, messages et étapes.
+// Sans cela, un chauffeur à qui la course était retirée continuait de recevoir la discussion
+// entre le client et le nouveau chauffeur (relecture du 19 septembre 2026).
+function leaveRideRoom(req, userId, rideId) {
+  const io = req.app.get("io");
+  if (io && userId) io.in(`user:${userId}`).socketsLeave(`ride:${rideId}`);
 }
 
 function broadcast(req, room, event, payload) {

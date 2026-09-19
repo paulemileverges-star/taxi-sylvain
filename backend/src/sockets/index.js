@@ -35,6 +35,9 @@ export function registerSocketHandlers(io) {
 
   io.on("connection", (socket) => {
     const { role, id } = socket.user;
+    // Salle propre à chaque compte, quel que soit son rôle : permet de retirer toutes ses
+    // connexions d'un suivi de course, ou de les couper quand le compte est supprimé.
+    socket.join(`user:${id}`);
     // Les admins (collaborateurs) reçoivent les mêmes évènements temps réel que le Dispatch.
     if (role === "DISPATCH" || role === "ADMIN") {
       socket.join("dispatch");

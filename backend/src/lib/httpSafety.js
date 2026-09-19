@@ -24,7 +24,9 @@ export function installErrorHandler(app) {
       return res.status(400).json({ error: message });
     }
 
-    console.error(`Erreur non traitée sur ${req.method} ${req.originalUrl} :`, err);
+    // Chemin sans les paramètres : l'adresse de téléchargement des récapitulatifs contient le jeton
+    // de connexion (?token=...), qui ne doit jamais se retrouver dans les journaux.
+    console.error(`Erreur non traitée sur ${req.method} ${req.baseUrl || ""}${req.path} :`, err);
     res.status(500).json({ error: "Erreur interne du serveur. Réessayez dans un instant." });
   });
 }

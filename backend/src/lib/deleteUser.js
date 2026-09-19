@@ -3,6 +3,7 @@ import path from "path";
 import { prisma } from "./prisma.js";
 import { uploadsDir } from "./uploads.js";
 import { RIDE_STATUSES_BLOQUANTS, messageCourseEnCours } from "./accountDeletion.js";
+import { clearDriverLocation } from "./driverLocations.js";
 
 // Courses pas encore terminées, et courses déjà confiées à un chauffeur.
 const NON_TERMINEES = ["REQUESTED", "BROADCAST", "ACCEPTED", "EN_ROUTE", "STARTED"];
@@ -112,7 +113,7 @@ export async function deleteUserCascade(userId, { db = prisma, removeFiles = rem
     await tx.ride.updateMany({ where: { driverId: userId }, data: { driverId: null } });
 
     await tx.user.delete({ where: { id: userId } });
-    return { role: user.role, annulees, aReaffecter };
+    return { userId, role: user.role, annulees, aReaffecter };
   });
 
   // Après la transaction seulement : un fichier effacé ne peut pas être « annulé » avec elle.
@@ -125,9 +126,19 @@ export async function deleteUserCascade(userId, { db = prisma, removeFiles = rem
 export function announceDeletion(io, result, nom) {
   if (!io || !result) return;
   try {
+    // Le compte n'existe plus : ses connexions en temps réel encore ouvertes sont coupées.
+    if (result.userId) io.in(`user:${result.userId}`).disconnectSockets(true);
+    if (result.role === "DRIVER" && result.userId && clearDriverLocation(result.userId)) {
+      io.to("dispatch").emit("driver:location:clear", { driverId: result.userId });
+    }
     for (const ride of result.annulees) {
       io.to("drivers").emit("ride:taken", { id: ride.id });
-      if (ride.driverId) io.to(`driver:${ride.driverId}`).emit("ride:taken", { id: ride.id });
+      if (ride.driverId) {
+        io.to(`driver:${ride.driverId}`).emit("ride:taken", { id: ride.id });
+        io.in(`user:${ride.driverId}`).socketsLeave(`ride:${ride.id}`);
+        // Course annulée alors que son chauffeur était en route : il disparaît de la carte.
+        if (clearDriverLocation(ride.driverId)) io.to("dispatch").emit("driver:location:clear", { driverId: ride.driverId });
+      }
       io.to(`ride:${ride.id}`).emit("ride:status", { id: ride.id, status: "CANCELLED" });
       io.to("dispatch").emit("ride:updated", { id: ride.id, status: "CANCELLED" });
     }

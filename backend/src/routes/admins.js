@@ -69,6 +69,8 @@ router.delete("/:id", async (req, res) => {
   const existing = await prisma.user.findUnique({ where: { id: req.params.id } });
   if (!existing || existing.role !== "ADMIN") return res.status(404).json({ error: "Compte admin introuvable." });
   await deleteUserCascade(req.params.id);
+  // Ses connexions en temps réel encore ouvertes (console, carte en direct) sont coupées.
+  req.app.get("io")?.in(`user:${req.params.id}`).disconnectSockets(true);
   res.status(204).end();
 });
 

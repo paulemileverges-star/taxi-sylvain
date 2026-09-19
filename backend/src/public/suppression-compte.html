@@ -42,6 +42,7 @@
     padding: 20px;
     margin-bottom: 16px;
   }
+  .carte-accent { border-color: var(--accent); }
   .carte-alerte { border-color: var(--rouge); }
   ul { margin: 0 0 12px; padding-left: 22px; }
   li { margin-bottom: 8px; }
@@ -98,25 +99,75 @@
   <div class="logo">Taxi <span>Sylvain</span></div>
   <h1>Supprimer mon compte Taxi Sylvain</h1>
   <p class="intro">
-    Cette page vous permet de supprimer vous-même votre compte, sans installer l'application.
-    Prenez une minute pour lire ce qui suit : la suppression ne s'annule pas.
+    Cette page permet à un <strong>client</strong> de supprimer lui-même son compte, sans installer
+    l'application. Prenez une minute pour lire ce qui suit : la suppression ne s'annule pas.
   </p>
+  <p class="doux">Page mise à jour le 19 septembre 2026.</p>
+
+  <section class="carte carte-accent">
+    <h2>Vous êtes chauffeur ?</h2>
+    <p>
+      Un compte chauffeur ne se supprime pas sur cette page, ni dans l'application, pour l'instant.
+      <strong>Appelez Taxi Sylvain</strong> : la redevance de vos courses doit d'abord être réglée,
+      puis Taxi Sylvain supprime votre compte depuis sa console.
+    </p>
+    <p class="appel"><a href="tel:+14384991120">438-499-1120</a></p>
+    <p class="doux">
+      Sont alors effacés votre compte, vos renseignements personnels, vos photos, votre cédule, vos
+      récapitulatifs hebdomadaires, vos messages envoyés, votre fil de discussion avec Taxi Sylvain,
+      vos notations et votre jeton de notification. Les courses qui vous étaient affectées et qui ne
+      sont pas terminées repassent en attente d'un chauffeur. Les courses effectuées restent dans les
+      registres, sans lien avec votre compte, mais avec leurs adresses, leur date, leur numéro de vol
+      et leur montant.
+    </p>
+    <p class="doux">
+      Si votre compte est supprimé pendant les étapes « En route » ou « Course démarrée », votre
+      dernière position, avec votre nom, peut rester en mémoire sur le serveur de Taxi Sylvain
+      jusqu'à son prochain redémarrage. L'application peut aussi continuer à transmettre votre
+      position à Taxi Sylvain et à ses collaborateurs jusqu'à ce qu'elle soit redémarrée ou perde sa
+      connexion.
+    </p>
+  </section>
 
   <section class="carte">
     <h2>Ce qui est supprimé</h2>
     <ul>
       <li>Votre compte et votre mot de passe.</li>
-      <li>Vos renseignements personnels : nom, courriel, téléphone, adresse, photos, notes internes.</li>
-      <li>Les messages que vous avez envoyés.</li>
-      <li>Vos notations.</li>
-      <li>Votre cédule et les groupes que vous avez créés.</li>
-      <li>Les notifications envoyées à votre téléphone.</li>
+      <li>Vos renseignements de compte : nom, courriel, téléphone, adresse de domicile, mémo interne, jeton de notification et préférences de rappel.</li>
+      <li>Les messages que vous avez envoyés, dans les courses et dans les groupes.</li>
+      <li>Les notations, celles que vous avez données et celles que vous avez reçues.</li>
+      <li>Votre participation aux groupes de discussion.</li>
     </ul>
     <h2>Ce qui est conservé</h2>
     <p class="doux">
-      Vos courses passées restent dans les registres de Taxi Sylvain, parce que la comptabilité
-      l'exige (redevance de 10 %). Elles ne sont plus reliées à votre compte : votre nom et vos
-      coordonnées en sont retirés.
+      Vos courses à venir qui n'ont pas encore de chauffeur sont annulées, mais pas effacées. Comme
+      vos courses passées, elles restent dans les registres de Taxi Sylvain. Elles ne sont plus
+      reliées à votre compte, donc plus à votre nom, votre courriel ni votre téléphone. <strong>Mais
+      elles gardent l'adresse de départ et la destination (avec leur position sur la carte), la date
+      et l'heure, le numéro de vol et le montant.</strong> Si une course partait de chez vous, votre
+      adresse y figure donc encore. Le chauffeur qui a fait une course la voit toujours dans son
+      historique.
+    </p>
+    <p class="doux">
+      Taxi Sylvain garde l'historique de ses courses. Le calcul de la redevance de 10 % due par les
+      chauffeurs utilise la date et le montant des courses terminées. L'adresse de départ, la
+      destination (avec leur position sur la carte) et le numéro de vol sont aussi conservés. Aucune
+      durée de conservation n'est encore fixée : ces registres ne sont pas effacés automatiquement
+      pour l'instant. Ils sont conservés chez notre hébergeur Railway, à l'extérieur du Québec, aux
+      États-Unis.
+    </p>
+    <p class="doux">
+      Les messages écrits par les autres personnes restent aussi : dans la discussion d'une course
+      (le chauffeur ou Taxi Sylvain) et dans les groupes de discussion dont vous faisiez partie.
+    </p>
+    <p class="doux">
+      Si une erreur s'est produite pendant votre utilisation, les journaux techniques du serveur,
+      conservés chez Railway, peuvent encore contenir des renseignements tirés de la demande qui a
+      échoué, par exemple un nom, un numéro de téléphone, une adresse, un texte cherché ou le numéro
+      interne d'une course. La suppression de votre compte ne les efface pas. Des copies peuvent
+      aussi rester ailleurs : les listes de clients exportées par Taxi Sylvain avant la suppression,
+      les notifications déjà reçues sur les téléphones et, s'il en existe, les copies de sauvegarde
+      de la base de données chez notre hébergeur Railway.
     </p>
   </section>
 
@@ -131,15 +182,41 @@
   <section class="carte">
     <h2>Quand la suppression est refusée</h2>
     <ul>
-      <li><strong>Vous avez une course en cours.</strong> Terminez ou annulez la course, puis revenez ici. Ça vaut autant pour le client que pour le chauffeur.</li>
-      <li><strong>Vous êtes le compte Dispatch.</strong> Ce compte fait fonctionner l'entreprise : il ne se supprime pas depuis cette page.</li>
-      <li><strong>Vous êtes un compte administrateur.</strong> Ces comptes sont gérés par Taxi Sylvain. Demandez au Dispatch de le faire pour vous.</li>
+      <li><strong>Une de vos courses est acceptée par un chauffeur ou en cours.</strong> Attendez la fin de la course, ou appelez Taxi Sylvain pour la faire annuler, puis revenez ici.</li>
+      <li><strong>Vous êtes chauffeur.</strong> Appelez Taxi Sylvain au 438-499-1120 (voir plus haut).</li>
+      <li><strong>Vous êtes le compte Dispatch.</strong> Ce compte fait fonctionner l'entreprise : il ne peut pas être supprimé.</li>
+      <li><strong>Vous êtes un collaborateur (compte administrateur).</strong> Ces comptes sont gérés par Taxi Sylvain. Demandez au Dispatch de le retirer.</li>
     </ul>
   </section>
 
   <section class="carte">
-    <h2>Supprimer mon compte</h2>
-    <p class="doux">Votre mot de passe actuel est exigé, pour être certain que c'est bien vous.</p>
+    <h2>Vos renseignements : à qui vous adresser</h2>
+    <p>
+      La personne responsable de la protection des renseignements personnels chez Taxi Sylvain est
+      <strong>le propriétaire de Taxi Sylvain</strong>. Vous pouvez la joindre au
+      <a href="tel:+14384991120">438-499-1120</a>.
+    </p>
+    <p>
+      Pour obtenir une copie de vos renseignements ou les faire corriger, faites une demande par
+      écrit à la personne responsable. Taxi Sylvain n'a pas encore d'adresse courriel : appelez le
+      438-499-1120 pour obtenir l'adresse postale où envoyer votre demande.
+    </p>
+    <p>
+      <strong>Si vous voulez une copie, demandez-la avant de supprimer votre compte</strong> : après
+      la suppression, vos courses ne sont plus reliées à votre nom.
+    </p>
+  </section>
+
+  <section class="carte">
+    <h2>Supprimer mon compte client</h2>
+    <p class="doux">Votre courriel et votre mot de passe actuel sont exigés, pour être certain que c'est bien vous.</p>
+    <p class="doux">
+      Votre compte a été créé par Taxi Sylvain (par exemple lors d'une réservation par téléphone) et
+      vous ne connaissez pas le courriel ou le mot de passe du compte ? Appelez le
+      <a href="tel:+14384991120">438-499-1120</a> : Taxi Sylvain supprimera votre compte depuis sa
+      console. Dans ce cas, toutes vos courses non terminées sont annulées, y compris celles qui ont
+      déjà un chauffeur.
+    </p>
 
     <form id="formulaire" novalidate>
       <label for="courriel">Courriel du compte</label>
@@ -162,7 +239,7 @@
   <section class="carte">
     <h2>Deux autres façons de faire</h2>
     <p>
-      Vous pouvez aussi supprimer votre compte directement dans l'application, menu
+      Vous pouvez aussi supprimer votre compte client directement dans l'application, avec le lien
       <strong>Supprimer mon compte</strong>.
     </p>
     <p class="doux">Vous préférez parler à quelqu'un ? Appelez-nous, on s'en occupe.</p>
@@ -233,7 +310,7 @@
       .then(function (resultat) {
         if (resultat.ok && resultat.donnees.ok) {
           formulaire.style.display = "none";
-          afficher("Votre compte a été supprimé. Vos renseignements personnels ont été effacés. Merci d'avoir voyagé avec Taxi Sylvain.", "succes");
+          afficher("Votre compte a été supprimé. Les renseignements de votre compte ont été effacés. Merci d'avoir voyagé avec Taxi Sylvain.", "succes");
           return;
         }
         // On reprend le message français renvoyé par l'API. Jamais de message technique brut :
