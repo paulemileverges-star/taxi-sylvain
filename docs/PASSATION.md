@@ -308,7 +308,7 @@ sinon l'application s'affiche mais ne peut plus se connecter. Les APK ne sont pa
 | Nom de domaine | **fait le 19 septembre : `taxisylvain.ca`**, rattaché aux trois sites et à l'API | DNS pour Brevo et courriel pro exigé par Apple, dès l'ouverture de ces comptes |
 | Numéro D-U-N-S | **demande envoyée le 19 septembre**, confirmation attendue de Dun & Bradstreet | comptes d'entreprise Google Play et Apple |
 | Brevo | créer le compte, vérifier le domaine, mettre `BREVO_API_KEY` et `MAIL_FROM` dans Railway | tester avec le bouton de la page Administrateurs |
-| Firebase | projet avec les apps `com.taxisylvain.driver` et `com.taxisylvain.client` | `google-services.json` dans les apps, clé FCM V1 dans EAS, recompiler |
+| Firebase | **projet `taxi-sylvain` créé le 19 septembre, fichiers rangés** : `google-services.json` et `GoogleService-Info.plist` dans chaque app (exclus de Git), clé de compte de service dans `C:UsersPCcles-taxi-sylvain` | reste : déposer les fichiers dans les variables EAS (`GOOGLE_SERVICES_JSON`, `GOOGLE_SERVICE_INFO_PLIST`, relayées par `app.config.js`) une fois `eas login` fait, et la clé FCM V1 sur expo.dev pour chaque projet, puis recompiler avec accord |
 | Expo Starter ou 1er octobre | activer le forfait sur l'équipe `taxisylvains-team` | recompiler les deux APK |
 | Apple Developer | inscription, idéalement comme entreprise avec numéro D-U-N-S | builds iOS, TestFlight |
 | Google Play | compte d'entreprise, 25 USD | fiches des applications |
@@ -377,6 +377,7 @@ sinon l'application s'affiche mais ne peut plus se connecter. Les APK ne sont pa
 | 19 sept. | Suppression de compte et conformité magasins : suppression dans les deux apps, page web publique de suppression, politique de confidentialité, conditions d'utilisation, dossier Google Play / App Store | **Écrit et vérifié, pas encore en ligne.** 11 tests + scénario complet sur base locale (24 vérifications). Suite passée de 41 à 52 tests |
 | 19 sept. | Revue complète du projet demandée par le propriétaire, à partir de ses textes d'origine : chaque demande vérifiée dans le code, puis contestée par un second passage | En cours — voir `docs/ETAT-DU-PROJET.md` |
 | 19 sept. | Prendre en compte le domaine `taxisylvain.ca` acheté par le propriétaire | **Fait et vérifié en production.** Adresses `dispatch.`, `chauffeur.`, `client.`, `www.` et racine rattachées aux sites, `api.` au serveur, certificats valides ; CORS et liens des courriels mis à jour dans Railway sans redéployer de code ; futurs APK réglés sur `api.taxisylvain.ca`. Le script de vérification contrôle désormais les 8 adresses web et leur autorisation par le serveur |
+| 19 sept. | Firebase : ranger les fichiers et brancher les notifications | **Fichiers rangés et vérifiés** ; trou corrigé : Expo n'emporte pas les fichiers exclus de Git, d'où `app.config.js` qui les lit depuis des variables EAS de type fichier (5 tests). Dépôt de ces variables et de la clé FCM en attente de la connexion au compte Expo |
 
 ---
 

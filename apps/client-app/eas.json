@@ -12,7 +12,8 @@
       "env": {
         "EXPO_PUBLIC_API_URL": "https://api.taxisylvain.ca/api",
         "EXPO_PUBLIC_SOCKET_URL": "https://api.taxisylvain.ca"
-      }
+      },
+      "environment": "preview"
     }
   },
   "submit": {
