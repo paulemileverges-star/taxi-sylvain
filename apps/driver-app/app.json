@@ -29,7 +29,8 @@
           "locationForegroundPermission": "Taxi Sylvain a besoin de votre position pour que le Dispatch et le client puissent suivre votre déplacement pendant une course.",
           "locationAlwaysAndWhenInUsePermission": "Taxi Sylvain partage votre position avec le Dispatch et le client pendant une course, même lorsque vous naviguez avec Waze ou Google Maps.",
           "isAndroidBackgroundLocationEnabled": true,
-          "isAndroidForegroundServiceEnabled": true
+          "isAndroidForegroundServiceEnabled": true,
+          "isIosBackgroundLocationEnabled": true
         }
       ],
       "expo-task-manager",

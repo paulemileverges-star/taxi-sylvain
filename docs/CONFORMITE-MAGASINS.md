@@ -30,9 +30,9 @@ encore.
 
 | Page | Adresse à coller | Adresse de rechange en anglais |
 |---|---|---|
-| Suppression de compte | `https://backend-production-03f0b.up.railway.app/suppression-compte` | `.../delete-account` |
-| Politique de confidentialité | `https://backend-production-03f0b.up.railway.app/confidentialite` | `.../privacy` |
-| Conditions d'utilisation | `https://backend-production-03f0b.up.railway.app/conditions` | `.../terms` |
+| Suppression de compte | `https://api.taxisylvain.ca/suppression-compte` | `.../delete-account` |
+| Politique de confidentialité | `https://api.taxisylvain.ca/confidentialite` | `.../privacy` |
+| Conditions d'utilisation | `https://api.taxisylvain.ca/conditions` | `.../terms` |
 
 Les deux adresses d'une même ligne mènent exactement au même texte. Certains formulaires de Google et
 d'Apple demandent une adresse en anglais : c'est à ça que servent celles de la colonne de droite.
@@ -88,7 +88,7 @@ vérifications d'identité. Commencez par là, avant les captures d'écran.
 Deux endroits, et il faut les deux :
 
 - **Play Console → votre application → Contenu de l'application → Politique de confidentialité.**
-  Collez `https://backend-production-03f0b.up.railway.app/confidentialite`, puis **Enregistrer**.
+  Collez `https://api.taxisylvain.ca/confidentialite`, puis **Enregistrer**.
 - **Play Console → Développer la présence → Fiche Play Store principale**, champ
   **« URL de la politique de confidentialité »** quand il apparaît.
 
@@ -105,7 +105,7 @@ Répondez ceci :
 |---|---|
 | Les utilisateurs peuvent-ils créer un compte dans l'application ? | **Oui** |
 | Offrez-vous un moyen de demander la suppression du compte ? | **Oui** |
-| Adresse web de la suppression de compte | `https://backend-production-03f0b.up.railway.app/suppression-compte` |
+| Adresse web de la suppression de compte | `https://api.taxisylvain.ca/suppression-compte` |
 | La suppression est-elle possible depuis l'application ? | **Oui** — écran d'accueil, lien « Supprimer mon compte » |
 | Certaines données sont-elles conservées après la suppression ? | **Oui** |
 | Lesquelles et pourquoi ? | le texte ci-dessous |
@@ -245,14 +245,13 @@ Aujourd'hui, le projet ne sait produire qu'un **APK d'essai**, en distribution i
 (`apps/driver-app/eas.json` et `apps/client-app/eas.json`, profil `preview`). C'est ce format que
 vous installez à la main sur un téléphone Android.
 
-**Google Play n'accepte pas ce format.** Le magasin exige un *App Bundle* (fichier `.aab`), produit
-par un profil de compilation « production » qui n'existe pas encore dans le projet. Il faut aussi
-une **clé de signature** conservée durablement : si elle est perdue, plus aucune mise à jour de
-l'application ne peut être publiée.
+**Google Play n'accepte pas ce format.** Le magasin exige un *App Bundle* (fichier `.aab`). Le profil
+de compilation `production` qui le produit **existe depuis le 19 septembre** dans les deux `eas.json`
+(avec, pour l'iPhone, les identifiants Apple de la clé App Store Connect). Il faut aussi une **clé de
+signature** conservée durablement : EAS la crée et la garde au premier build `production` ; si elle
+était perdue, plus aucune mise à jour de l'application ne pourrait être publiée.
 
-Ce n'est pas un gros travail, mais **ce n'est pas fait**. Dites-le-moi quand vous voudrez que je le
-prépare. Cela demandera une recompilation des applications, donc votre accord explicite, et le
-forfait Expo actif.
+La compilation elle-même demande votre accord explicite, la connexion à Expo et le forfait Expo actif.
 
 ### 2.7 Les autres cases de « Contenu de l'application »
 
@@ -288,7 +287,7 @@ demandera où se trouve la suppression, écrivez ceci dans les **Notes pour l'ex
 > « Supprimer mon compte ». Le mot de passe est demandé pour confirmer.
 >
 > La suppression est aussi possible sans installer l'application, à l'adresse
-> https://backend-production-03f0b.up.railway.app/suppression-compte
+> https://api.taxisylvain.ca/suppression-compte
 
 Apple exige que la suppression soit **dans l'application**, et pas seulement sur le web. Les deux
 existent maintenant. Un lien web tout seul serait refusé.
