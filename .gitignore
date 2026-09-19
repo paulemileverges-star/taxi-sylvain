@@ -11,3 +11,4 @@ backend/uploads/*
 google-services.json
 GoogleService-Info.plist
 firebase-service-account.json
+.claude/settings.local.json
