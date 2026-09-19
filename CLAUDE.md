@@ -135,6 +135,9 @@ vercel --prod --yes
 vercel alias set <adresse-du-nouveau-deploiement> taxi-sylvain-client.vercel.app
 ```
 
+Depuis le 19 septembre, les adresses `*.taxisylvain.ca` suivent automatiquement la production ; l'alias ne
+sert plus qu'à l'ancienne adresse `taxi-sylvain-client.vercel.app`. Voir `docs/PASSATION.md` § 6 bis.
+
 ## 8) Pièges connus qu’il faut absolument éviter
 
 - ne pas annoncer un correctif sans preuve

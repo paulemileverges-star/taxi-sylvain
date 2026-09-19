@@ -16,9 +16,9 @@ restants et historique complet des demandes.
 3. **Une règle métier demandée = un test.** Les tests sont dans `backend/test/`, harnais `node --test`.
 4. **Pas de recompilation des APK** Android ou iOS sans l'accord explicite du propriétaire. Par défaut, les
    corrections se font sur les versions web.
-5. **App Client sur Vercel** : après `vercel --prod`, toujours réaliaser
-   `taxi-sylvain-client.vercel.app` sur le nouveau déploiement, sinon le propriétaire teste une ancienne
-   version. Détails dans `docs/PASSATION.md` § 6.
+5. **App Client sur Vercel** : `client.taxisylvain.ca` suit automatiquement chaque mise en production.
+   L'ancienne adresse `taxi-sylvain-client.vercel.app` doit encore être réaliasée après `vercel --prod`.
+   Détails dans `docs/PASSATION.md` § 6.
 6. **Railway** : lancer `railway up --service backend` depuis `backend/` uniquement.
 7. **Secrets** : jamais dans le code, les commits ou les documents. Les clés se saisissent dans Railway,
    Vercel ou EAS. Ne jamais brancher un environnement local sur la base de production.
@@ -31,3 +31,5 @@ restants et historique complet des demandes.
 - Console Dispatch : `apps/dispatch-web/` (React + Vite).
 - Apps Chauffeur et Client : `apps/driver-app/`, `apps/client-app/` (Expo SDK 51, aussi publiées en web).
 - Fuseau horaire de référence : `America/Toronto`.
+- Domaine : `taxisylvain.ca` chez Vercel. Adresses officielles `dispatch.`, `chauffeur.`, `client.` et
+  `api.taxisylvain.ca`. Toute nouvelle adresse web doit être ajoutée à `CORS_ORIGIN` dans Railway.

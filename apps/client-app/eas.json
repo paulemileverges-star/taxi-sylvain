@@ -10,8 +10,8 @@
         "buildType": "apk"
       },
       "env": {
-        "EXPO_PUBLIC_API_URL": "https://backend-production-03f0b.up.railway.app/api",
-        "EXPO_PUBLIC_SOCKET_URL": "https://backend-production-03f0b.up.railway.app"
+        "EXPO_PUBLIC_API_URL": "https://api.taxisylvain.ca/api",
+        "EXPO_PUBLIC_SOCKET_URL": "https://api.taxisylvain.ca"
       }
     }
   },

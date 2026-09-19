@@ -30,14 +30,20 @@ Lire aussi : `AGENTS.md` (règles courtes), `docs/ARCHITECTURE.md` (choix techni
 
 ## 2. Liens de production
 
-| Élément | Adresse |
-|---|---|
-| Console Dispatch | https://taxi-sylvain-dispatch.vercel.app |
-| App Chauffeur, version web | https://taxi-sylvain-driver.vercel.app |
-| App Client, version web | https://taxi-sylvain-client.vercel.app |
-| API | https://backend-production-03f0b.up.railway.app/api |
-| Santé de l'API | https://backend-production-03f0b.up.railway.app/health |
-| Téléphone de réservation | 438-499-1120 |
+Depuis le 19 septembre, les adresses officielles sont sur le domaine `taxisylvain.ca` (voir § 6 bis). Les
+anciennes adresses en `vercel.app` et `railway.app` continuent de fonctionner. Les versions web publiées et
+les APK installés appellent encore l'API par son adresse `railway.app` : ils passeront à `api.taxisylvain.ca`
+à leur prochaine publication (variables Vercel `VITE_API_URL` et `EXPO_PUBLIC_API_URL` à changer à ce
+moment-là) ou recompilation (déjà prévu dans `eas.json`).
+
+| Élément | Adresse officielle | Ancienne adresse, toujours active |
+|---|---|---|
+| Console Dispatch | https://dispatch.taxisylvain.ca | https://taxi-sylvain-dispatch.vercel.app |
+| App Chauffeur, version web | https://chauffeur.taxisylvain.ca | https://taxi-sylvain-driver.vercel.app |
+| App Client, version web | https://client.taxisylvain.ca, https://taxisylvain.ca, https://www.taxisylvain.ca | https://taxi-sylvain-client.vercel.app |
+| API | https://api.taxisylvain.ca/api | https://backend-production-03f0b.up.railway.app/api |
+| Santé de l'API | https://api.taxisylvain.ca/health | https://backend-production-03f0b.up.railway.app/health |
+| Téléphone de réservation | 438-499-1120 | |
 
 APK Android : produits par EAS Build, profil `preview`. Les derniers APK datent du 13 septembre (commit
 `e327a49`) : tout ce qui a été livré après n'existe que sur les versions web tant qu'on ne recompile pas.
@@ -179,9 +185,24 @@ Le dossier est lié au projet Vercel `client-app`, dont le domaine naturel est
 `vercel alias set`, le propriétaire continue de tester l'ancienne version. Un ancien projet Vercel vide nommé
 `taxi-sylvain-client` existe aussi : ne pas l'utiliser.
 
-Correction durable possible, avec l'accord du propriétaire : renommer l'ancien projet vide, puis renommer
-`client-app` en `taxi-sylvain-client` depuis le tableau de bord Vercel, pour que le domaine suive enfin la
-production.
+**Depuis le 19 septembre, le piège ne touche plus que l'ancienne adresse.** `client.taxisylvain.ca`,
+`taxisylvain.ca` et `www.taxisylvain.ca` sont des domaines du projet `client-app` : ils suivent
+automatiquement chaque mise en production, sans `vercel alias set`. L'alias reste à refaire uniquement pour
+que `taxi-sylvain-client.vercel.app` suive aussi.
+
+### 6 bis. Domaine taxisylvain.ca
+
+- Acheté le 19 septembre 2026 chez **Vercel**, qui est à la fois registraire et serveur DNS
+  (`ns1.vercel-dns.com`, `ns2.vercel-dns.com`), équipe Vercel `taxi-sylvain`. Renouvellement le 19 septembre
+  2027, 16,99 USD.
+- Les enregistrements se gèrent en ligne de commande : `vercel dns ls taxisylvain.ca`,
+  `vercel dns add taxisylvain.ca <nom> <type> <valeur>`.
+- Les sous-domaines web sont couverts par l'enregistrement générique de Vercel ; il suffit de rattacher
+  l'adresse au bon projet : `vercel domains add <adresse> <projet>`.
+- `api.taxisylvain.ca` : domaine personnalisé du service Railway `backend`, avec un enregistrement `CNAME api`
+  vers la cible donnée par Railway et un enregistrement `TXT _railway-verify.api` de vérification.
+- **À venir** : les enregistrements de Brevo pour l'envoi des courriels, dès que le compte existera, et une
+  adresse de contact sur ce domaine pour les pages de confidentialité et le compte Apple d'entreprise.
 
 ### APK Android (EAS Build)
 
@@ -193,7 +214,9 @@ eas build --platform android --profile preview
 - Équipe Expo `taxisylvains-team`. Identifiants Android : `com.taxisylvain.driver` et
   `com.taxisylvain.client` (les mêmes servent d'identifiants iOS).
 - Le quota gratuit était épuisé jusqu'au 1er octobre 2026 ; le propriétaire envisage le forfait Starter.
-- Les URL de l'API sont injectées par `eas.json` (`EXPO_PUBLIC_API_URL`, `EXPO_PUBLIC_SOCKET_URL`).
+- Les URL de l'API sont injectées par `eas.json` (`EXPO_PUBLIC_API_URL`, `EXPO_PUBLIC_SOCKET_URL`). Depuis
+  le 19 septembre, elles pointent vers `https://api.taxisylvain.ca` : les prochains APK ne dépendront plus
+  de l'adresse générée par Railway. Les APK déjà installés gardent l'ancienne adresse, qui reste active.
 - **Uniquement avec l'accord du propriétaire.**
 
 ---
@@ -207,8 +230,11 @@ eas build --platform android --profile preview
 | Vercel, driver et client | `EXPO_PUBLIC_API_URL`, `EXPO_PUBLIC_SOCKET_URL` |
 | EAS | définies dans `eas.json`, profil `preview` |
 
-`CORS_ORIGIN` accepte les trois sites et tout sous-domaine `*-taxi-sylvain.vercel.app`. Les APK ne sont pas
-concernés par CORS.
+`CORS_ORIGIN` liste les sites autorisés à appeler l'API : les adresses `taxisylvain.ca` (racine, `www`,
+`dispatch`, `chauffeur`, `client`), les anciennes adresses `vercel.app` et `http://localhost:5173`. Le code
+accepte en plus tout sous-domaine `*-taxi-sylvain.vercel.app`. Une nouvelle adresse web doit y être ajoutée,
+sinon l'application s'affiche mais ne peut plus se connecter. Les APK ne sont pas concernés par CORS.
+`DRIVER_APP_URL` et `CLIENT_APP_URL` pointent vers `chauffeur.taxisylvain.ca` et `client.taxisylvain.ca`.
 
 ---
 
@@ -279,7 +305,8 @@ concernés par CORS.
 | Élément | Ce qu'il doit faire | Ce qui se fait ensuite |
 |---|---|---|
 | GitHub | créer un compte et un dépôt privé | pousser le code : **aujourd'hui il n'existe que sur son PC** |
-| Nom de domaine | choisir ou acheter le domaine de l'entreprise | DNS pour Brevo, site public, courriel pro exigé par Apple |
+| Nom de domaine | **fait le 19 septembre : `taxisylvain.ca`**, rattaché aux trois sites et à l'API | DNS pour Brevo et courriel pro exigé par Apple, dès l'ouverture de ces comptes |
+| Numéro D-U-N-S | **demande envoyée le 19 septembre**, confirmation attendue de Dun & Bradstreet | comptes d'entreprise Google Play et Apple |
 | Brevo | créer le compte, vérifier le domaine, mettre `BREVO_API_KEY` et `MAIL_FROM` dans Railway | tester avec le bouton de la page Administrateurs |
 | Firebase | projet avec les apps `com.taxisylvain.driver` et `com.taxisylvain.client` | `google-services.json` dans les apps, clé FCM V1 dans EAS, recompiler |
 | Expo Starter ou 1er octobre | activer le forfait sur l'équipe `taxisylvains-team` | recompiler les deux APK |
@@ -349,6 +376,7 @@ concernés par CORS.
 | 17 et 18 sept. | Courriels automatiques avec ajout à l'agenda du chauffeur pour chaque course confirmée | Fait ; en attente du compte Brevo et du domaine |
 | 19 sept. | Suppression de compte et conformité magasins : suppression dans les deux apps, page web publique de suppression, politique de confidentialité, conditions d'utilisation, dossier Google Play / App Store | **Écrit et vérifié, pas encore en ligne.** 11 tests + scénario complet sur base locale (24 vérifications). Suite passée de 41 à 52 tests |
 | 19 sept. | Revue complète du projet demandée par le propriétaire, à partir de ses textes d'origine : chaque demande vérifiée dans le code, puis contestée par un second passage | En cours — voir `docs/ETAT-DU-PROJET.md` |
+| 19 sept. | Prendre en compte le domaine `taxisylvain.ca` acheté par le propriétaire | **Fait et vérifié en production.** Adresses `dispatch.`, `chauffeur.`, `client.`, `www.` et racine rattachées aux sites, `api.` au serveur, certificats valides ; CORS et liens des courriels mis à jour dans Railway sans redéployer de code ; futurs APK réglés sur `api.taxisylvain.ca`. Le script de vérification contrôle désormais les 8 adresses web et leur autorisation par le serveur |
 
 ---
 
