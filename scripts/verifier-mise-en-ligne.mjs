@@ -27,10 +27,13 @@ const SITES = [
   { nom: "Chauffeur", adressePublique: "https://chauffeur.taxisylvain.ca", adresseProduction: CHAUFFEUR },
   { nom: "Chauffeur (ancienne adresse)", adressePublique: CHAUFFEUR, adresseProduction: CHAUFFEUR },
   { nom: "Client", adressePublique: "https://client.taxisylvain.ca", adresseProduction: CLIENT },
-  { nom: "Client (taxisylvain.ca)", adressePublique: "https://taxisylvain.ca", adresseProduction: CLIENT },
-  { nom: "Client (www)", adressePublique: "https://www.taxisylvain.ca", adresseProduction: CLIENT },
   { nom: "Client (ancienne adresse)", adressePublique: "https://taxi-sylvain-client.vercel.app", adresseProduction: CLIENT },
 ];
+
+// Depuis le 20 septembre, la racine et www servent le site vitrine WordPress heberge chez LWS ;
+// l'application client vit sur client.taxisylvain.ca. On verifie donc que ces deux adresses
+// repondent ET qu'elles ne servent PAS l'application par erreur (retour en arriere silencieux).
+const SITE_VITRINE = ["https://taxisylvain.ca", "https://www.taxisylvain.ca"];
 
 const OK = "OK    ";
 const KO = "ERREUR";
@@ -137,6 +140,24 @@ async function verifierSite(site) {
   console.log(`${OK} ${site.nom} : ${site.adressePublique.replace("https://", "")} à jour (${fichierPublic}) et autorisé par le serveur.`);
 }
 
+// Le site vitrine doit répondre, et ne doit pas servir l'application client.
+async function verifierSiteVitrine() {
+  for (const adresse of SITE_VITRINE) {
+    const { status, text, error } = await fetchText(adresse);
+    if (status !== 200) {
+      console.log(`${KO} Site ${adresse.replace("https://", "")} : ne répond pas (${error || `code ${status}`}).`);
+      problemes.push(`Le site ${adresse} ne répond pas — vérifier l'hébergement LWS.`);
+      continue;
+    }
+    if (bundleName(text)) {
+      console.log(`${KO} Site ${adresse.replace("https://", "")} : sert l'application client au lieu du site.`);
+      problemes.push(`${adresse} est revenu sur Vercel : retirer ce domaine du projet client-app.`);
+      continue;
+    }
+    console.log(`${OK} Site ${adresse.replace("https://", "")} : en ligne.`);
+  }
+}
+
 // Pages légales exigées par Google Play, Apple et la Loi 25 : elles doivent toujours répondre.
 async function verifierPagesLegales() {
   for (const page of ["/confidentialite", "/conditions", "/suppression-compte"]) {
@@ -153,6 +174,7 @@ async function verifierPagesLegales() {
 console.log("Vérification de la version en ligne de Taxi Sylvain\n");
 await verifierApi();
 await verifierPagesLegales();
+await verifierSiteVitrine();
 for (const site of SITES) await verifierSite(site);
 
 // Contrôle inverse : une adresse inconnue doit toujours être refusée par le serveur.
