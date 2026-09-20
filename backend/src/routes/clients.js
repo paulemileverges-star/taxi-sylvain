@@ -35,6 +35,8 @@ async function createClientAccount({ name, email, phone, address, notes, passwor
   const client = await prisma.user.create({
     data: {
       role: "CLIENT", name, email: finalEmail, phone, address: cleanAddressText(address), notes: notes || null, passwordHash,
+      // Un vrai courriel sera confirmé par code à la première connexion (lib/verification.js).
+      emailVerifiedAt: realEmailOrNull(finalEmail) ? null : new Date(),
       priceYUL: parsePrice(priceYUL), priceYHU: parsePrice(priceYHU), priceREM: parsePrice(priceREM),
     },
     select: { id: true, name: true, email: true, phone: true, address: true, ratingAvg: true, createdAt: true, notes: true, priceYUL: true, priceYHU: true, priceREM: true },
@@ -48,7 +50,7 @@ router.get("/", async (req, res) => {
   const [clients, destinations, zones] = await Promise.all([
     prisma.user.findMany({
       where: { role: "CLIENT" },
-      select: { id: true, name: true, email: true, phone: true, address: true, ratingAvg: true, createdAt: true, notes: true, priceYUL: true, priceYHU: true, priceREM: true },
+      select: { id: true, name: true, email: true, phone: true, address: true, ratingAvg: true, createdAt: true, notes: true, priceYUL: true, priceYHU: true, priceREM: true, emailVerifiedAt: true },
       orderBy: { createdAt: "desc" },
     }),
     prisma.destination.findMany({ orderBy: { sortOrder: "asc" } }),

@@ -112,6 +112,7 @@ export async function sendRideReminders(io = null, maintenant = new Date()) {
             title: titre,
             body: texte,
             data: { type: "ride:reminder:urgent", rideId: ride.id },
+            channelId: "urgence",
           });
           signalerEnDirect(io, ride.driverId, "ride:reminder", { rideId: ride.id, texte, urgent: true });
           await courrielDeRappel({ ride, personne: ride.driver, audience: "driver", urgent: true });

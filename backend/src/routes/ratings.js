@@ -1,9 +1,26 @@
 import { Router } from "express";
 import { prisma } from "../lib/prisma.js";
 import { requireAuth } from "../middleware/auth.js";
+import { coursesANoter, DELAI_NOTATION_JOURS } from "../lib/notation.js";
 
 const router = Router();
 router.use(requireAuth);
+
+// Courses terminées que la personne n'a pas encore notées (voir lib/notation.js) : l'application
+// propose la notation à l'ouverture, même si la fin de course a été manquée (app fermée).
+router.get("/pending", async (req, res) => {
+  const moi = req.user.id;
+  const depuis = new Date(Date.now() - DELAI_NOTATION_JOURS * 86400000);
+  const rides = await prisma.ride.findMany({
+    where: { status: "COMPLETED", completedAt: { gte: depuis }, OR: [{ clientId: moi }, { driverId: moi }] },
+    include: {
+      ratings: { select: { fromUserId: true } },
+      client: { select: { id: true, name: true } },
+      driver: { select: { id: true, name: true, carModel: true, plate: true, ratingAvg: true, photoUrl: true, carPhotoUrl: true } },
+    },
+  });
+  res.json(coursesANoter(rides, moi));
+});
 
 // Notation bidirectionnelle en fin de course (chauffeur -> client et client -> chauffeur).
 // Seules les deux parties de la course peuvent noter, uniquement l'autre partie, une seule fois,

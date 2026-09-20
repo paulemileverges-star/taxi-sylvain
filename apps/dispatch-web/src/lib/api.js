@@ -14,7 +14,14 @@ async function request(path, { method = "GET", body } = {}) {
     body: body ? JSON.stringify(body) : undefined,
   });
   const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(data.error || "Erreur réseau");
+  if (!res.ok) {
+    const err = new Error(data.error || "Erreur réseau");
+    err.status = res.status;
+    // La réponse complète accompagne l’erreur : la connexion répond 403 avec verificationRequired
+    // quand un collaborateur doit d’abord saisir le code reçu par courriel.
+    err.data = data;
+    throw err;
+  }
   return data;
 }
 
@@ -55,6 +62,14 @@ async function uploadFile(path, file) {
 
 export const api = {
   login: (email, password) => request("/auth/login", { method: "POST", body: { email, password } }),
+  verifyEmail: (email, password, code) => request("/auth/verify-email", { method: "POST", body: { email, password, code } }),
+  resendCode: (email, password) => request("/auth/resend-code", { method: "POST", body: { email, password } }),
+  // Porte de secours : le Dispatch confirme le courriel d’un compte qui n’a pas reçu son code.
+  confirmEmail: (userId) => request(`/auth/confirm-email/${userId}`, { method: "POST" }),
+  // Notifications Web Push du navigateur (voir lib/webNotify.js).
+  webPushKey: () => request("/push/web/key"),
+  webPushSubscribe: (subscription) => request("/push/web/subscribe", { method: "POST", body: { subscription } }),
+  webPushUnsubscribe: (endpoint) => request("/push/web/subscribe", { method: "DELETE", body: { endpoint } }),
   changePassword: (currentPassword, newPassword) => request("/auth/change-password", { method: "POST", body: { currentPassword, newPassword } }),
   listRides: () => request("/rides"),
   geocodeSearch: (q) => request(`/geocode/search?q=${encodeURIComponent(q)}`),

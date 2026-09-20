@@ -6,12 +6,12 @@ import { requireAuth, requireRole, requirePermission } from "../middleware/auth.
 import { isConfigured as isCallMaskingConfigured, getOrCreateCallSession, callAllowedForStatus } from "../lib/twilioProxy.js";
 import { notifyUser, notifyAllDrivers } from "../lib/push.js";
 import { createDriverAccount } from "./drivers.js";
-import { generateTempPassword } from "../lib/placeholderEmail.js";
+import { generateTempPassword, realEmailOrNull } from "../lib/placeholderEmail.js";
 import { computeDistanceKm, geocodeAddress } from "../lib/distance.js";
 import { clearDriverLocation, getDriverLocation } from "../lib/driverLocations.js";
 import { quote } from "../lib/pricing.js";
 import { sendRideConfirmation, sendRideCancellation, loadRideForEmail } from "../lib/rideEmails.js";
-import { pageDeCourses } from "../lib/ridesOrder.js";
+import { pageDeCourses, ordreAccueil } from "../lib/ridesOrder.js";
 import { normaliserAdresse, chargerZones } from "../lib/rideAddresses.js";
 import { oublierRappels } from "../jobs/rideReminders.js";
 
@@ -27,7 +27,11 @@ async function findOrCreateClientByPhone(name, phone, email, address, notes) {
   const passwordHash = await bcrypt.hash(tempPassword, 10);
   const finalEmail = email || `client-${crypto.randomBytes(6).toString("hex")}@reservation.taxisylvain.local`;
   const created = await prisma.user.create({
-    data: { role: "CLIENT", name, phone, email: finalEmail, address: address || null, notes: notes || null, passwordHash },
+    data: {
+      role: "CLIENT", name, phone, email: finalEmail, address: address || null, notes: notes || null, passwordHash,
+      // Un vrai courriel sera confirmé par code à la première connexion (lib/verification.js).
+      emailVerifiedAt: realEmailOrNull(finalEmail) ? null : new Date(),
+    },
   });
   return { id: created.id, tempPassword };
 }
@@ -72,7 +76,9 @@ router.get("/", async (req, res) => {
   }
 
   const rides = await prisma.ride.findMany({ where, orderBy: { createdAt: "desc" }, include: RIDE_INCLUDE });
-  res.json(rides);
+  // Accueil des applications : les courses à prendre en premier, puis celles à faire par heure de
+  // prise en charge, puis l’historique (voir lib/ridesOrder.js). La console garde l’ordre de saisie.
+  res.json(role === "DISPATCH" || role === "ADMIN" ? rides : ordreAccueil(rides));
 });
 
 router.get("/:id", async (req, res) => {
@@ -259,11 +265,13 @@ router.post("/:id/assign", requirePermission("courses"), async (req, res) => {
       data: { type: "ride:assigned", rideId: ride.id },
     });
     if (ride.clientId) {
-      notifyUser(ride.clientId, {
+      const charge = {
         title: "Votre chauffeur est confirmé",
         body: `${ride.driver.name}${ride.driver.carModel ? ` · ${ride.driver.carModel}` : ""}${ride.driver.plate ? ` · ${ride.driver.plate}` : ""} — ${ride.pickupAddress} → ${ride.destAddress}`,
         data: { type: "ride:status", rideId: ride.id, status: ride.status },
-      });
+      };
+      notifyUser(ride.clientId, charge);
+      signalerClient(req, ride.clientId, { rideId: ride.id, status: ride.status, ...charge });
     }
   }
   broadcast(req, "dispatch", "ride:updated", ride);
@@ -409,7 +417,9 @@ router.post("/:id/status", requireRole("DRIVER"), async (req, res) => {
     CANCELLED: { title: "Changement de chauffeur", body: "Taxi Sylvain vous réaffecte un autre chauffeur pour votre course." },
   };
   if (ride.clientId && clientLabels[status]) {
-    notifyUser(ride.clientId, { ...clientLabels[status], data: { type: "ride:status", rideId: ride.id, status } });
+    const charge = { ...clientLabels[status], data: { type: "ride:status", rideId: ride.id, status } };
+    notifyUser(ride.clientId, charge);
+    signalerClient(req, ride.clientId, { rideId: ride.id, status, ...charge });
   }
   res.json(ride);
 });
@@ -494,7 +504,9 @@ router.patch("/:id", requirePermission("courses"), async (req, res) => {
     });
     broadcast(req, "dispatch", "ride:updated", ride);
     broadcast(req, `ride:${ride.id}`, "ride:status", ride);
-    if (ride.driverId) broadcast(req, `driver:${ride.driverId}`, "ride:assigned", ride);
+    // « ride:updated » et non « ride:assigned » : une correction de détail ne doit pas faire
+    // sonner l’application du chauffeur comme une nouvelle course ni le sortir de son écran.
+    if (ride.driverId) broadcast(req, `driver:${ride.driverId}`, "ride:updated", ride);
 
     // Un détail qui figure dans l'agenda a changé : on renvoie l'invitation mise à jour, qui
     // remplace l'évènement déjà présent chez le chauffeur et le client.
@@ -518,11 +530,13 @@ router.patch("/:id", requirePermission("courses"), async (req, res) => {
       const when = ride.scheduledFor
         ? new Date(ride.scheduledFor).toLocaleString("fr-CA", { timeZone: "America/Toronto", dateStyle: "short", timeStyle: "short" })
         : "dès que possible";
-      notifyUser(ride.clientId, {
+      const charge = {
         title: `Course validée — ${ride.fare.toFixed(2)} $`,
         body: `${ride.pickupAddress} → ${ride.destAddress} · ${when}${ride.driver ? ` · chauffeur ${ride.driver.name}` : ""}`,
         data: { type: "ride:status", rideId: ride.id, status: ride.status },
-      });
+      };
+      notifyUser(ride.clientId, charge);
+      signalerClient(req, ride.clientId, { rideId: ride.id, status: ride.status, ...charge });
     }
     res.json(ride);
   } catch (e) {
@@ -567,6 +581,13 @@ function sanitizeRide(ride, requester) {
 function leaveRideRoom(req, userId, rideId) {
   const io = req.app.get("io");
   if (io && userId) io.in(`user:${userId}`).socketsLeave(`ride:${rideId}`);
+}
+
+// Évènement personnel du client (salle user:{id}), reçu quel que soit l’écran ouvert : son et
+// notification du navigateur dans l’application client. Avant le 20 septembre 2026, le client
+// n’entendait un changement que s’il avait l’écran de suivi de cette course ouvert.
+function signalerClient(req, clientId, charge) {
+  if (clientId) broadcast(req, `user:${clientId}`, "ride:client-update", charge);
 }
 
 function broadcast(req, room, event, payload) {

@@ -45,7 +45,11 @@ router.post("/", async (req, res) => {
   const tempPassword = password || generateTempPassword();
   const passwordHash = await bcrypt.hash(tempPassword, 10);
   const admin = await prisma.user.create({
-    data: { role: "ADMIN", name, email, phone, passwordHash, permissions: perms },
+    data: {
+      role: "ADMIN", name, email, phone, passwordHash, permissions: perms,
+      // Le collaborateur confirme son courriel par code à sa première connexion à la console.
+      emailVerifiedAt: realEmailOrNull(email) ? null : new Date(),
+    },
     select: { id: true, name: true, email: true, phone: true, permissions: true, createdAt: true },
   });
   res.status(201).json({ ...admin, tempPassword });

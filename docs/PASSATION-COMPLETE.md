@@ -117,6 +117,11 @@ Expo Push.
 | `lib/twilioVoice.js` | L'appel vocal de rappel d'urgence (Twilio Voice). Inactif sans clés. |
 | `lib/httpSafety.js` | Le filet d'erreurs : une erreur dans une route async n'arrête plus le serveur. |
 | `apps/driver-app/src/lib/navigationLinks.js` | Les liens Waze et Google Maps. Guidage direct **seulement** sur un point sûr ; sinon recherche par texte, sans `navigate=yes`, pour que le chauffeur voie les résultats. Fichier pur, testé côté serveur. |
+| `lib/verification.js` | La confirmation du courriel par code à six chiffres : qui doit confirmer (jamais le Dispatch, jamais un compte sans vrai courriel, personne si les courriels ne sont pas configurés), validité 15 minutes, 5 essais, renvoi après une minute. Le code n'est jamais gardé en clair. Les routes sont dans `routes/auth.js` (`/register`, `/login`, `/verify-email`, `/resend-code`, `/confirm-email/:userId`). |
+| `lib/webPush.js` + `lib/push.js` | Les notifications : Expo Push pour les applications installées, Web Push (clés VAPID, service worker `public/sw.js` des trois sites) pour les versions web. Chaque envoi part par les deux voies ; un jeton ou un abonnement périmé est effacé. Inactif sans clés, jamais bloquant. |
+| `lib/notation.js` | Les courses terminées qu'il reste à noter (7 jours), proposées à l'ouverture des applications. |
+| `jobs/weeklyReport.js` | Les bornes de la semaine du récap, **à l'heure du Québec** (lundi 00 h 00 → dimanche 23 h 59), et le courriel de récap au chauffeur. |
+| `apps/dispatch-web/src/lib/coursesFilter.js` | Recherche, filtres et pagination de la page Courses de la console. Fichier pur, testé côté serveur. |
 
 ---
 
@@ -206,6 +211,27 @@ ligne, écrites puis **vérifiées phrase par phrase contre le code** (33 écart
 9. Saisie intuitive d'adresses partout.
 10. Forme unique des adresses, avec garde-fou tarifaire.
 
+### Reprise du 20 septembre (après-midi) : ce que le plan de révision a fait livrer
+
+- **Confirmation du courriel par code** (demande du propriétaire) : inscription dans l'app,
+  chauffeurs et clients créés par le Dispatch, collaborateurs. Code à six chiffres gardé en
+  empreinte, 15 minutes, 5 essais, renvoi après une minute ; aucune session tant que le code n'est
+  pas saisi ; écran dédié dans les deux applications et dans la console ; le Dispatch peut confirmer
+  à la main depuis les fiches. Comptes existants confirmés d'office. Règles dans
+  `backend/src/lib/verification.js` (13 tests).
+- **Notifications des versions web** : service worker et Web Push (clés VAPID) dans les trois
+  sites ; Android Chrome affiche enfin les notifications, même onglet fermé. `backend/src/lib/webPush.js`.
+- **Défauts de la revue corrigés** : semaine du récap et tâches planifiées à l'heure du Québec ;
+  correction de course qui ne fait plus sonner le chauffeur comme une nouvelle affectation ; client
+  prévenu (son, notification) quel que soit l'écran ouvert ; réabonnement au suivi après une
+  coupure ; jetons push périmés effacés ; canal Android « urgence » ; son iPhone en mode silencieux.
+- **Confort** : accueil des applications trié (à prendre, à faire par heure, historique après) ;
+  notation à rattraper proposée à l'ouverture ; sélecteur de date natif dans l'app client ; page
+  Courses de la console avec recherche, filtres et pagination ; récap hebdomadaire envoyé par
+  courriel aux chauffeurs ; script de remise en forme des adresses existantes.
+- **Preuves** : 232 tests (au lieu de 201), scénario local de 32 vérifications
+  (`05-Verifications/scenario-vague-20-sept.cjs`), exports web des trois sites reconstruits.
+
 ---
 
 ## 6. Rapport de vérification (20 septembre 2026)
@@ -278,18 +304,21 @@ Le détail par domaine est dans les fichiers de vérification conservés avec le
 
 ### C. À construire
 
+- **Recompilation des deux APK** (accord du propriétaire) : depuis les APK 1.2.0 du 20 septembre
+  au matin, cinq changements n'existent que sur le web : écran du code de confirmation, sélecteur
+  de date natif (app client, nouvelle dépendance native `@react-native-community/datetimepicker`),
+  canal Android « urgence », son en mode silencieux iPhone, réabonnement au suivi après coupure.
 - **Version iPhone** : jamais compilée.
-- **Courriels à chaque étape** (en route, démarrée, terminée) : seules la confirmation et
-  l'annulation partent.
-- **Envoi du récapitulatif hebdomadaire par courriel** : il est généré et consultable, pas envoyé.
+- **Courriels à chaque étape** (en route, démarrée, terminée) : seules la confirmation, l'annulation,
+  les rappels, le code de confirmation et le récap hebdomadaire partent.
 - **Dépôt des documents des chauffeurs** (permis, assurance) dans l'application.
 - **Paiement en ligne** : aucun paiement ne passe par l'application (choix actuel).
 - **Réglage du volume des alertes sonores** : annoncé fait autrefois, introuvable dans le code.
-- **Suivi des échecs d'envoi de notification** (jetons périmés).
 - **Environnement d'essai séparé**, alerte automatique d'erreurs (Sentry), tests de parcours sur
   les interfaces, sauvegardes de base vérifiées.
-- **Remise en forme des adresses déjà enregistrées** : les nouvelles sont à la bonne forme, les
-  anciennes restent telles quelles (un script de reprise, en mode essai par défaut, reste à écrire).
+- **Remise en forme des adresses déjà enregistrées** : le script existe
+  (`backend/scripts/reformater-adresses.mjs`, simulation par défaut, refuse une base distante sans
+  `--production`). Il reste à le lancer une fois sur la production, après lecture de la simulation.
 
 ---
 

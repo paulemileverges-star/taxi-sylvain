@@ -3,6 +3,7 @@ import { SafeAreaView, StatusBar } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import LoginScreen from "./src/screens/LoginScreen";
 import RegisterScreen from "./src/screens/RegisterScreen";
+import VerifyCodeScreen from "./src/screens/VerifyCodeScreen";
 import BookScreen from "./src/screens/BookScreen";
 import TrackingScreen from "./src/screens/TrackingScreen";
 import RateScreen from "./src/screens/RateScreen";
@@ -12,12 +13,13 @@ import ChangePasswordScreen from "./src/screens/ChangePasswordScreen";
 import DeleteAccountScreen from "./src/screens/DeleteAccountScreen";
 import NotificationSettingsScreen from "./src/screens/NotificationSettingsScreen";
 import RidesScreen from "./src/screens/RidesScreen";
-import { getSocket, resetSocket } from "./src/lib/socket";
+import { getSocket, resetSocket, watchRide, unwatchRide } from "./src/lib/socket";
 import { api, logout as clearSession } from "./src/lib/api";
 import { playSound } from "./src/lib/sound";
+import { showAlert } from "./src/lib/alert";
 import * as Notifications from "expo-notifications";
 import { registerForPushNotifications, clearPushToken } from "./src/lib/pushNotifications";
-import { requestWebNotificationPermission, notifyWeb } from "./src/lib/webNotify";
+import { requestWebNotificationPermission, notifyWeb, registerWebPush, unregisterWebPush } from "./src/lib/webNotify";
 
 const EMPTY_UNREAD = { direct: { total: 0, byDriver: {} }, groups: { total: 0, byConversation: {} }, rides: { total: 0, byRide: {} }, total: 0 };
 
@@ -25,6 +27,9 @@ export default function App() {
   const [user, setUser] = useState(null);
   // Écran d'ouverture de compte, atteint depuis la connexion (le site public y envoie des clients).
   const [inscription, setInscription] = useState(false);
+  // Code de confirmation attendu par le serveur : { email, password, message }. Aucune session
+  // n'est ouverte tant qu'il n'est pas saisi (voir VerifyCodeScreen).
+  const [verification, setVerification] = useState(null);
   const [screen, setScreen] = useState("book");
   const [activeRideId, setActiveRideId] = useState(null);
   const [unread, setUnread] = useState(EMPTY_UNREAD);
@@ -51,22 +56,42 @@ export default function App() {
     })();
   }, []);
 
+  // Suivi de la course active : position du chauffeur, messages, étapes. L'abonnement survit aux
+  // coupures réseau (voir lib/socket.js). Le son et la notification viennent de l'évènement
+  // personnel « ride:client-update » ci-dessous, reçu quel que soit l'écran ouvert.
   useEffect(() => {
-    if (!activeRideId) return;
+    if (!activeRideId) return undefined;
     let sock;
+    watchRide(activeRideId);
     getSocket().then((s) => {
       sock = s;
-      s.emit("ride:watch", activeRideId);
       s.on("ride:status", (ride) => {
-        playSound("notify");
-        if (ride.status === "COMPLETED") setScreen("rate");
+        if (ride?.id === activeRideId && ride.status === "COMPLETED") setScreen("rate");
       });
     });
-    return () => sock?.off("ride:status");
+    return () => { sock?.off("ride:status"); unwatchRide(activeRideId); };
   }, [activeRideId]);
 
+  // Course terminée pendant que l'application était fermée : la notation est proposée à l'ouverture.
+  const proposerNotation = async () => {
+    try {
+      const [aNoter] = await api.pendingRatings();
+      if (!aNoter) return;
+      showAlert(
+        "Notez votre course",
+        `${aNoter.pickupAddress} → ${aNoter.destAddress}${aNoter.autre?.name ? `, avec ${aNoter.autre.name}` : ""}. Voulez-vous noter votre chauffeur ?`,
+        [
+          { text: "Plus tard", style: "cancel" },
+          { text: "Noter", onPress: () => { setActiveRideId(aNoter.rideId); setScreen("rate"); } },
+        ]
+      );
+    } catch {
+      // Hors ligne : on réessaiera à la prochaine ouverture.
+    }
+  };
+
   useEffect(() => {
-    if (!user) return;
+    if (!user) return undefined;
     let sock;
     getSocket().then((s) => {
       sock = s;
@@ -84,11 +109,25 @@ export default function App() {
         if (m.sender.id === user.id) return;
         playSound("notify"); notifyWeb(`Message de ${m.sender.name}`, m.text); refreshUnread();
       });
+      // Toute nouvelle sur une de mes courses (chauffeur confirmé, en route, terminée, montant
+      // fixé) : son et notification même depuis l'accueil ; la fin de course ouvre la notation.
+      s.on("ride:client-update", ({ rideId, status, title, body }) => {
+        playSound(status === "COMPLETED" ? "action" : "notify");
+        notifyWeb(title || "Taxi Sylvain", body || "");
+        if (status === "COMPLETED" && rideId) { setActiveRideId(rideId); setScreen("rate"); }
+      });
     });
     registerForPushNotifications();
-    requestWebNotificationPermission();
+    // Version web : abonnement aux notifications du serveur, si la permission a été accordée.
+    requestWebNotificationPermission().then(registerWebPush).catch(() => null);
     refreshUnread();
-    return () => { sock?.off("message:group"); sock?.off("message:ride"); };
+    proposerNotation();
+    return () => {
+      sock?.off("message:group");
+      sock?.off("ride:reminder");
+      sock?.off("message:ride");
+      sock?.off("ride:client-update");
+    };
   }, [user]);
 
   // Permet de rouvrir directement le bon écran quand on tape sur une notification reçue
@@ -113,7 +152,10 @@ export default function App() {
   // retirer côté serveur (l'ancien appel faisait même planter le serveur).
   const logout = async ({ server = true } = {}) => {
     resetSocket();
-    if (server) await clearPushToken();
+    if (server) {
+      await clearPushToken();
+      await unregisterWebPush();
+    }
     await clearSession();
     setUser(null);
     setScreen("book");
@@ -124,10 +166,16 @@ export default function App() {
     return (
       <SafeAreaView style={{ flex: 1, backgroundColor: "#0f1b2d" }}>
         <StatusBar barStyle="light-content" />
-        {inscription ? (
-          <RegisterScreen onRegistered={setUser} onBack={() => setInscription(false)} />
+        {verification ? (
+          <VerifyCodeScreen
+            {...verification}
+            onVerified={(u) => { setVerification(null); setInscription(false); setUser(u); }}
+            onBack={() => setVerification(null)}
+          />
+        ) : inscription ? (
+          <RegisterScreen onRegistered={setUser} onVerification={setVerification} onBack={() => setInscription(false)} />
         ) : (
-          <LoginScreen onLogin={setUser} onCreerCompte={() => setInscription(true)} />
+          <LoginScreen onLogin={setUser} onVerification={setVerification} onCreerCompte={() => setInscription(true)} />
         )}
       </SafeAreaView>
     );

@@ -4,7 +4,7 @@ import { playSound } from "../lib/sound.js";
 import AddressInput from "../components/AddressInput.jsx";
 import { matchedFields } from "../lib/clientSearch.js";
 
-function ClientCard({ client, onDelete, onEdit, masque, trouvePar }) {
+function ClientCard({ client, onDelete, onEdit, onConfirmEmail, masque, trouvePar }) {
   const [notes, setNotes] = useState(client.notes || "");
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -43,7 +43,12 @@ function ClientCard({ client, onDelete, onEdit, masque, trouvePar }) {
               <span className="chip" style={{ marginLeft: 8 }}>trouvé par : {trouvePar.join(", ")}</span>
             )}
           </div>
-          <div style={{ color: "#8b99b5", fontSize: 13 }}>{client.email || "(pas de courriel)"} · {client.phone}</div>
+          <div style={{ color: "#8b99b5", fontSize: 13 }}>
+            {client.email || "(pas de courriel)"} · {client.phone}
+            {client.email && client.emailVerifiedAt === null && (
+              <button className="btn outline" style={{ marginLeft: 8 }} title={"Ce compte n’a pas encore saisi le code reçu par courriel. Confirmer à sa place le laisse se connecter sans code."} onClick={() => onConfirmEmail(client)}>Courriel non confirmé · Confirmer</button>
+            )}
+          </div>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
           <span className="chip">★ {client.ratingAvg?.toFixed(1) ?? "5.0"}</span>
@@ -181,6 +186,19 @@ export default function Clients() {
     load();
   };
 
+  // Porte de secours : le client n’a pas reçu son code de confirmation. Le Dispatch confirme à
+  // sa place, après l’avoir eu au téléphone.
+  const confirmerCourriel = async (client) => {
+    if (!window.confirm(`Confirmer le courriel de ${client.name} à sa place ? Il pourra se connecter sans code.`)) return;
+    try {
+      await api.confirmEmail(client.id);
+      playSound("action");
+      load();
+    } catch (e) {
+      alert(`Confirmation impossible : ${e.message}`);
+    }
+  };
+
   const createClient = async () => {
     setError("");
     try {
@@ -261,7 +279,7 @@ export default function Clients() {
 
       {clients.map((c) => {
         const m = correspondances.get(c.id);
-        return <ClientCard key={c.id} client={c} onDelete={remove} onEdit={openEdit} masque={m === null} trouvePar={m} />;
+        return <ClientCard key={c.id} client={c} onDelete={remove} onEdit={openEdit} onConfirmEmail={confirmerCourriel} masque={m === null} trouvePar={m} />;
       })}
 
       {clients.length > 0 && nbVisibles === 0 && (

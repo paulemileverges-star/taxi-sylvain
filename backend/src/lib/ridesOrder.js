@@ -88,3 +88,23 @@ export function pageDeCourses(rides, { when, page, pageSize } = {}) {
     pageSize: taille,
   };
 }
+
+const OFFRES = ["BROADCAST", "REQUESTED"];
+const TERMINEES = ["COMPLETED", "CANCELLED", "REFUSED"];
+
+/**
+ * Ordre de l'écran d'accueil (applications chauffeur et client) : d'abord les courses à prendre
+ * (diffusées ou proposées), puis les courses à faire, de la plus proche à la plus lointaine ;
+ * l'historique vient en dernier, du plus récent au plus ancien. Avant le 20 septembre 2026,
+ * l'accueil suivait l'ordre de saisie : une course pour dans trois semaines passait devant celle
+ * de demain, et une course terminée hier restait au-dessus de celle de ce soir.
+ */
+export function ordreAccueil(rides) {
+  const groupe = (r) => (OFFRES.includes(r?.status) ? 0 : TERMINEES.includes(r?.status) ? 2 : 1);
+  return [...(rides || [])].sort((a, b) => {
+    const ga = groupe(a);
+    const gb = groupe(b);
+    if (ga !== gb) return ga - gb;
+    return ga === 2 ? compareRides(b, a, "upcoming") : compareRides(a, b, "upcoming");
+  });
+}

@@ -55,6 +55,13 @@ model User {
   // chauffeur ou un client même quand l'app est fermée ou l'écran verrouillé.
   pushToken String?
 
+  // Date de confirmation du courriel par code à six chiffres (null = code encore à saisir,
+  // voir src/lib/verification.js). Les comptes sans vrai courriel sont confirmés d'office.
+  emailVerifiedAt      DateTime?
+  emailVerification    EmailVerification?
+  // Navigateurs abonnés aux notifications Web Push (versions web des applications).
+  webPushSubscriptions WebPushSubscription[]
+
   // Rappels de course programmés (besoin #1) : décalages en minutes avant l'heure de prise en
   // charge auxquels envoyer un rappel push. Ex. [60, 10] = 1h avant et 10min avant. Vide = désactivé.
   reminderOffsets Int[] @default([60, 10])
@@ -200,6 +207,31 @@ model SentReminder {
   sentAt         DateTime @default(now())
 
   @@unique([rideId, userId, offsetMinutes, canal])
+}
+
+// Code de confirmation de courriel en attente pour un compte (un seul à la fois). Seule
+// l'empreinte du code est gardée ; il expire et les essais ratés sont comptés.
+model EmailVerification {
+  id        String   @id @default(cuid())
+  userId    String   @unique
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  codeHash  String
+  expiresAt DateTime
+  attempts  Int      @default(0)
+  sentAt    DateTime @default(now())
+}
+
+// Abonnement d'un navigateur aux notifications Web Push (norme RFC 8030), pour les versions
+// web des trois applications. Un navigateur = un endpoint ; il suit le compte connecté.
+model WebPushSubscription {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  endpoint  String   @unique
+  p256dh    String
+  auth      String
+  userAgent String?
+  createdAt DateTime @default(now())
 }
 
 model Schedule {

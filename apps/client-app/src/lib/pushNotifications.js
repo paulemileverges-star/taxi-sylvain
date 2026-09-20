@@ -33,6 +33,17 @@ export async function registerForPushNotifications() {
         importance: Notifications.AndroidImportance.HIGH,
         sound: "default",
       });
+      // Canal « urgence » : nouvelle course diffusée et rappel d’une heure avant. Importance
+      // maximale, vibration longue, visible sur l’écran verrouillé : le téléphone doit réveiller
+      // le chauffeur, pas seulement afficher une ligne discrète.
+      await Notifications.setNotificationChannelAsync("urgence", {
+        name: "Urgences Taxi Sylvain (nouvelle course, rappel urgent)",
+        importance: Notifications.AndroidImportance.MAX,
+        sound: "default",
+        vibrationPattern: [0, 400, 200, 400, 200, 400],
+        lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
+        bypassDnd: true,
+      });
     }
 
     const projectId = Constants.expoConfig?.extra?.eas?.projectId;

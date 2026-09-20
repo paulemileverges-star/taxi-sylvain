@@ -3,7 +3,7 @@ import { View, Text, TouchableOpacity, Linking, StyleSheet } from "react-native"
 import { api } from "../lib/api";
 import { DriverAvatar, CarPhoto } from "../components/DriverPhotos";
 import { playSound } from "../lib/sound";
-import { getSocket } from "../lib/socket";
+import { getSocket, watchRide } from "../lib/socket";
 import DriverMap from "../components/DriverMap";
 
 const STATUS_LABEL = {
@@ -61,7 +61,7 @@ export default function TrackingScreen({ rideId, onOpenChat, onBack, unreadRide 
     let sock;
     getSocket().then((s) => {
       sock = s;
-      s.emit("ride:watch", rideId);
+      watchRide(rideId);
       s.on("driver:location", (p) => {
         if (p.rideId === rideId) setDriverPos({ lat: p.lat, lng: p.lng });
       });

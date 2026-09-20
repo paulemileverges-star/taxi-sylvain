@@ -2,10 +2,11 @@ import { Router } from "express";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import { prisma } from "../lib/prisma.js";
-import { requireAuth } from "../middleware/auth.js";
+import { requireAuth, requireRole } from "../middleware/auth.js";
 import { rateLimit } from "../middleware/rateLimit.js";
 import { deleteUserCascade, announceDeletion } from "../lib/deleteUser.js";
 import { motifDeRefus, courseEnCoursBloque } from "../lib/accountDeletion.js";
+import { confirmationRequise, demanderCode, verifierCode, messagePourEtat } from "../lib/verification.js";
 
 const router = Router();
 
@@ -43,6 +44,35 @@ const deleteAccountLimiter = rateLimit({
   keyFn: (req) => `suppression|${req.ip}|${String(req.body?.email || "").toLowerCase()}`,
 });
 
+// Message montré quand un code vient d'être demandé (ou pas), selon le résultat de l'envoi.
+export function messageDemandeDeCode(envoi, email) {
+  if (envoi?.envoye) return `Un code de confirmation à six chiffres vient d'être envoyé à ${email}. Saisissez-le pour continuer.`;
+  if (envoi?.raison === "trop-tot") return "Un code vous a déjà été envoyé il y a moins d'une minute. Vérifiez votre boîte de courriel, y compris les indésirables.";
+  return "Le courriel de confirmation n'a pas pu être envoyé. Réessayez dans un instant, ou appelez Taxi Sylvain.";
+}
+
+// Fin commune de l'inscription et de la connexion (demande du propriétaire du 20 septembre 2026 :
+// « confirmation de code envoyé par courriel » pour les nouveaux comptes chauffeurs et clients).
+// Tant que le courriel n'est pas confirmé, AUCUN jeton ne part : le compte existe, mais il n'ouvre
+// rien. Sans service de courriel, ou sans vrai courriel (réservation par téléphone), le compte est
+// confirmé d'office pour ne bloquer personne, et on le note pour que l'activation future des
+// courriels ne bloque pas ce compte rétroactivement.
+async function ouvrirSession(user, res, { statutSiCode = 403, statutSiJeton = 200 } = {}) {
+  if (confirmationRequise(user)) {
+    const envoi = await demanderCode(user);
+    return res.status(statutSiCode).json({
+      verificationRequired: true,
+      email: user.email,
+      error: messageDemandeDeCode(envoi, user.email),
+    });
+  }
+  if (!user.emailVerifiedAt) {
+    await prisma.user.updateMany({ where: { id: user.id }, data: { emailVerifiedAt: new Date() } });
+  }
+  const token = signToken(user);
+  return res.status(statutSiJeton).json({ token, user: publicUser(user) });
+}
+
 // Inscription publique — uniquement des comptes CLIENT. Les chauffeurs, admins et le Dispatch
 // sont créés depuis la console par Taxi Sylvain ; le rôle n'est jamais accepté depuis le client.
 router.post("/register", authLimiter, async (req, res) => {
@@ -61,8 +91,8 @@ router.post("/register", authLimiter, async (req, res) => {
     data: { name: name.trim(), email: normaliserCourriel(email), phone: phone.trim(), passwordHash, role: "CLIENT" },
   });
 
-  const token = signToken(user);
-  res.status(201).json({ token, user: publicUser(user) });
+  // Compte créé : réponse 201 dans les deux cas (jeton, ou code à saisir).
+  return ouvrirSession(user, res, { statutSiCode: 201, statutSiJeton: 201 });
 });
 
 router.post("/login", authLimiter, async (req, res) => {
@@ -74,8 +104,49 @@ router.post("/login", authLimiter, async (req, res) => {
   const valid = await bcrypt.compare(password, user.passwordHash);
   if (!valid) return res.status(401).json({ error: "Identifiants invalides." });
 
-  const token = signToken(user);
-  res.json({ token, user: publicUser(user) });
+  // Un chauffeur ou un client créé par le Dispatch reçoit son code ici, à sa première connexion.
+  return ouvrirSession(user, res);
+});
+
+// Saisie du code reçu par courriel. Le mot de passe est redemandé : le code seul ne doit jamais
+// suffire à ouvrir un compte, et l'application l'a encore sous la main à ce moment-là.
+router.post("/verify-email", authLimiter, async (req, res) => {
+  const { email, password, code } = req.body || {};
+  if (!isText(email) || !isText(password) || !isText(code, { max: 12 })) {
+    return res.status(400).json({ error: "Courriel, mot de passe et code requis." });
+  }
+  const user = await chercherParCourriel(prisma, email);
+  if (!user || !(await bcrypt.compare(password, user.passwordHash))) return res.status(401).json({ error: "Identifiants invalides." });
+
+  if (!user.emailVerifiedAt) {
+    const etat = await verifierCode(user, code);
+    if (etat !== "valide") return res.status(400).json({ error: messagePourEtat(etat), etat });
+    user.emailVerifiedAt = new Date();
+  }
+  res.json({ token: signToken(user), user: publicUser(user) });
+});
+
+// Nouveau code (bouton « Renvoyer le code »). Même garde-fou : courriel ET mot de passe, pour que
+// personne ne puisse faire pleuvoir des courriels sur une adresse qui n'est pas la sienne.
+router.post("/resend-code", authLimiter, async (req, res) => {
+  const { email, password } = req.body || {};
+  if (!isText(email) || !isText(password)) return res.status(400).json({ error: "Courriel et mot de passe requis." });
+  const user = await chercherParCourriel(prisma, email);
+  if (!user || !(await bcrypt.compare(password, user.passwordHash))) return res.status(401).json({ error: "Identifiants invalides." });
+
+  if (!confirmationRequise(user)) return res.json({ ok: true, dejaConfirme: true, message: "Ce courriel est déjà confirmé : connectez-vous." });
+  const envoi = await demanderCode(user);
+  res.json({ ok: Boolean(envoi.envoye), message: messageDemandeDeCode(envoi, user.email) });
+});
+
+// Porte de secours du Dispatch : confirmer un courriel à la main (code jamais reçu, adresse
+// corrigée après coup, personne au téléphone). Le compte peut ensuite se connecter sans code.
+router.post("/confirm-email/:userId", requireAuth, requireRole("DISPATCH"), async (req, res) => {
+  const user = await prisma.user.findUnique({ where: { id: req.params.userId }, select: { id: true, emailVerifiedAt: true } });
+  if (!user) return res.status(404).json({ error: "Compte introuvable." });
+  await prisma.user.update({ where: { id: user.id }, data: { emailVerifiedAt: user.emailVerifiedAt || new Date() } });
+  await prisma.emailVerification.deleteMany({ where: { userId: user.id } });
+  res.json({ ok: true });
 });
 
 // Profil à jour de l'utilisateur connecté (adresse de domicile, préférences...) — rafraîchi à

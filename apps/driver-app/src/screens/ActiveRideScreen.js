@@ -3,6 +3,7 @@ import { View, Text, TouchableOpacity, StyleSheet, Linking } from "react-native"
 import { api } from "../lib/api";
 import { playSound } from "../lib/sound";
 import { showAlert } from "../lib/alert";
+import { getSocket } from "../lib/socket";
 import { openWaze as openWazeTo, openGoogleMaps as openGoogleMapsTo } from "../lib/navigation";
 import { chooseTarget, navigationHint } from "../lib/navigationLinks";
 import SwipeButton from "../components/SwipeButton";
@@ -45,6 +46,14 @@ export default function ActiveRideScreen({ rideId, onCompleted, onCancelled, onO
   };
 
   useEffect(() => { load(); }, [rideId]);
+
+  // Une correction du Dispatch (adresse, heure, montant) se voit sans fermer l’écran.
+  useEffect(() => {
+    let sock;
+    const surMiseAJour = (r) => { if (r?.id === rideId) load(); };
+    getSocket().then((s) => { sock = s; s.on("ride:updated", surMiseAJour); });
+    return () => sock?.off("ride:updated", surMiseAJour);
+  }, [rideId]);
 
   // Le suivi GPS est piloté au niveau de l'application (App.js) et non ici : il doit continuer
   // quand le chauffeur revient à l'accueil, ouvre la messagerie ou bascule dans Waze.

@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, Linking, Platform, ScrollView } from "react-native";
+import DateTimePicker from "@react-native-community/datetimepicker";
 import { api } from "../lib/api";
 import { playSound } from "../lib/sound";
 import { showAlert } from "../lib/alert";
@@ -7,9 +8,17 @@ import AddressInput from "../components/AddressInput";
 
 const TAXI_SYLVAIN_PHONE = "+14384991120";
 
-// Sur le web, les champs date/heure natifs du navigateur sont bien plus pratiques que des
-// zones de texte ; sur Android/iOS on garde une saisie texte simple (AAAA-MM-JJ / HH:MM).
+const deuxChiffres = (n) => String(n).padStart(2, "0");
+const dateLocale = (d) => `${d.getFullYear()}-${deuxChiffres(d.getMonth() + 1)}-${deuxChiffres(d.getDate())}`;
+const heureLocale = (d) => `${deuxChiffres(d.getHours())}:${deuxChiffres(d.getMinutes())}`;
+
+// Date et heure de la course. Sur le web, les champs natifs du navigateur ; sur Android et iPhone,
+// le sélecteur du système (calendrier et horloge) : avant le 20 septembre 2026, il fallait taper
+// « AAAA-MM-JJ » et « HH:MM » à la main, ce qui donnait des dates invalides et des réservations
+// ratées. Les valeurs restent des textes « AAAA-MM-JJ » et « HH:MM », comme avant.
 function DateTimeFields({ date, time, onDate, onTime }) {
+  const [mode, setMode] = useState(null); // "date", "time" ou null (sélecteur fermé)
+
   if (Platform.OS === "web") {
     const style = { background: "#16233a", color: "#edeff3", border: "1px solid #28395a", borderRadius: 12, padding: 12, fontSize: 14, flex: 1, colorScheme: "dark" };
     return (
@@ -19,10 +28,51 @@ function DateTimeFields({ date, time, onDate, onTime }) {
       </View>
     );
   }
+
+  // Valeur montrée par le sélecteur : ce qui est déjà choisi, sinon maintenant.
+  const maintenant = new Date();
+  const base = new Date(`${date || dateLocale(maintenant)}T${time || heureLocale(maintenant)}:00`);
+  const valeur = Number.isNaN(base.getTime()) ? maintenant : base;
+
+  const changer = (event, choisi) => {
+    // Android ferme le sélecteur tout seul ; iPhone le laisse ouvert jusqu'au bouton Terminé.
+    if (Platform.OS === "android") setMode(null);
+    if (event?.type === "dismissed" || !choisi) return;
+    if (mode === "date") onDate(dateLocale(choisi));
+    else onTime(heureLocale(choisi));
+  };
+
   return (
-    <View style={{ flexDirection: "row", gap: 8, marginBottom: 10 }}>
-      <TextInput style={[styles.input, { flex: 1, marginBottom: 0 }]} placeholder="Date (AAAA-MM-JJ)" placeholderTextColor="#8b99b5" value={date} onChangeText={onDate} />
-      <TextInput style={[styles.input, { flex: 1, marginBottom: 0 }]} placeholder="Heure (HH:MM)" placeholderTextColor="#8b99b5" value={time} onChangeText={onTime} />
+    <View style={{ marginBottom: 10 }}>
+      <View style={{ flexDirection: "row", gap: 8 }}>
+        <TouchableOpacity style={[styles.input, { flex: 1, marginBottom: 0 }]} onPress={() => setMode("date")} accessibilityLabel="Choisir la date">
+          <Text style={{ color: date ? "#edeff3" : "#8b99b5" }}>{date || "Choisir la date"}</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={[styles.input, { flex: 1, marginBottom: 0 }]} onPress={() => setMode("time")} accessibilityLabel="Choisir l'heure">
+          <Text style={{ color: time ? "#edeff3" : "#8b99b5" }}>{time || "Choisir l'heure"}</Text>
+        </TouchableOpacity>
+        {date || time ? (
+          <TouchableOpacity style={[styles.input, { marginBottom: 0, justifyContent: "center" }]} onPress={() => { onDate(""); onTime(""); }} accessibilityLabel="Effacer la date et l'heure">
+            <Text style={{ color: "#8b99b5" }}>✕</Text>
+          </TouchableOpacity>
+        ) : null}
+      </View>
+      {mode ? (
+        <DateTimePicker
+          value={valeur}
+          mode={mode}
+          is24Hour
+          display={Platform.OS === "ios" ? "spinner" : "default"}
+          minimumDate={mode === "date" ? new Date() : undefined}
+          onChange={changer}
+          themeVariant="dark"
+        />
+      ) : null}
+      {mode && Platform.OS === "ios" ? (
+        <TouchableOpacity style={styles.primaryBtn} onPress={() => setMode(null)}>
+          <Text style={styles.primaryBtnText}>Terminé</Text>
+        </TouchableOpacity>
+      ) : null}
     </View>
   );
 }
@@ -79,7 +129,7 @@ export default function BookScreen({ user, onBooked, onOpenGroups, onOpenChangeP
     }
     const when = scheduledFor();
     if (when === null) {
-      showAlert("Date invalide", "Indiquez la date au format AAAA-MM-JJ et l'heure au format HH:MM.");
+      showAlert("Date invalide", Platform.OS === "web" ? "Indiquez la date au format AAAA-MM-JJ et l'heure au format HH:MM." : "Choisissez la date et l'heure de la course, ou effacez-les pour partir dès que possible.");
       return;
     }
     setSubmitting(true);

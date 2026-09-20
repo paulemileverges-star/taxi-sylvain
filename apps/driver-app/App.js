@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import { SafeAreaView, StatusBar } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import LoginScreen from "./src/screens/LoginScreen";
+import VerifyCodeScreen from "./src/screens/VerifyCodeScreen";
 import HomeScreen from "./src/screens/HomeScreen";
 import ActiveRideScreen from "./src/screens/ActiveRideScreen";
 import RatingScreen from "./src/screens/RatingScreen";
@@ -19,7 +20,7 @@ import { logout as clearSession } from "./src/lib/api";
 import { playSound } from "./src/lib/sound";
 import * as Notifications from "expo-notifications";
 import { registerForPushNotifications, clearPushToken } from "./src/lib/pushNotifications";
-import { requestWebNotificationPermission, notifyWeb } from "./src/lib/webNotify";
+import { requestWebNotificationPermission, notifyWeb, registerWebPush, unregisterWebPush } from "./src/lib/webNotify";
 import { startTrackingLocation, stopTrackingLocation } from "./src/lib/locationTracker";
 import { showAlert } from "./src/lib/alert";
 import { api } from "./src/lib/api";
@@ -30,6 +31,9 @@ const EMPTY_UNREAD = { direct: { total: 0, byDriver: {} }, groups: { total: 0, b
 
 export default function App() {
   const [user, setUser] = useState(null);
+  // Code de confirmation attendu par le serveur à la première connexion : { email, password,
+  // message }. Aucune session n'est ouverte tant qu'il n'est pas saisi (voir VerifyCodeScreen).
+  const [verification, setVerification] = useState(null);
   const [screen, setScreen] = useState("home");
   const [activeRideId, setActiveRideId] = useState(null);
   const [newReport, setNewReport] = useState(false);
@@ -61,8 +65,27 @@ export default function App() {
     })();
   }, []);
 
+  // Course terminée sans passer par l'écran de notation (application fermée, coupure) : la
+  // notation du client est proposée à l'ouverture suivante.
+  const proposerNotation = async () => {
+    try {
+      const [aNoter] = await api.pendingRatings();
+      if (!aNoter) return;
+      showAlert(
+        "Notez votre client",
+        `${aNoter.pickupAddress} → ${aNoter.destAddress}${aNoter.autre?.name ? `, ${aNoter.autre.name}` : ""}. Voulez-vous noter cette course ?`,
+        [
+          { text: "Plus tard", style: "cancel" },
+          { text: "Noter", onPress: () => { setActiveRideId(aNoter.rideId); setScreen("rating"); } },
+        ]
+      );
+    } catch {
+      // Hors ligne : on réessaiera à la prochaine ouverture.
+    }
+  };
+
   useEffect(() => {
-    if (!user) return;
+    if (!user) return undefined;
     let sock;
     getSocket().then((s) => {
       sock = s;
@@ -96,12 +119,15 @@ export default function App() {
       });
     });
     registerForPushNotifications();
-    requestWebNotificationPermission();
+    // Version web : abonnement aux notifications du serveur, si la permission a été accordée.
+    requestWebNotificationPermission().then(registerWebPush).catch(() => null);
     refreshUnread();
+    proposerNotation();
     return () => {
       sock?.off("ride:broadcast");
       sock?.off("ride:assigned");
       sock?.off("report:ready");
+      sock?.off("ride:reminder");
       sock?.off("message:group");
       sock?.off("message:direct");
       sock?.off("message:ride");
@@ -141,13 +167,16 @@ export default function App() {
   useEffect(() => {
     const sub = Notifications.addNotificationResponseReceivedListener((response) => {
       const data = response.notification.request.content.data;
-      if ((data?.type === "ride:assigned" || data?.type === "ride:broadcast" || data?.type === "ride:reminder") && data.rideId) {
+      if ((data?.type === "ride:assigned" || data?.type === "ride:broadcast" || data?.type === "ride:reminder" || data?.type === "ride:reminder:urgent") && data.rideId) {
         setActiveRideId(data.rideId);
         setScreen("active");
       } else if (data?.type === "message:direct") {
         setScreen("messages");
       } else if (data?.type === "message:group") {
         setScreen("groups");
+      } else if (data?.type === "report:ready") {
+        setNewReport(false);
+        setScreen("reports");
       }
     });
     return () => sub.remove();
@@ -159,7 +188,10 @@ export default function App() {
     setTrackedRide(null);
     await stopTrackingLocation();
     resetSocket();
-    if (server) await clearPushToken();
+    if (server) {
+      await clearPushToken();
+      await unregisterWebPush();
+    }
     await clearSession();
     setUser(null);
     setScreen("home");
@@ -170,7 +202,15 @@ export default function App() {
     return (
       <SafeAreaView style={{ flex: 1, backgroundColor: "#0f1b2d" }}>
         <StatusBar barStyle="light-content" />
-        <LoginScreen onLogin={setUser} />
+        {verification ? (
+          <VerifyCodeScreen
+            {...verification}
+            onVerified={(u) => { setVerification(null); setUser(u); }}
+            onBack={() => setVerification(null)}
+          />
+        ) : (
+          <LoginScreen onLogin={setUser} onVerification={setVerification} />
+        )}
       </SafeAreaView>
     );
   }

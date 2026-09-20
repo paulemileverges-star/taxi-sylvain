@@ -3,6 +3,7 @@ import "./App.css";
 import { api } from "./lib/api.js";
 import { getSocket, resetSocket } from "./lib/socket.js";
 import { playSound } from "./lib/sound.js";
+import { notifyWeb, registerWebPush, unregisterWebPush } from "./lib/webNotify.js";
 import Login from "./pages/Login.jsx";
 import Dashboard from "./pages/Dashboard.jsx";
 import Courses from "./pages/Courses.jsx";
@@ -35,6 +36,13 @@ const NAV = [
   { key: "admins", label: "Administrateurs", dispatchOnly: true },
 ];
 
+// Session ouverte : jeton et profil gardés dans le navigateur.
+function ouvrirSession(data, setUser) {
+  api.setToken(data.token);
+  localStorage.setItem("ts_user", JSON.stringify(data.user));
+  setUser(data.user);
+}
+
 export default function App() {
   const [user, setUser] = useState(() => {
     const raw = localStorage.getItem("ts_user");
@@ -48,20 +56,12 @@ export default function App() {
   const [showChangePassword, setShowChangePassword] = useState(false);
 
   useEffect(() => {
-    if (!user) return;
+    if (!user) return undefined;
     const socket = getSocket();
-    // Notification système du navigateur (visible même si la fenêtre est réduite ou sur un autre
-    // onglet, tant que la console reste ouverte) — demandée une fois à la connexion.
-    if (typeof Notification !== "undefined" && Notification.permission === "default") {
-      Notification.requestPermission().catch(() => null);
-    }
-    const desktopNotify = (text) => {
-      try {
-        if (typeof Notification !== "undefined" && Notification.permission === "granted" && document.visibilityState !== "visible") {
-          new Notification("Taxi Sylvain — Dispatch", { body: text, tag: `ts-${Date.now()}` });
-        }
-      } catch { /* non supporté */ }
-    };
+    // Notification système du navigateur, par le service worker : visible même si la fenêtre est
+    // réduite ou sur un autre onglet, et par Web Push même console fermée (voir lib/webNotify.js).
+    registerWebPush();
+    const desktopNotify = (text) => notifyWeb("Taxi Sylvain — Dispatch", text);
     const push = (n) => {
       const entry = { id: `${Date.now()}-${Math.random()}`, text: n.text, status: n.status || null, at: new Date() };
       setNotifs((prev) => [entry, ...prev].slice(0, 100));
@@ -92,8 +92,10 @@ export default function App() {
     };
   }, [user]);
 
-  const logout = () => {
+  const logout = async () => {
     resetSocket();
+    // Ce navigateur ne doit plus recevoir les notifications de ce compte (avant d'effacer le jeton).
+    await unregisterWebPush();
     api.logout();
     setUser(null);
   };
@@ -101,12 +103,9 @@ export default function App() {
   if (!user) {
     return (
       <Login
-        onLogin={async (email, password) => {
-          const data = await api.login(email, password);
-          api.setToken(data.token);
-          localStorage.setItem("ts_user", JSON.stringify(data.user));
-          setUser(data.user);
-        }}
+        onLogin={async (email, password) => ouvrirSession(await api.login(email, password), setUser)}
+        onVerify={async (email, password, code) => ouvrirSession(await api.verifyEmail(email, password, code), setUser)}
+        onResend={(email, password) => api.resendCode(email, password)}
       />
     );
   }

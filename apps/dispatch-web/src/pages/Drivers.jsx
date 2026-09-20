@@ -79,6 +79,19 @@ export default function Drivers() {
     load();
   };
 
+  // Porte de secours : le chauffeur n’a pas reçu son code de confirmation (courriel mal saisi,
+  // indésirables...). Le Dispatch confirme à sa place, après l’avoir eu au téléphone.
+  const confirmerCourriel = async (driver) => {
+    if (!window.confirm(`Confirmer le courriel de ${driver.name} à sa place ? Il pourra se connecter sans code.`)) return;
+    try {
+      await api.confirmEmail(driver.id);
+      playSound("action");
+      load();
+    } catch (e) {
+      alert(`Confirmation impossible : ${e.message}`);
+    }
+  };
+
   const createDriver = async () => {
     setError("");
     try {
@@ -147,6 +160,9 @@ export default function Drivers() {
               }}
             />
             <span>{d.name} — {d.carModel} · {d.plate}</span>
+            {d.emailVerifiedAt === null && (
+              <button className="btn outline" title={"Ce compte n’a pas encore saisi le code reçu par courriel. Confirmer à sa place le laisse se connecter sans code."} onClick={() => confirmerCourriel(d)}>Courriel non confirmé · Confirmer</button>
+            )}
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
             <span className="chip">★ {d.ratingAvg?.toFixed(1) ?? "5.0"}</span>

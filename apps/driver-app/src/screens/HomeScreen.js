@@ -66,12 +66,14 @@ export default function HomeScreen({ user, onOpenRide, onOpenEarnings, onOpenMes
       s.on("ride:broadcast", refresh);
       s.on("ride:taken", refresh);
       s.on("ride:assigned", refresh);
+      s.on("ride:updated", refresh);
       s.on("ride:status", refresh);
     });
     return () => {
       sock?.off("ride:broadcast", refresh);
       sock?.off("ride:taken", refresh);
       sock?.off("ride:assigned", refresh);
+      sock?.off("ride:updated", refresh);
       sock?.off("ride:status", refresh);
     };
   }, [load]);

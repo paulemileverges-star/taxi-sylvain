@@ -24,6 +24,9 @@ async function request(path, { method = "GET", body } = {}) {
     // plus (supprimé), et l'application doit alors fermer la session.
     const err = new Error(data.error || "Erreur réseau");
     err.status = res.status;
+    // La réponse complète accompagne l’erreur : la connexion répond 403 avec
+    // verificationRequired quand un code de confirmation doit d’abord être saisi.
+    err.data = data;
     throw err;
   }
   return data;
@@ -39,11 +42,20 @@ export async function reportDownloadUrl(format, weekStart, weekEnd) {
 
 export const api = {
   login: (email, password) => request("/auth/login", { method: "POST", body: { email, password } }),
+  // Confirmation du courriel par code à six chiffres (nouveaux comptes).
+  verifyEmail: (email, password, code) => request("/auth/verify-email", { method: "POST", body: { email, password, code } }),
+  resendCode: (email, password) => request("/auth/resend-code", { method: "POST", body: { email, password } }),
   me: () => request("/auth/me"),
   changePassword: (currentPassword, newPassword) => request("/auth/change-password", { method: "POST", body: { currentPassword, newPassword } }),
   deleteAccount: (password) => request("/auth/delete-account", { method: "POST", body: { password } }),
   registerPushToken: (token) => request("/auth/push-token", { method: "POST", body: { token } }),
   clearPushToken: () => request("/auth/push-token", { method: "DELETE" }),
+  // Notifications Web Push (version web seulement, voir lib/webNotify.js).
+  webPushKey: () => request("/push/web/key"),
+  webPushSubscribe: (subscription) => request("/push/web/subscribe", { method: "POST", body: { subscription } }),
+  webPushUnsubscribe: (endpoint) => request("/push/web/subscribe", { method: "DELETE", body: { endpoint } }),
+  // Courses terminées qu’il reste à noter (proposées à l’ouverture de l’application).
+  pendingRatings: () => request("/ratings/pending"),
   updateNotificationPrefs: (offsets) => request("/auth/notification-prefs", { method: "PATCH", body: { offsets } }),
   myRides: () => request("/rides"),
   myRidesPaged: (when, page) => request(`/rides?when=${when}&page=${page}&pageSize=10`),

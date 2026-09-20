@@ -1,10 +1,11 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { api } from "../lib/api.js";
 import { getSocket } from "../lib/socket.js";
 import { playSound } from "../lib/sound.js";
 import AddressInput from "../components/AddressInput.jsx";
 import Suggest from "../components/Suggest.jsx";
 import { STATUS_LABEL, statusClass, localInputToIso } from "../lib/status.js";
+import { filtrerCourses, paginer, PERIODES } from "../lib/coursesFilter.js";
 
 function fmtDate(d) {
   return new Date(d).toLocaleDateString("fr-CA");
@@ -21,6 +22,8 @@ function Field({ label, value }) {
     </div>
   );
 }
+
+const FILTRE_VIDE = { q: "", statut: "", periode: "all", driverId: "" };
 
 export default function Courses() {
   const [rides, setRides] = useState([]);
@@ -40,6 +43,14 @@ export default function Courses() {
   const [credentials, setCredentials] = useState(null); // { clientTempPassword?, driverTempPassword? }
   const [destinations, setDestinations] = useState([]);
   const [quoteInfo, setQuoteInfo] = useState(null); // { price, zoneName } pour la destination choisie
+
+  // Recherche, filtres et pagination (voir lib/coursesFilter.js) : la liste complète reste en
+  // mémoire, seule la page affichée change. Un changement de filtre ramène à la première page.
+  const [filtre, setFiltre] = useState(FILTRE_VIDE);
+  const [page, setPage] = useState(1);
+  const changerFiltre = (patch) => { setFiltre((f) => ({ ...f, ...patch })); setPage(1); };
+  const filtrees = useMemo(() => filtrerCourses(rides, filtre), [rides, filtre]);
+  const pagination = paginer(filtrees, page);
 
   useEffect(() => { api.listDestinations().then(setDestinations).catch(() => setDestinations([])); }, []);
 
@@ -176,6 +187,8 @@ export default function Courses() {
     load();
   };
 
+  const filtreActif = filtre.q || filtre.statut || filtre.periode !== "all" || filtre.driverId;
+
   return (
     <div>
       <div className="row">
@@ -183,7 +196,35 @@ export default function Courses() {
         <button className="btn" onClick={() => setShowCreate(true)}>Nouvelle course</button>
       </div>
 
-      {rides.map((ride) => {
+      <div className="card" style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", marginBottom: 12 }}>
+        <input
+          className="input"
+          style={{ flex: 1, minWidth: 220, marginTop: 0 }}
+          placeholder="Rechercher : client, chauffeur, adresse, numéro de vol…"
+          value={filtre.q}
+          onChange={(e) => changerFiltre({ q: e.target.value })}
+        />
+        <select className="input" style={{ width: 210, marginTop: 0 }} value={filtre.statut} onChange={(e) => changerFiltre({ statut: e.target.value })}>
+          <option value="">Tous les statuts</option>
+          {Object.entries(STATUS_LABEL).map(([k, l]) => <option key={k} value={k}>{l}</option>)}
+        </select>
+        <select className="input" style={{ width: 210, marginTop: 0 }} value={filtre.periode} onChange={(e) => changerFiltre({ periode: e.target.value })}>
+          {PERIODES.map((p) => <option key={p.key} value={p.key}>{p.label}</option>)}
+        </select>
+        <select className="input" style={{ width: 190, marginTop: 0 }} value={filtre.driverId} onChange={(e) => changerFiltre({ driverId: e.target.value })}>
+          <option value="">Tous les chauffeurs</option>
+          <option value="__none__">Non assignées</option>
+          {drivers.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
+        </select>
+        {filtreActif && (
+          <button type="button" className="btn outline" onClick={() => { setFiltre(FILTRE_VIDE); setPage(1); }}>Effacer les filtres</button>
+        )}
+      </div>
+      <div style={{ color: "var(--muted)", fontSize: 13, marginBottom: 8 }}>
+        {pagination.total} course{pagination.total > 1 ? "s" : ""}{filtreActif ? ` sur ${rides.length}` : ""} · page {pagination.page} / {pagination.pages}
+      </div>
+
+      {pagination.items.map((ride) => {
         const when = ride.scheduledFor || ride.createdAt;
         return (
           <div key={ride.id} className={`card ride-card ${statusClass(ride.status)}`}>
@@ -215,6 +256,15 @@ export default function Courses() {
         );
       })}
       {rides.length === 0 && <div style={{ color: "#8b99b5", fontSize: 14 }}>Aucune course pour l'instant.</div>}
+      {rides.length > 0 && pagination.total === 0 && <div style={{ color: "#8b99b5", fontSize: 14 }}>Aucune course ne correspond à ces filtres.</div>}
+
+      {pagination.pages > 1 && (
+        <div className="row" style={{ justifyContent: "center", gap: 12, marginTop: 12 }}>
+          <button className="btn outline" disabled={pagination.page <= 1} onClick={() => setPage(pagination.page - 1)}>← Précédente</button>
+          <span style={{ color: "var(--muted)", fontSize: 13 }}>Page {pagination.page} / {pagination.pages}</span>
+          <button className="btn outline" disabled={pagination.page >= pagination.pages} onClick={() => setPage(pagination.page + 1)}>Suivante →</button>
+        </div>
+      )}
 
       {showCreate && (
         <div className="modal-backdrop">
@@ -319,6 +369,9 @@ export default function Courses() {
                 />
                 <label style={{ display: "block", marginTop: 8 }}>Courriel du nouveau client (optionnel)</label>
                 <input className="input" type="email" value={form.clientEmail} onChange={(e) => setForm({ ...form, clientEmail: e.target.value })} />
+                <div style={{ color: "var(--muted)", fontSize: 12, marginTop: 4 }}>
+                  Avec un courriel, le client recevra un code de confirmation à sa première connexion (et les courriels de course).
+                </div>
                 <label style={{ display: "block", marginTop: 8 }}>Adresse du nouveau client (domicile — par défaut, l'adresse de prise en charge)</label>
                 <AddressInput
                   value={form.clientAddress}
@@ -359,7 +412,7 @@ export default function Courses() {
                 <label style={{ display: "block", marginTop: 8 }}>Plaque (optionnel)</label>
                 <input className="input" value={form.newDriverPlate} onChange={(e) => setForm({ ...form, newDriverPlate: e.target.value })} />
                 <div style={{ color: "var(--muted)", fontSize: 12, marginTop: 4 }}>
-                  Un compte chauffeur sera créé automatiquement avec des accès générés automatiquement, et affecté à cette course.
+                  Un compte chauffeur sera créé automatiquement avec des accès générés automatiquement, et affecté à cette course. Il recevra un code de confirmation par courriel à sa première connexion.
                 </div>
               </>
             )}
@@ -380,6 +433,7 @@ export default function Courses() {
             <div className="row"><h3>Accès générés automatiquement</h3><button onClick={() => setCredentials(null)}>✕</button></div>
             <div style={{ color: "var(--muted)", fontSize: 13, marginBottom: 10 }}>
               Copiez ces mots de passe temporaires et transmettez-les aux concernés — ils pourront les changer eux-mêmes une fois connectés.
+              À la première connexion, un code de confirmation leur est envoyé par courriel.
             </div>
             {credentials.client && (
               <div className="field-row"><span className="field-label">Client — mot de passe :</span><span>{credentials.client}</span></div>

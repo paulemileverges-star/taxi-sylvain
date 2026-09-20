@@ -24,7 +24,7 @@ export function problemeDeSaisie({ name, email, phone, password, confirmation })
   return null;
 }
 
-export default function RegisterScreen({ onRegistered, onBack }) {
+export default function RegisterScreen({ onRegistered, onBack, onVerification }) {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
@@ -41,6 +41,8 @@ export default function RegisterScreen({ onRegistered, onBack }) {
     setEnvoi(true);
     try {
       const data = await api.register(name.trim(), email.trim(), phone.trim(), password);
+      // Compte créé, code envoyé par courriel : aucune session tant qu’il n’est pas saisi.
+      if (data.verificationRequired) return onVerification?.({ email: data.email || email.trim(), password, message: data.error });
       await AsyncStorage.setItem("ts_token", data.token);
       await AsyncStorage.setItem("ts_user", JSON.stringify(data.user));
       onRegistered(data.user);

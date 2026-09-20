@@ -9,6 +9,19 @@ function getContext() {
   return ctx;
 }
 
+// Les navigateurs bloquent tout son tant que la personne n’a pas cliqué ou tapé une touche dans
+// la page : au premier geste, on ouvre le contexte audio pour que la première notification
+// (une course qui arrive pendant qu’on lit une autre page) sonne vraiment.
+if (typeof window !== "undefined") {
+  const debloquer = () => {
+    try { getContext(); } catch { /* API indisponible */ }
+    window.removeEventListener("pointerdown", debloquer);
+    window.removeEventListener("keydown", debloquer);
+  };
+  window.addEventListener("pointerdown", debloquer);
+  window.addEventListener("keydown", debloquer);
+}
+
 function tone(audioCtx, freq, startTime, duration, gainValue) {
   const osc = audioCtx.createOscillator();
   const gain = audioCtx.createGain();

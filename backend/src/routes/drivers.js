@@ -9,7 +9,7 @@ import { requireAuth, requirePermission } from "../middleware/auth.js";
 import { deleteUserCascade, announceDeletion } from "../lib/deleteUser.js";
 import { getOnlineDriverIds } from "../lib/onlineDrivers.js";
 import { streamListPdf, streamListXlsx } from "../lib/exportReport.js";
-import { generateTempPassword } from "../lib/placeholderEmail.js";
+import { generateTempPassword, realEmailOrNull } from "../lib/placeholderEmail.js";
 import { parseImportFile, pick } from "../lib/bulkImport.js";
 import { getAllDriverLocations } from "../lib/driverLocations.js";
 
@@ -34,7 +34,11 @@ export async function createDriverAccount({ name, email, phone, password, carMod
   const tempPassword = password || generateTempPassword();
   const passwordHash = await bcrypt.hash(tempPassword, 10);
   const driver = await prisma.user.create({
-    data: { role: "DRIVER", name, email, phone, passwordHash, carModel: carModel || null, plate: plate || null },
+    data: {
+      role: "DRIVER", name, email, phone, passwordHash, carModel: carModel || null, plate: plate || null,
+      // Le chauffeur confirme son courriel par code à sa première connexion (lib/verification.js).
+      emailVerifiedAt: realEmailOrNull(email) ? null : new Date(),
+    },
     select: { id: true, name: true, email: true, phone: true, carModel: true, plate: true, ratingAvg: true, photoUrl: true, carPhotoUrl: true },
   });
   return { driver, tempPassword };
@@ -105,7 +109,8 @@ router.use(requireAuth);
 router.get("/", requirePermission("drivers"), async (req, res) => {
   const drivers = await prisma.user.findMany({
     where: { role: "DRIVER" },
-    select: { id: true, name: true, carModel: true, plate: true, ratingAvg: true, photoUrl: true, carPhotoUrl: true },
+    // emailVerifiedAt : la console montre qui n’a pas encore confirmé son courriel (et peut le faire à sa place).
+    select: { id: true, name: true, carModel: true, plate: true, ratingAvg: true, photoUrl: true, carPhotoUrl: true, emailVerifiedAt: true },
   });
   const onlineIds = getOnlineDriverIds();
   res.json(drivers.map((d) => ({ ...d, online: onlineIds.has(d.id) })));

@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { View, Text, TextInput, TouchableOpacity, ScrollView, StyleSheet } from "react-native";
 import { api } from "../lib/api";
-import { getSocket } from "../lib/socket";
+import { getSocket, watchRide } from "../lib/socket";
 import { playSound } from "../lib/sound";
 import { showAlert } from "../lib/alert";
 
@@ -16,7 +16,7 @@ export default function RideChatScreen({ rideId, onBack, onRead }) {
     let sock;
     getSocket().then((s) => {
       sock = s;
-      s.emit("ride:watch", rideId);
+      watchRide(rideId);
       s.on("message:new", (m) => {
         if (m.rideId !== rideId) return;
         setMessages((prev) => (prev.some((x) => x.id === m.id) ? prev : [...prev, m]));
