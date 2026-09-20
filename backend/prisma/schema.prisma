@@ -85,6 +85,10 @@ model Ride {
   status        RideStatus @default(REQUESTED)
   pickupAddress String
   destAddress   String
+  // Precision du point : « verifie » (catalogue), « porte », « rue », « lieu », « approx ».
+  // Vide = ancienne course : on navigue alors sur le texte de l'adresse.
+  pickupConfidence String?
+  destConfidence   String?
   pickupLat     Float?
   pickupLng     Float?
   destLat       Float?

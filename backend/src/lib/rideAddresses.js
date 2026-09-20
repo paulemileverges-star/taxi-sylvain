@@ -4,7 +4,7 @@
 // donc la carte gardait l'ancien point).
 import { prisma } from "./prisma.js";
 import { geocodeAddress } from "./distance.js";
-import { canonicalAddress, cleanAddressText } from "./addressFormat.js";
+import { canonicalAddress, cleanAddressText, confidenceFromOsm } from "./addressFormat.js";
 
 /**
  * Met une adresse à la forme unique de Taxi Sylvain et, si besoin, retrouve ses coordonnées.
@@ -19,7 +19,9 @@ export async function normaliserAdresse(texte, { zones = [], coords = null, geoc
   if (!texte || !String(texte).trim()) return { address: null, coords: coords || null, avertissement: "adresse-vide" };
 
   const aDesCoords = coords && typeof coords.lat === "number" && typeof coords.lng === "number";
-  if (aDesCoords) return { address: cleanAddressText(texte), coords, avertissement: null };
+  // Un point fourni par l'application sans niveau de précision vaut « approx » : on ne lance
+  // jamais un guidage automatique sur un point dont on ne sait rien.
+  if (aDesCoords) return { address: cleanAddressText(texte), coords, confidence: coords.confidence || "approx", avertissement: null };
 
   let trouve = null;
   try {
@@ -31,6 +33,7 @@ export async function normaliserAdresse(texte, { zones = [], coords = null, geoc
   return {
     address: r.address,
     coords: trouve ? { lat: trouve.lat, lng: trouve.lng } : null,
+    confidence: trouve ? confidenceFromOsm(trouve.raw) : null,
     avertissement: r.avertissement,
     zoneTexte: r.zoneTexte,
     zoneForme: r.zoneForme,

@@ -92,7 +92,7 @@ router.post("/", requirePermission("courses", "CLIENT"), async (req, res) => {
   const {
     pickupAddress, distanceKm, scheduledFor, flightNumber, destinationCode,
     clientName, clientPhone, clientEmail, clientAddress, clientNotes,
-    pickupLat, pickupLng, broadcastAll,
+    pickupLat, pickupLng, pickupConfidence, destConfidence: destConfidenceRecue, broadcastAll,
     newDriver, // { name, email, phone, password?, carModel?, plate? } — créé à la volée et affecté
   } = req.body;
   let { driverId, destAddress, destLat, destLng, fare } = req.body;
@@ -116,9 +116,11 @@ router.post("/", requirePermission("courses", "CLIENT"), async (req, res) => {
   // affiché partout et ouvert dans Waze. La mise en forme ne peut jamais changer la municipalité
   // reconnue (garde-fou dans addressFormat.js) : aucun prix ne bouge en silence.
   const zones = await chargerZones();
-  const depart = await normaliserAdresse(pickupAddress, { zones, coords: { lat: pickupLat, lng: pickupLng } });
+  const depart = await normaliserAdresse(pickupAddress, { zones, coords: { lat: pickupLat, lng: pickupLng, confidence: pickupConfidence } });
   let pickupAddressFinale = depart.address || pickupAddress;
   let pickup = depart.coords || { lat: pickupLat, lng: pickupLng };
+  let precisionDepart = depart.confidence || null;
+  let precisionArrivee = destConfidenceRecue || null;
   const avertissements = depart.avertissement && depart.avertissement !== "adresse-vide" ? [depart.avertissement] : [];
 
   if (destinationCode) {
@@ -127,12 +129,16 @@ router.post("/", requirePermission("courses", "CLIENT"), async (req, res) => {
       destAddress = q.destination.address;
       destLat = q.destination.lat;
       destLng = q.destination.lng;
+      // Les points du catalogue sont vérifiés à la main dans la page Tarifs : ce sont les seuls
+      // sur lesquels on lance un guidage automatique.
+      precisionArrivee = "verifie";
       if (isClientBooking || !fare) fare = q.price ?? 0;
     }
   } else if (destAddress) {
-    const arrivee = await normaliserAdresse(destAddress, { zones, coords: { lat: destLat, lng: destLng } });
+    const arrivee = await normaliserAdresse(destAddress, { zones, coords: { lat: destLat, lng: destLng, confidence: destConfidenceRecue } });
     if (arrivee.address) destAddress = arrivee.address;
     if (arrivee.coords) { destLat = arrivee.coords.lat; destLng = arrivee.coords.lng; }
+    precisionArrivee = arrivee.confidence || precisionArrivee;
   }
 
   // Un client qui réserve dans l'app ne connaît pas le tarif : sans destination au catalogue, le
@@ -170,6 +176,8 @@ router.post("/", requirePermission("courses", "CLIENT"), async (req, res) => {
     data: {
       pickupAddress: pickupAddressFinale,
       destAddress,
+      pickupConfidence: precisionDepart,
+      destConfidence: precisionArrivee,
       distanceKm: computedDistance,
       fare: isClientBooking ? Number(fare) || 0 : Number(fare),
       flightNumber: flightNumber || null,
@@ -444,13 +452,15 @@ router.patch("/:id", requirePermission("courses"), async (req, res) => {
   // endroit après une correction.
   const zonesEdition = pickupAddress !== undefined || destAddress !== undefined ? await chargerZones() : [];
   if (pickupAddress !== undefined) {
-    const r = await normaliserAdresse(pickupAddress, { zones: zonesEdition, coords: { lat: pickupLat, lng: pickupLng } });
+    const r = await normaliserAdresse(pickupAddress, { zones: zonesEdition, coords: { lat: pickupLat, lng: pickupLng, confidence: req.body.pickupConfidence } });
     data.pickupAddress = r.address ?? pickupAddress;
+    data.pickupConfidence = r.confidence || null;
     if (r.coords && pickupLat === undefined) { data.pickupLat = r.coords.lat; data.pickupLng = r.coords.lng; }
   }
   if (destAddress !== undefined) {
-    const r = await normaliserAdresse(destAddress, { zones: zonesEdition, coords: { lat: destLat, lng: destLng } });
+    const r = await normaliserAdresse(destAddress, { zones: zonesEdition, coords: { lat: destLat, lng: destLng, confidence: req.body.destConfidence } });
     data.destAddress = r.address ?? destAddress;
+    data.destConfidence = r.confidence || null;
     if (r.coords && destLat === undefined) { data.destLat = r.coords.lat; data.destLng = r.coords.lng; }
   }
   if (fare !== undefined) data.fare = Number(fare);

@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { requireAuth } from "../middleware/auth.js";
-import { formatFromNominatim, buildGeocodeParams } from "../lib/addressFormat.js";
+import { formatFromNominatim, buildGeocodeParams, confidenceFromOsm, expandAbbreviations } from "../lib/addressFormat.js";
 
 const router = Router();
 router.use(requireAuth);
@@ -12,7 +12,7 @@ router.get("/search", async (req, res) => {
   const q = String(req.query.q || "").trim();
   if (q.length < 3) return res.json([]);
 
-  const params = buildGeocodeParams({ q });
+  const params = buildGeocodeParams({ q: expandAbbreviations(q) });
 
   try {
     const response = await fetch(`https://nominatim.openstreetmap.org/search?${params}`, {
@@ -28,7 +28,7 @@ router.get("/search", async (req, res) => {
           // civique, il ferait reconnaître la mauvaise municipalité, donc facturer un autre prix.
           // Il n'est là que pour aider à choisir dans la liste.
           const nomLieu = r.name && label && !label.includes(r.name) ? r.name : null;
-          return label ? { label, nomLieu, lat: parseFloat(r.lat), lng: parseFloat(r.lon) } : null;
+          return label ? { label, nomLieu, lat: parseFloat(r.lat), lng: parseFloat(r.lon), confidence: confidenceFromOsm(r) } : null;
         })
         .filter(Boolean)
     );

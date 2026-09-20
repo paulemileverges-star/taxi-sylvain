@@ -154,3 +154,23 @@ test("la recherche d'adresses accepte le Canada et les États-Unis", () => {
   assert.equal(p.get("countrycodes"), "ca,us", "Plattsburgh et Burlington sont dans la grille tarifaire");
   assert.equal(p.get("addressdetails"), "1");
 });
+
+test("les abréviations sont écrites en toutes lettres avant d'interroger OpenStreetMap", async () => {
+  const { expandAbbreviations } = await import("../src/lib/addressFormat.js");
+  // Cas réel : « 975 Boul. Roméo-Vachon N » n'est pas trouvé, la forme longue l'est.
+  assert.equal(expandAbbreviations("975 Boul. Roméo-Vachon N"), "975 Boulevard Roméo-Vachon Nord");
+  assert.equal(expandAbbreviations("12 Av. des Érables"), "12 Avenue des Érables");
+  assert.equal(expandAbbreviations("3 Ch. du Lac, St-Jean"), "3 Chemin du Lac, Saint-Jean");
+  assert.equal(expandAbbreviations("Ste-Julie"), "Sainte-Julie");
+});
+
+test("le niveau de précision distingue une porte d'un arrêt d'autobus", async () => {
+  const { confidenceFromOsm } = await import("../src/lib/addressFormat.js");
+  assert.equal(confidenceFromOsm({ address: { house_number: "1580", road: "Avenue Bourgogne" }, category: "building" }), "porte");
+  // Cas réel : « 975 Boulevard Roméo-Vachon Nord » tombe sur l'arrêt d'autobus des arrivées.
+  assert.equal(confidenceFromOsm({ address: { house_number: "975", road: "Boulevard Roméo-Vachon Nord" }, category: "highway", type: "bus_stop" }), "rue");
+  assert.equal(confidenceFromOsm({ address: { road: "Boulevard de Rome" }, name: "Station du REM", category: "public_transport" }), "lieu");
+  assert.equal(confidenceFromOsm({ address: { road: "Rue X" }, category: "highway" }), "rue");
+  assert.equal(confidenceFromOsm({ address: {}, category: "boundary" }), "approx");
+  assert.equal(confidenceFromOsm(null), null);
+});

@@ -28,9 +28,9 @@ export default function Courses() {
   const [clients, setClients] = useState([]);
   const [showCreate, setShowCreate] = useState(false);
   const EMPTY_FORM = {
-    pickupAddress: "", pickupLat: null, pickupLng: null,
+    pickupAddress: "", pickupLat: null, pickupLng: null, pickupConfidence: null,
     destinationCode: "", // "" = autre adresse, sinon YUL / YHU / REM
-    destAddress: "", destLat: null, destLng: null,
+    destAddress: "", destLat: null, destLng: null, destConfidence: null,
     fare: "", driverId: "", clientId: "", flightNumber: "", scheduledFor: "",
     clientName: "", clientPhone: "", clientEmail: "", clientAddress: "", clientNotes: "",
     newDriverName: "", newDriverEmail: "", newDriverPhone: "", newDriverCarModel: "", newDriverPlate: "",
@@ -123,6 +123,8 @@ export default function Courses() {
         pickupAddress: form.pickupAddress,
         pickupLat: form.pickupLat ?? undefined,
         pickupLng: form.pickupLng ?? undefined,
+        pickupConfidence: form.pickupConfidence ?? undefined,
+        destConfidence: form.destConfidence ?? undefined,
         destinationCode: form.destinationCode || undefined,
         destAddress: form.destAddress,
         destLat: form.destLat ?? undefined,
@@ -228,7 +230,7 @@ export default function Courses() {
               <AddressInput
                 label="Adresse de prise en charge (domicile du client par défaut)"
                 value={form.pickupAddress}
-                onChange={({ address, lat, lng }) => setForm({ ...form, pickupAddress: address, pickupLat: lat, pickupLng: lng })}
+                onChange={({ address, lat, lng, confidence }) => setForm({ ...form, pickupAddress: address, pickupLat: lat, pickupLng: lng, pickupConfidence: confidence || null })}
               />
             </div>
             <label style={{ display: "block", marginTop: 8 }}>Destination</label>
@@ -252,7 +254,7 @@ export default function Courses() {
               <AddressInput
                 label="Adresse de destination"
                 value={form.destAddress}
-                onChange={({ address, lat, lng }) => setForm({ ...form, destAddress: address, destLat: lat, destLng: lng })}
+                onChange={({ address, lat, lng, confidence }) => setForm({ ...form, destAddress: address, destLat: lat, destLng: lng, destConfidence: confidence || null })}
               />
             )}
             <Suggest

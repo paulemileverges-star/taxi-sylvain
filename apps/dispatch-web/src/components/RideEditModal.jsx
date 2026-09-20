@@ -35,8 +35,8 @@ export default function RideEditModal({ rideId, onClose, onSaved }) {
         destAddress: form.destAddress,
         // Coordonnées envoyées seulement si l'adresse vient d'être choisie dans la liste ;
         // sinon le serveur géocode lui-même la nouvelle adresse.
-        ...(typeof form.pickupLat === "number" ? { pickupLat: form.pickupLat, pickupLng: form.pickupLng } : {}),
-        ...(typeof form.destLat === "number" ? { destLat: form.destLat, destLng: form.destLng } : {}),
+        ...(typeof form.pickupLat === "number" ? { pickupLat: form.pickupLat, pickupLng: form.pickupLng, pickupConfidence: form.pickupConfidence } : {}),
+        ...(typeof form.destLat === "number" ? { destLat: form.destLat, destLng: form.destLng, destConfidence: form.destConfidence } : {}),
         fare: Number(form.fare),
         flightNumber: form.flightNumber || null,
         scheduledFor: localInputToIso(form.scheduledFor),
@@ -82,12 +82,12 @@ export default function RideEditModal({ rideId, onClose, onSaved }) {
             <AddressInput
               label="Adresse de prise en charge"
               value={form.pickupAddress}
-              onChange={({ address, lat, lng }) => setForm({ ...form, pickupAddress: address, pickupLat: lat, pickupLng: lng })}
+              onChange={({ address, lat, lng, confidence }) => setForm({ ...form, pickupAddress: address, pickupLat: lat, pickupLng: lng, pickupConfidence: confidence || null })}
             />
             <AddressInput
               label="Adresse de destination"
               value={form.destAddress}
-              onChange={({ address, lat, lng }) => setForm({ ...form, destAddress: address, destLat: lat, destLng: lng })}
+              onChange={({ address, lat, lng, confidence }) => setForm({ ...form, destAddress: address, destLat: lat, destLng: lng, destConfidence: confidence || null })}
             />
             <label style={{ display: "block", marginTop: 8 }}>Heure de prise en charge du client</label>
             <input className="input" type="datetime-local" value={form.scheduledFor} onChange={(e) => setForm({ ...form, scheduledFor: e.target.value })} />

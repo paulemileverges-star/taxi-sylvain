@@ -24,7 +24,11 @@
       "bundleIdentifier": "com.taxisylvain.driver",
       "buildNumber": "2",
       "infoPlist": {
-        "ITSAppUsesNonExemptEncryption": false
+        "ITSAppUsesNonExemptEncryption": false,
+        "LSApplicationQueriesSchemes": [
+          "waze",
+          "comgooglemaps"
+        ]
       }
     },
     "plugins": [

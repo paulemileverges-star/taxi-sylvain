@@ -41,7 +41,7 @@ export default function AddressInput({ label, value, onChange, placeholder }) {
           const key = k.value.trim().toLowerCase();
           if (seen.has(key)) continue;
           seen.add(key);
-          merged.push({ label: k.value, lat: k.data?.lat ?? null, lng: k.data?.lng ?? null, known: true });
+          merged.push({ label: k.value, lat: k.data?.lat ?? null, lng: k.data?.lng ?? null, confidence: k.data?.confidence || null, known: true });
         }
         for (const g of geocoded) {
           const key = g.label.trim().toLowerCase();
@@ -60,7 +60,7 @@ export default function AddressInput({ label, value, onChange, placeholder }) {
   };
 
   const select = (s) => {
-    onChange({ address: s.label, lat: s.lat, lng: s.lng });
+    onChange({ address: s.label, lat: s.lat, lng: s.lng, confidence: s.confidence || null });
     setOpen(false);
     setSuggestions([]);
   };

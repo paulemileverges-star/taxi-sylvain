@@ -4,6 +4,7 @@ import { api } from "../lib/api";
 import { playSound } from "../lib/sound";
 import { showAlert } from "../lib/alert";
 import { openWaze as openWazeTo, openGoogleMaps as openGoogleMapsTo } from "../lib/navigation";
+import { chooseTarget, navigationHint } from "../lib/navigationLinks";
 import SwipeButton from "../components/SwipeButton";
 
 const NEXT_STATUS = { ACCEPTED: "EN_ROUTE", EN_ROUTE: "STARTED", STARTED: "COMPLETED" };
@@ -70,10 +71,12 @@ export default function ActiveRideScreen({ rideId, onCompleted, onCancelled, onO
 
   // Avant la prise en charge (ACCEPTED/EN_ROUTE) on navigue vers le client ; une fois la
   // course démarrée (STARTED), on navigue vers la destination finale.
+  // La confiance dit si le point enregistré vaut vraiment l'adresse : seul un point « porte »
+  // ou une destination du catalogue déclenche un guidage direct.
   const navTarget = () =>
     ride.status === "STARTED"
-      ? { address: ride.destAddress, lat: ride.destLat, lng: ride.destLng }
-      : { address: ride.pickupAddress, lat: ride.pickupLat, lng: ride.pickupLng };
+      ? { address: ride.destAddress, lat: ride.destLat, lng: ride.destLng, confidence: ride.destConfidence }
+      : { address: ride.pickupAddress, lat: ride.pickupLat, lng: ride.pickupLng, confidence: ride.pickupConfidence };
 
   const openWaze = async () => {
     if (!ride) return;
@@ -137,6 +140,9 @@ export default function ActiveRideScreen({ rideId, onCompleted, onCancelled, onO
       <Text style={styles.navHint}>
         Navigation vers {ride.status === "STARTED" ? "la destination" : "le client"}
       </Text>
+      {/* Le chauffeur doit savoir s'il part vers un point exact ou vers une adresse à confirmer :
+          c'est ce qui évite d'arriver au mauvais endroit sans s'en rendre compte. */}
+      <Text style={styles.navHint}>{navigationHint(chooseTarget(navTarget()))}</Text>
       <View style={styles.rowBetween}>
         <TouchableOpacity style={styles.outlineBtn} onPress={openWaze}><Text style={styles.outlineBtnText}>Waze</Text></TouchableOpacity>
         <TouchableOpacity style={styles.outlineBtn} onPress={openGoogleMaps}><Text style={styles.outlineBtnText}>Google Maps</Text></TouchableOpacity>

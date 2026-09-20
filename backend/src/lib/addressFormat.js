@@ -31,6 +31,50 @@ const SEGMENTS_ADMINISTRATIFS = /^(mrc|municipalit[ée] r[ée]gionale|communaut[
 
 const PREFIXES_VILLE = /^(city|town|village|municipality|ville|municipalit[ée])\s+(of|de|d')\s+/i;
 
+// Abréviations courantes au Québec. OpenStreetMap ne reconnaît PAS « 975 Boul. Roméo-Vachon N » :
+// il faut « 975 Boulevard Roméo-Vachon Nord ». Sans cette conversion, l'adresse n'est pas trouvée,
+// donc pas de coordonnées, donc pas de distance et une navigation approximative.
+// Le point de l'abréviation empêche « \b » de fonctionner : on regarde donc explicitement qu'aucune
+// lettre ne suit, sinon « Boulevard » deviendrait « Boulevardevard ».
+const ABREVIATIONS = [
+  [/\bboul\.?(?![a-zà-ÿ])/gi, "Boulevard"],
+  [/\bbd\.?(?![a-zà-ÿ])/gi, "Boulevard"],
+  [/\bave?\.?(?![a-zà-ÿ])/gi, "Avenue"],
+  [/\bch\.?(?![a-zà-ÿ])/gi, "Chemin"],
+  [/\brte\.?(?![a-zà-ÿ])/gi, "Route"],
+  [/\bmont\.?(?![a-zà-ÿ])/gi, "Montée"],
+  [/\bst-/gi, "Saint-"],
+  [/\bste-/gi, "Sainte-"],
+  [/\bN\.?\b(?=\s*,|\s*$)/g, "Nord"],
+  [/\bS\.?\b(?=\s*,|\s*$)/g, "Sud"],
+  [/\bE\.?\b(?=\s*,|\s*$)/g, "Est"],
+  [/\bO\.?\b(?=\s*,|\s*$)/g, "Ouest"],
+];
+
+export function expandAbbreviations(texte) {
+  if (!texte) return texte;
+  let out = String(texte);
+  for (const [regex, remplacement] of ABREVIATIONS) out = out.replace(regex, remplacement);
+  return out.replace(/\s+/g, " ").trim();
+}
+
+// Niveau de précision d'un point trouvé par OpenStreetMap. Seul « porte » est assez fiable pour
+// lancer un guidage automatique : un arrêt d'autobus ou un tronçon de rue enverrait le chauffeur
+// au mauvais endroit (cas réel : « 975 Boulevard Roméo-Vachon Nord » tombe sur l'arrêt d'autobus
+// des arrivées, pas sur la porte des départs).
+const CATEGORIES_PRECISES = ["place", "building", "shop", "amenity", "office", "tourism"];
+
+export function confidenceFromOsm(r) {
+  if (!r) return null;
+  const a = r.address || {};
+  const categorie = r.category || r.class || "";
+  if (a.house_number && CATEGORIES_PRECISES.includes(categorie) && r.type !== "bus_stop") return "porte";
+  if (a.house_number) return "rue";
+  if (r.name) return "lieu";
+  if (a.road) return "rue";
+  return "approx";
+}
+
 /** « QC » à partir de « Québec », « NY » à partir de « New York ». Inconnu : renvoyé tel quel. */
 export function codeProvince(nom) {
   if (!nom) return null;
