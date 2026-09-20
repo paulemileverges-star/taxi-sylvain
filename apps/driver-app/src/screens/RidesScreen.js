@@ -4,6 +4,7 @@ import { api } from "../lib/api";
 import { playSound } from "../lib/sound";
 import { showAlert } from "../lib/alert";
 import SwipeButton from "../components/SwipeButton";
+import { withDayHeaders } from "../lib/rideDays";
 
 const STATUS_LABEL = {
   REQUESTED: "Demandée", BROADCAST: "Diffusée", ACCEPTED: "Acceptée",
@@ -11,9 +12,7 @@ const STATUS_LABEL = {
   COMPLETED: "Terminée", CANCELLED: "Annulée", REFUSED: "Refusée",
 };
 
-function fmtDate(d) {
-  return d ? new Date(d).toLocaleDateString("fr-CA") : "—";
-}
+// La date complète n'est plus répétée sur chaque carte : elle est devenue le titre de la journée.
 function fmtTime(d) {
   return d ? new Date(d).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "—";
 }
@@ -76,33 +75,36 @@ export default function RidesScreen({ onOpenRide, onBack }) {
         <ActivityIndicator color="#f5a623" style={{ marginTop: 20 }} />
       ) : (
         <FlatList
-          data={data.rides}
-          keyExtractor={(r) => r.id}
+          data={withDayHeaders(data.rides)}
+          keyExtractor={(row) => row.id}
           ListEmptyComponent={<Text style={{ color: "#8b99b5", marginTop: 12 }}>Aucune course ici.</Text>}
           renderItem={({ item }) => {
-            const isOffer = item.status === "BROADCAST" || item.status === "REQUESTED";
+            // Titre de journée, calculé par le serveur à l'heure du Québec.
+            if (item.type === "day") return <Text style={styles.dayHeader}>{item.label}</Text>;
+            const ride = item.ride;
+            const isOffer = ride.status === "BROADCAST" || ride.status === "REQUESTED";
             return (
               <View style={[styles.card, isOffer && styles.offerCard]}>
                 {isOffer && (
-                  <TouchableOpacity style={styles.closeBtn} onPress={() => refuse(item.id)} accessibilityLabel="Refuser cette course">
+                  <TouchableOpacity style={styles.closeBtn} onPress={() => refuse(ride.id)} accessibilityLabel="Refuser cette course">
                     <Text style={styles.closeBtnText}>✕</Text>
                   </TouchableOpacity>
                 )}
                 <View style={styles.rowBetween}>
-                  <Text style={styles.date}>{fmtDate(item.scheduledFor || item.createdAt)} · {fmtTime(item.scheduledFor || item.createdAt)}</Text>
-                  <Text style={styles.status}>{STATUS_LABEL[item.status] || item.status}</Text>
+                  <Text style={styles.date}>{fmtTime(ride.scheduledFor || ride.createdAt)}</Text>
+                  <Text style={styles.status}>{STATUS_LABEL[ride.status] || ride.status}</Text>
                 </View>
-                <Text style={styles.addr}>{item.pickupAddress} → {item.destAddress}</Text>
+                <Text style={styles.addr}>{ride.pickupAddress} → {ride.destAddress}</Text>
                 <Text style={styles.fare}>
-                  {item.fare > 0 ? `${item.fare} $` : "Montant à confirmer"}{item.distanceKm != null ? `  ·  ${item.distanceKm.toFixed(1)} km` : ""}
+                  {ride.fare > 0 ? `${ride.fare} $` : "Montant à confirmer"}{ride.distanceKm != null ? `  ·  ${ride.distanceKm.toFixed(1)} km` : ""}
                 </Text>
                 {isOffer && (
                   <View style={{ marginTop: 8 }}>
-                    <SwipeButton label="Accepter la course" onConfirm={() => accept(item.id)} color="#3fa796" textColor="#06231d" />
+                    <SwipeButton label="Accepter la course" onConfirm={() => accept(ride.id)} color="#3fa796" textColor="#06231d" />
                   </View>
                 )}
-                {["ACCEPTED", "EN_ROUTE", "STARTED"].includes(item.status) && (
-                  <TouchableOpacity style={styles.smallBtn} onPress={() => onOpenRide(item.id)}>
+                {["ACCEPTED", "EN_ROUTE", "STARTED"].includes(ride.status) && (
+                  <TouchableOpacity style={styles.smallBtn} onPress={() => onOpenRide(ride.id)}>
                     <Text style={styles.smallBtnText}>Ouvrir la course</Text>
                   </TouchableOpacity>
                 )}
@@ -141,6 +143,7 @@ const styles = StyleSheet.create({
   closeBtnText: { color: "#e85d4c", fontWeight: "700", fontSize: 13, lineHeight: 15 },
   rowBetween: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginTop: 4 },
   date: { color: "#8b99b5", fontSize: 12 },
+  dayHeader: { color: "#f5a623", fontWeight: "700", fontSize: 13, marginTop: 10, marginBottom: 6 },
   status: { color: "#f5a623", fontSize: 12, fontWeight: "600" },
   addr: { color: "#edeff3", marginTop: 6 },
   fare: { color: "#f5a623", fontWeight: "700", marginTop: 4 },

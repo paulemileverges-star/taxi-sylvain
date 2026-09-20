@@ -11,6 +11,7 @@ import { computeDistanceKm, geocodeAddress } from "../lib/distance.js";
 import { clearDriverLocation, getDriverLocation } from "../lib/driverLocations.js";
 import { quote } from "../lib/pricing.js";
 import { sendRideConfirmation, sendRideCancellation, loadRideForEmail } from "../lib/rideEmails.js";
+import { pageDeCourses } from "../lib/ridesOrder.js";
 
 // Réservation par téléphone (besoin #5) : le Dispatch peut créer une course pour un client sans
 // compte — on retrouve son compte existant par téléphone, ou on lui en crée un à la volée. Si le
@@ -52,13 +53,20 @@ router.get("/", async (req, res) => {
   else if (when === "upcoming") where = { ...where, status: { notIn: TERMINAL_STATUSES } };
 
   if (when) {
-    const take = Math.min(Number(pageSize) || 10, 50);
-    const skip = (Math.max(Number(page), 1) - 1) * take;
-    const [rides, total] = await Promise.all([
-      prisma.ride.findMany({ where, orderBy: { createdAt: "desc" }, skip, take, include: RIDE_INCLUDE }),
-      prisma.ride.count({ where }),
-    ]);
-    return res.json({ rides, total, page: Number(page), pageSize: take });
+    // Le classement suit « heure de prise en charge, sinon heure de création », que PostgreSQL ne
+    // sait pas exprimer dans un orderBy : il se fait donc en mémoire. Pour ne pas charger tout
+    // l'historique avec ses relations à chaque page, on ne lit d'abord que les dates, puis on ne
+    // recharge en détail que les courses de la page demandée.
+    // Le orderBy reste indispensable : sans ORDER BY, PostgreSQL peut renvoyer les lignes dans un
+    // ordre différent d'une requête à l'autre, et une course changerait de page entre deux pages.
+    const legeres = await prisma.ride.findMany({ where, select: { id: true, scheduledFor: true, createdAt: true }, orderBy: { id: "asc" } });
+    const { rides: refs, total, page: numero, pageSize: taille } = pageDeCourses(legeres, { when, page, pageSize });
+    const completes = await prisma.ride.findMany({ where: { id: { in: refs.map((r) => r.id) } }, include: RIDE_INCLUDE });
+    const parId = new Map(completes.map((r) => [r.id, r]));
+    // RIDE_INCLUDE est la seule protection des données personnelles sur cette route : on recompose
+    // donc chaque course à partir de SON résultat, jamais à partir de la requête légère.
+    const rides = refs.filter((r) => parId.has(r.id)).map((r) => ({ ...parId.get(r.id), dayKey: r.dayKey, dayLabel: r.dayLabel }));
+    return res.json({ rides, total, page: numero, pageSize: taille });
   }
 
   const rides = await prisma.ride.findMany({ where, orderBy: { createdAt: "desc" }, include: RIDE_INCLUDE });

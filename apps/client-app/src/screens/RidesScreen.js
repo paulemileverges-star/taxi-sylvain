@@ -3,6 +3,7 @@ import { View, Text, TouchableOpacity, StyleSheet, FlatList, ActivityIndicator }
 import { api } from "../lib/api";
 import { showAlert } from "../lib/alert";
 import { DriverAvatar, CarPhoto } from "../components/DriverPhotos";
+import { withDayHeaders } from "../lib/rideDays";
 
 const STATUS_LABEL = {
   REQUESTED: "En attente de validation", BROADCAST: "Recherche d'un chauffeur", ACCEPTED: "Confirmée",
@@ -10,9 +11,7 @@ const STATUS_LABEL = {
   COMPLETED: "Terminée", CANCELLED: "Annulée", REFUSED: "Refusée",
 };
 
-function fmtDate(d) {
-  return d ? new Date(d).toLocaleDateString("fr-CA") : "—";
-}
+// La date complète n'est plus répétée sur chaque carte : elle est devenue le titre de la journée.
 function fmtTime(d) {
   return d ? new Date(d).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "—";
 }
@@ -57,28 +56,33 @@ export default function RidesScreen({ onOpenRide, onBack }) {
         <ActivityIndicator color="#f5a623" style={{ marginTop: 20 }} />
       ) : (
         <FlatList
-          data={data.rides}
-          keyExtractor={(r) => r.id}
+          data={withDayHeaders(data.rides)}
+          keyExtractor={(row) => row.id}
           ListEmptyComponent={<Text style={{ color: "#8b99b5", marginTop: 12 }}>Aucune course ici.</Text>}
-          renderItem={({ item }) => (
-            <TouchableOpacity style={styles.card} onPress={() => onOpenRide(item.id)}>
+          renderItem={({ item }) => {
+            // Titre de journée, calculé par le serveur à l'heure du Québec.
+            if (item.type === "day") return <Text style={styles.dayHeader}>{item.label}</Text>;
+            const ride = item.ride;
+            return (
+            <TouchableOpacity style={styles.card} onPress={() => onOpenRide(ride.id)}>
               <View style={styles.rowBetween}>
-                <Text style={styles.date}>{fmtDate(item.scheduledFor || item.createdAt)} · {fmtTime(item.scheduledFor || item.createdAt)}</Text>
-                <Text style={styles.status}>{STATUS_LABEL[item.status] || item.status}</Text>
+                <Text style={styles.date}>{fmtTime(ride.scheduledFor || ride.createdAt)}</Text>
+                <Text style={styles.status}>{STATUS_LABEL[ride.status] || ride.status}</Text>
               </View>
-              <Text style={styles.addr}>{item.pickupAddress} → {item.destAddress}</Text>
-              {item.driver?.name && (
+              <Text style={styles.addr}>{ride.pickupAddress} → {ride.destAddress}</Text>
+              {ride.driver?.name && (
                 <View style={styles.driverRow}>
-                  <DriverAvatar driver={item.driver} size={32} />
-                  <CarPhoto driver={item.driver} height={32} style={{ width: 48 }} />
-                  <Text style={styles.driver}>{item.driver.name}{item.driver.carModel ? ` · ${item.driver.carModel}` : ""}{item.driver.plate ? ` · ${item.driver.plate}` : ""}</Text>
+                  <DriverAvatar driver={ride.driver} size={32} />
+                  <CarPhoto driver={ride.driver} height={32} style={{ width: 48 }} />
+                  <Text style={styles.driver}>{ride.driver.name}{ride.driver.carModel ? ` · ${ride.driver.carModel}` : ""}{ride.driver.plate ? ` · ${ride.driver.plate}` : ""}</Text>
                 </View>
               )}
               <Text style={styles.fare}>
-                {item.fare > 0 ? `${item.fare} $` : "Montant à confirmer"}{item.distanceKm != null ? `  ·  ${item.distanceKm.toFixed(1)} km` : ""}
+                {ride.fare > 0 ? `${ride.fare} $` : "Montant à confirmer"}{ride.distanceKm != null ? `  ·  ${ride.distanceKm.toFixed(1)} km` : ""}
               </Text>
             </TouchableOpacity>
-          )}
+            );
+          }}
           ListFooterComponent={
             data.total > data.pageSize ? (
               <View style={styles.pager}>
@@ -108,6 +112,7 @@ const styles = StyleSheet.create({
   card: { backgroundColor: "#16233a", borderRadius: 14, padding: 14, marginBottom: 10, borderWidth: 1, borderColor: "#28395a" },
   rowBetween: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
   date: { color: "#8b99b5", fontSize: 12 },
+  dayHeader: { color: "#f5a623", fontWeight: "700", fontSize: 13, marginTop: 10, marginBottom: 6 },
   status: { color: "#f5a623", fontSize: 12, fontWeight: "600" },
   addr: { color: "#edeff3", marginTop: 6 },
   driver: { color: "#8b99b5", fontSize: 12, flexShrink: 1 },
