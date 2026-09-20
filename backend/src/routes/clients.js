@@ -8,7 +8,7 @@ import { deleteUserCascade, announceDeletion } from "../lib/deleteUser.js";
 import { streamListPdf, streamListXlsx } from "../lib/exportReport.js";
 import { realEmailOrNull, generateTempPassword } from "../lib/placeholderEmail.js";
 import { parseImportFile, pick } from "../lib/bulkImport.js";
-import { quoteAll } from "../lib/pricing.js";
+import { quoteAll, clientPriceData, parsePrice } from "../lib/pricing.js";
 
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024 } });
 
@@ -16,7 +16,7 @@ const router = Router();
 router.use(requireAuth);
 router.use(requirePermission("clients"));
 
-async function createClientAccount({ name, email, phone, address, notes, password }) {
+async function createClientAccount({ name, email, phone, address, notes, password, priceYUL, priceYHU, priceREM }) {
   if (!name || !phone) {
     const err = new Error("Nom et téléphone sont requis.");
     err.status = 400;
@@ -32,8 +32,11 @@ async function createClientAccount({ name, email, phone, address, notes, passwor
   const tempPassword = password || generateTempPassword();
   const passwordHash = await bcrypt.hash(tempPassword, 10);
   const client = await prisma.user.create({
-    data: { role: "CLIENT", name, email: finalEmail, phone, address: address || null, notes: notes || null, passwordHash },
-    select: { id: true, name: true, email: true, phone: true, address: true, ratingAvg: true, createdAt: true, notes: true },
+    data: {
+      role: "CLIENT", name, email: finalEmail, phone, address: address || null, notes: notes || null, passwordHash,
+      priceYUL: parsePrice(priceYUL), priceYHU: parsePrice(priceYHU), priceREM: parsePrice(priceREM),
+    },
+    select: { id: true, name: true, email: true, phone: true, address: true, ratingAvg: true, createdAt: true, notes: true, priceYUL: true, priceYHU: true, priceREM: true },
   });
   return { client, tempPassword };
 }
@@ -44,7 +47,7 @@ router.get("/", async (req, res) => {
   const [clients, destinations, zones] = await Promise.all([
     prisma.user.findMany({
       where: { role: "CLIENT" },
-      select: { id: true, name: true, email: true, phone: true, address: true, ratingAvg: true, createdAt: true, notes: true },
+      select: { id: true, name: true, email: true, phone: true, address: true, ratingAvg: true, createdAt: true, notes: true, priceYUL: true, priceYHU: true, priceREM: true },
       orderBy: { createdAt: "desc" },
     }),
     prisma.destination.findMany({ orderBy: { sortOrder: "asc" } }),
@@ -53,8 +56,8 @@ router.get("/", async (req, res) => {
 
   res.json(
     clients.map((c) => {
-      const { prices, zoneName } = quoteAll(c.address, destinations, zones);
-      return { ...c, email: realEmailOrNull(c.email), prices, zoneName };
+      const { prices, zoneName, sources } = quoteAll(c.address, destinations, zones, c);
+      return { ...c, email: realEmailOrNull(c.email), prices, zoneName, sources };
     })
   );
 });
@@ -100,6 +103,9 @@ router.post("/import", upload.single("file"), async (req, res) => {
         email: pick(row, "courriel", "email") || undefined,
         address: pick(row, "adresse", "address") || undefined,
         notes: pick(row, "memo", "mémo et préférences", "notes", "preferences", "préférences") || undefined,
+        priceYUL: pick(row, "prix yul", "tarif yul", "yul"),
+        priceYHU: pick(row, "prix yhu", "tarif yhu", "yhu"),
+        priceREM: pick(row, "prix rem", "tarif rem", "rem"),
       });
       created.push(client.name);
     } catch (e) {
@@ -129,7 +135,12 @@ router.patch("/:id", async (req, res) => {
   if (!existing || existing.role !== "CLIENT") return res.status(404).json({ error: "Client introuvable." });
 
   const { name, email, phone, address, notes } = req.body;
-  const data = {};
+  // L'argent reste sous la permission « courses » : un collaborateur autorisé aux clients peut
+  // corriger une fiche, pas fixer un prix. Un refus franc plutôt qu'une saisie ignorée en silence.
+  const peutModifierLesPrix = req.user.role === "DISPATCH" || (req.user.role === "ADMIN" && (req.user.permissions || []).includes("courses"));
+  const { data: prixData, forbidden } = clientPriceData(req.body, existing, peutModifierLesPrix);
+  if (forbidden) return res.status(403).json({ error: "Seul un compte autorisé aux Courses peut modifier les tarifs d'un client." });
+  const data = { ...prixData };
   if (name !== undefined) data.name = String(name).trim();
   if (phone !== undefined) data.phone = String(phone).trim();
   if (address !== undefined) data.address = address ? String(address).trim() : null;
@@ -148,7 +159,7 @@ router.patch("/:id", async (req, res) => {
   const client = await prisma.user.update({
     where: { id: req.params.id },
     data,
-    select: { id: true, name: true, email: true, phone: true, address: true, ratingAvg: true, createdAt: true, notes: true },
+    select: { id: true, name: true, email: true, phone: true, address: true, ratingAvg: true, createdAt: true, notes: true, priceYUL: true, priceYHU: true, priceREM: true },
   });
   res.json({ ...client, email: realEmailOrNull(client.email) });
 });
@@ -174,7 +185,7 @@ router.get("/export", async (req, res) => {
   const format = req.query.format === "xlsx" ? "xlsx" : "pdf";
   const clients = await prisma.user.findMany({
     where: { role: "CLIENT" },
-    select: { name: true, email: true, phone: true, address: true, ratingAvg: true, createdAt: true, notes: true },
+    select: { name: true, email: true, phone: true, address: true, ratingAvg: true, createdAt: true, notes: true, priceYUL: true, priceYHU: true, priceREM: true },
     orderBy: { name: "asc" },
   });
 
@@ -185,6 +196,9 @@ router.get("/export", async (req, res) => {
     address: c.address || "",
     ratingAvg: c.ratingAvg?.toFixed(1) ?? "5.0",
     createdAt: new Date(c.createdAt).toLocaleDateString("fr-CA"),
+    priceYUL: c.priceYUL != null ? c.priceYUL.toFixed(2) : "",
+    priceYHU: c.priceYHU != null ? c.priceYHU.toFixed(2) : "",
+    priceREM: c.priceREM != null ? c.priceREM.toFixed(2) : "",
     notes: c.notes || "",
   }));
   const columns = [
@@ -194,6 +208,9 @@ router.get("/export", async (req, res) => {
     { key: "address", label: "Adresse", width: 180 },
     { key: "ratingAvg", label: "Note", width: 50 },
     { key: "createdAt", label: "Client depuis", width: 90 },
+    { key: "priceYUL", label: "Prix YUL ($)", width: 70 },
+    { key: "priceYHU", label: "Prix YHU ($)", width: 70 },
+    { key: "priceREM", label: "Prix REM ($)", width: 70 },
     { key: "notes", label: "Mémo et préférences", width: 200 },
   ];
 

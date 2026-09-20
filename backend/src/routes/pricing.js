@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { prisma } from "../lib/prisma.js";
 import { requireAuth, requirePermission } from "../middleware/auth.js";
-import { quote } from "../lib/pricing.js";
+import { quote, parsePrice } from "../lib/pricing.js";
 
 const router = Router();
 router.use(requireAuth);
@@ -9,15 +9,20 @@ router.use(requireAuth);
 // Tarif applicable à une course : municipalité reconnue dans l'adresse de départ x destination.
 router.post("/quote", async (req, res) => {
   const { pickupAddress, destinationCode } = req.body;
-  const result = await quote({ pickupAddress, destinationCode });
-  res.json({ price: result.price, zoneName: result.zoneName, destinationLabel: result.destination?.label || null });
+  // Un client obtient son propre prix négocié ; le Dispatch (ou un admin autorisé aux courses)
+  // peut demander celui d'un client précis. Un chauffeur, jamais : sans ce filtre, il pourrait
+  // interroger le tarif négocié de n'importe qui.
+  const peutVoirLesPrixClients = req.user.role === "DISPATCH" || (req.user.role === "ADMIN" && (req.user.permissions || []).includes("courses"));
+  const clientId = req.user.role === "CLIENT" ? req.user.id : (peutVoirLesPrixClients ? req.body.clientId : null);
+  const result = await quote({ pickupAddress, destinationCode, clientId });
+  res.json({
+    price: result.price,
+    zoneName: result.zoneName,
+    destinationLabel: result.destination?.label || null,
+    source: result.source,
+    zonePrice: result.zonePrice,
+  });
 });
-
-function parsePrice(v) {
-  if (v === null || v === undefined || v === "") return null;
-  const n = Number(v);
-  return Number.isFinite(n) && n > 0 ? Math.round(n * 100) / 100 : null;
-}
 
 // Grille tarifaire (page Tarifs du Dispatch)
 router.get("/zones", async (req, res) => {

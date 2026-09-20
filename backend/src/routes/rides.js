@@ -100,8 +100,19 @@ router.post("/", requirePermission("courses", "CLIENT"), async (req, res) => {
   // Destination prédéfinie (YUL, YHU, REM...) : adresse, coordonnées et tarif du catalogue selon
   // la municipalité de prise en charge. Le tarif du catalogue s'impose au client ; le Dispatch
   // peut le surcharger en saisissant un montant.
+  // Qui est le client ? Résolu ICI, en lecture seule, car son prix négocié l'emporte sur la grille.
+  // La création d'un compte client, elle, reste plus bas : la remonter fabriquerait un compte
+  // fantôme à chaque formulaire refusé.
+  const isStaff = req.user.role === "DISPATCH" || req.user.role === "ADMIN";
+  let clientId = req.user.role === "CLIENT" ? req.user.id : req.body.clientId ?? null;
+  let quoteClientId = clientId;
+  if (!quoteClientId && isStaff && clientPhone) {
+    const connu = await prisma.user.findFirst({ where: { role: "CLIENT", phone: clientPhone }, select: { id: true } });
+    quoteClientId = connu?.id ?? null;
+  }
+
   if (destinationCode) {
-    const q = await quote({ pickupAddress, destinationCode });
+    const q = await quote({ pickupAddress, destinationCode, clientId: quoteClientId });
     if (q.destination) {
       destAddress = q.destination.address;
       destLat = q.destination.lat;
@@ -117,8 +128,6 @@ router.post("/", requirePermission("courses", "CLIENT"), async (req, res) => {
     return res.status(400).json({ error: "Adresse de prise en charge, destination et montant requis." });
   }
 
-  const isStaff = req.user.role === "DISPATCH" || req.user.role === "ADMIN";
-  let clientId = req.user.role === "CLIENT" ? req.user.id : req.body.clientId ?? null;
   let clientTempPassword = null;
   if (!clientId && isStaff && clientName && clientPhone) {
     // Nouveau client créé pendant la réservation : sans adresse de domicile explicite, on retient

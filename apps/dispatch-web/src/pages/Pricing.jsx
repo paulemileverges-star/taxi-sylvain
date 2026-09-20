@@ -50,15 +50,17 @@ export default function Pricing() {
   const [zones, setZones] = useState([]);
   const [filter, setFilter] = useState("");
   const [newZone, setNewZone] = useState({ name: "", priceYUL: "", priceYHU: "", priceREM: "" });
-  const [remPrice, setRemPrice] = useState("");
+  // Prix par défaut de chaque destination, par code. Il ne sert que si la municipalité du client
+  // n'est pas dans la grille ci-dessous — sauf pour le REM, dont la grille est vide : là, ce prix
+  // s'applique à tout le monde.
+  const [prixDefaut, setPrixDefaut] = useState({});
   const [message, setMessage] = useState("");
 
   const load = async () => {
     const [d, z] = await Promise.all([api.listDestinations(), api.listPriceZones()]);
     setDestinations(d);
     setZones(z);
-    const rem = d.find((x) => x.code === "REM");
-    setRemPrice(rem?.price ?? "");
+    setPrixDefaut(Object.fromEntries(d.map((x) => [x.code, x.price ?? ""])));
   };
   useEffect(() => { load(); }, []);
 
@@ -80,8 +82,8 @@ export default function Pricing() {
     load();
   };
 
-  const saveRem = async () => {
-    await api.updateDestination("REM", { price: remPrice });
+  const savePrixDefaut = async (code) => {
+    await api.updateDestination(code, { price: prixDefaut[code] });
     playSound("action");
     load();
   };
@@ -97,6 +99,11 @@ export default function Pricing() {
       </p>
 
       <h3>Destinations prédéfinies</h3>
+      <p style={{ color: "var(--muted)", fontSize: 13, marginTop: -6 }}>
+        Le prix par défaut ne sert que si la municipalité du client n'est pas dans la grille ci-dessous.
+        Pour le REM, la grille n'a aucun prix : c'est donc ce prix par défaut qui s'applique à tout le monde.
+        Un prix négocié inscrit sur la fiche d'un client passe avant tout le reste.
+      </p>
       <div className="card">
         {destinations.map((d) => (
           <div key={d.code} className="row" style={{ padding: "6px 0", gap: 12 }}>
@@ -104,15 +111,11 @@ export default function Pricing() {
               <div><strong>{d.code}</strong> — {d.label}</div>
               <div style={{ color: "var(--muted)", fontSize: 13 }}>{d.address}</div>
             </div>
-            {d.code === "REM" ? (
-              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                <span style={{ fontSize: 13, color: "var(--muted)" }}>Prix par défaut ($)</span>
-                <PriceInput value={remPrice} onChange={setRemPrice} />
-                <button className="btn outline" onClick={saveRem}>Enregistrer</button>
-              </div>
-            ) : (
-              <span className="chip">Prix selon la municipalité (grille ci-dessous)</span>
-            )}
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <span style={{ fontSize: 13, color: "var(--muted)" }}>Prix par défaut ($)</span>
+              <PriceInput value={prixDefaut[d.code] ?? ""} onChange={(v) => setPrixDefaut((p) => ({ ...p, [d.code]: v }))} />
+              <button className="btn outline" onClick={() => savePrixDefaut(d.code)}>Enregistrer</button>
+            </div>
           </div>
         ))}
       </div>

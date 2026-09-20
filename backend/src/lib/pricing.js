@@ -38,30 +38,98 @@ export function matchZone(address, zones) {
   return best ? best.zone : null;
 }
 
-// Tarif d'une zone vers une destination. Le prix fixe de la destination sert de repli quand la
-// grille n'a pas de tarif pour cette municipalité.
-export function priceFor(destination, zone) {
+// Un montant saisi dans un formulaire ou lu dans un fichier importé. Vide, zéro, négatif ou
+// illisible donnent null : un prix ne peut jamais valoir zéro, sinon la course devient gratuite.
+// Règle unique du projet : la page Tarifs, les destinations et les fiches clients l'utilisent tous.
+export function parsePrice(v) {
+  if (v === null || v === undefined || v === "") return null;
+  const n = Number(String(v).replace(",", "."));
+  return Number.isFinite(n) && n > 0 ? Math.round(n * 100) / 100 : null;
+}
+
+const CHAMP_PRIX = { YUL: "priceYUL", YHU: "priceYHU", REM: "priceREM" };
+const valide = (n) => typeof n === "number" && Number.isFinite(n) && n > 0;
+
+/**
+ * Tarif applicable, dans cet ordre : prix négocié avec le client, puis grille de sa municipalité,
+ * puis prix de repli de la destination. Un zéro trouvé en base est ignoré à chaque étape.
+ * L'appel à deux arguments reste valable (aucun prix client).
+ */
+export function priceFor(destination, zone, clientPrices) {
   if (!destination) return null;
-  const byCode = { YUL: zone?.priceYUL, YHU: zone?.priceYHU, REM: zone?.priceREM };
-  return byCode[destination.code] ?? destination.price ?? null;
+  const champ = CHAMP_PRIX[destination.code];
+  for (const candidat of [clientPrices?.[champ], zone?.[champ], destination.price]) {
+    if (valide(candidat)) return candidat;
+  }
+  return null;
+}
+
+/** D'où vient le prix affiché : « client », « zone », « destination », ou null si aucun. */
+export function priceSource(destination, zone, clientPrices) {
+  if (!destination) return null;
+  const champ = CHAMP_PRIX[destination.code];
+  if (valide(clientPrices?.[champ])) return "client";
+  if (valide(zone?.[champ])) return "zone";
+  if (valide(destination.price)) return "destination";
+  return null;
 }
 
 // Tarifs d'une adresse de départ vers toutes les destinations d'un coup (données déjà chargées) —
 // utilisé pour afficher les 3 prix sur chaque fiche client sans multiplier les requêtes.
-export function quoteAll(pickupAddress, destinations, zones) {
+export function quoteAll(pickupAddress, destinations, zones, clientPrices) {
   const zone = matchZone(pickupAddress, zones);
   const prices = {};
-  for (const d of destinations) prices[d.code] = priceFor(d, zone);
-  return { prices, zoneName: zone?.name || null };
+  const sources = {};
+  for (const d of destinations) {
+    prices[d.code] = priceFor(d, zone, clientPrices);
+    sources[d.code] = priceSource(d, zone, clientPrices);
+  }
+  return { prices, zoneName: zone?.name || null, sources };
 }
 
-// Renvoie { price, zoneName, destination } — price null si aucun tarif ne s'applique.
-export async function quote({ pickupAddress, destinationCode }) {
-  if (!destinationCode) return { price: null, zoneName: null, destination: null };
+/**
+ * Ce qu'il faut écrire en base pour les trois prix négociés d'un client.
+ * - champ absent de la requête : on n'y touche pas ;
+ * - champ vide : le prix est effacé, la grille reprend la main ;
+ * - sinon : montant contrôlé par parsePrice.
+ * Si la personne n'a pas le droit de fixer les prix et qu'elle en change un, on refuse
+ * franchement (forbidden) au lieu d'ignorer sa saisie en silence.
+ */
+export function clientPriceData(body = {}, existing = {}, peutModifierLesPrix = false) {
+  const data = {};
+  let forbidden = false;
+  for (const champ of Object.values(CHAMP_PRIX)) {
+    if (body[champ] === undefined) continue;
+    const valeur = body[champ] === "" || body[champ] === null ? null : parsePrice(body[champ]);
+    const actuel = existing?.[champ] ?? null;
+    if (valeur === actuel) continue; // ré-enregistrer une fiche sans rien changer n'est pas une modification
+    if (!peutModifierLesPrix) { forbidden = true; continue; }
+    data[champ] = valeur;
+  }
+  return { data, forbidden };
+}
+
+// Renvoie { price, zoneName, destination, source, zonePrice } — price null si aucun tarif.
+// zonePrice est le prix qu'aurait donné la grille : il permet d'afficher la différence quand un
+// prix négocié s'applique, pour que personne ne facture un prix négocié sans le voir.
+export async function quote({ pickupAddress, destinationCode, clientId }) {
+  if (!destinationCode) return { price: null, zoneName: null, destination: null, source: null, zonePrice: null };
   const destination = await prisma.destination.findUnique({ where: { code: String(destinationCode) } });
-  if (!destination) return { price: null, zoneName: null, destination: null };
+  if (!destination) return { price: null, zoneName: null, destination: null, source: null, zonePrice: null };
 
   const zones = await prisma.priceZone.findMany();
   const zone = matchZone(pickupAddress, zones);
-  return { price: priceFor(destination, zone), zoneName: zone?.name || null, destination };
+  // Le filtre sur le rôle évite de lire par erreur la fiche d'un chauffeur portant le même
+  // identifiant qu'un client.
+  const clientPrices = clientId
+    ? await prisma.user.findFirst({ where: { id: String(clientId), role: "CLIENT" }, select: { priceYUL: true, priceYHU: true, priceREM: true } })
+    : null;
+
+  return {
+    price: priceFor(destination, zone, clientPrices),
+    zoneName: zone?.name || null,
+    destination,
+    source: priceSource(destination, zone, clientPrices),
+    zonePrice: priceFor(destination, zone),
+  };
 }

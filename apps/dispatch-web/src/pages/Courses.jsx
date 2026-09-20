@@ -50,7 +50,7 @@ export default function Courses() {
     let cancelled = false;
     const t = setTimeout(async () => {
       try {
-        const q = await api.priceQuote(form.pickupAddress, form.destinationCode);
+        const q = await api.priceQuote(form.pickupAddress, form.destinationCode, form.clientId || null);
         if (cancelled) return;
         setQuoteInfo(q);
         if (q.price != null) setForm((f) => ({ ...f, fare: String(q.price) }));
@@ -59,7 +59,7 @@ export default function Courses() {
       }
     }, 400);
     return () => { cancelled = true; clearTimeout(t); };
-  }, [showCreate, form.destinationCode, form.pickupAddress]);
+  }, [showCreate, form.destinationCode, form.pickupAddress, form.clientId]);
 
   // Adresse de prise en charge par défaut = domicile du client choisi (modifiable).
   const selectClient = async (clientId) => {
@@ -270,7 +270,11 @@ export default function Courses() {
             {form.destinationCode && (
               <div style={{ fontSize: 12, marginTop: 4, color: quoteInfo?.price != null ? "#3fa796" : "var(--muted)" }}>
                 {quoteInfo?.price != null
-                  ? `Tarif catalogue appliqué : ${quoteInfo.price.toFixed(2)} $ (${quoteInfo.zoneName || form.destinationCode}) — modifiable.`
+                  ? quoteInfo.source === "client"
+                    // Un prix négocié s'applique partout, même loin du domicile : on montre la
+                    // différence avec la grille pour que personne ne facture sans le voir.
+                    ? `Prix négocié de ce client : ${quoteInfo.price.toFixed(2)} $${quoteInfo.zonePrice != null ? ` (grille ${quoteInfo.zoneName || form.destinationCode} : ${quoteInfo.zonePrice.toFixed(2)} $)` : ""} — modifiable.`
+                    : `Tarif catalogue appliqué : ${quoteInfo.price.toFixed(2)} $ (${quoteInfo.zoneName || form.destinationCode}) — modifiable.`
                   : form.pickupAddress.trim().length >= 3
                     ? "Municipalité non reconnue dans la grille (voir Tarifs) — indiquez le montant."
                     : "Le tarif du catalogue s'affichera dès que l'adresse de prise en charge est saisie."}

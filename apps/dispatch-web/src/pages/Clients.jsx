@@ -27,6 +27,8 @@ function ClientCard({ client, onDelete, onEdit, masque, trouvePar }) {
     }
   };
 
+  const aUnPrixNegocie = ["YUL", "YHU", "REM"].some((code) => client.sources?.[code] === "client");
+
   // Une fiche écartée par la recherche est MASQUÉE, jamais retirée de la page : la retirer
   // détruirait le mémo en cours de saisie et la position de lecture.
   return (
@@ -54,7 +56,8 @@ function ClientCard({ client, onDelete, onEdit, masque, trouvePar }) {
         <span>{client.address || <em style={{ color: "var(--muted)" }}>non renseignée — bouton Modifier</em>}</span>
       </div>
 
-      {/* Tarifs depuis le domicile du client vers les trois destinations habituelles */}
+      {/* Tarifs depuis le domicile du client vers les trois destinations habituelles.
+          Un prix négocié avec ce client l'emporte sur la grille des municipalités. */}
       <div className="price-tiles">
         {["YUL", "YHU", "REM"].map((code) => {
           const price = client.prices?.[code];
@@ -62,16 +65,22 @@ function ClientCard({ client, onDelete, onEdit, masque, trouvePar }) {
             <div key={code} className={`price-tile ${price != null ? "has-price" : ""}`}>
               <div className="price-tile-code">{code}</div>
               <div className="price-tile-value">{price != null ? `${price.toFixed(2)} $` : "—"}</div>
+              {/* Sans cette mention, on chercherait l'explication du montant dans la page Tarifs. */}
+              {client.sources?.[code] === "client" && <div style={{ fontSize: 10, color: "var(--amber)" }}>prix négocié</div>}
             </div>
           );
         })}
       </div>
       <div style={{ fontSize: 12, color: "var(--muted)", marginTop: 4 }}>
-        {client.address
-          ? client.zoneName
-            ? `Tarifs depuis ${client.zoneName} (grille Tarifs).`
-            : "Municipalité non reconnue dans la grille — voir la page Tarifs."
-          : "Renseignez l'adresse du client pour afficher ses tarifs."}
+        {aUnPrixNegocie
+          ? client.address
+            ? `Prix négociés appliqués. Les autres tarifs viennent de la grille${client.zoneName ? ` (${client.zoneName})` : " — municipalité non reconnue"}.`
+            : "Prix négociés appliqués ; adresse non renseignée, les autres tarifs restent à confirmer."
+          : client.address
+            ? client.zoneName
+              ? `Tarifs depuis ${client.zoneName} (grille Tarifs).`
+              : "Municipalité non reconnue dans la grille — voir la page Tarifs."
+            : "Renseignez l'adresse du client pour afficher ses tarifs."}
       </div>
       <label style={{ display: "block", marginTop: 10, fontSize: 12, color: "var(--muted)", textTransform: "uppercase", letterSpacing: 0.5 }}>
         Mémo et préférences (visible uniquement par le Dispatch)
@@ -95,7 +104,35 @@ function ClientCard({ client, onDelete, onEdit, masque, trouvePar }) {
   );
 }
 
-const EMPTY_FORM = { name: "", email: "", phone: "", address: "", notes: "" };
+const EMPTY_FORM = { name: "", email: "", phone: "", address: "", notes: "", priceYUL: "", priceYHU: "", priceREM: "" };
+
+// Les trois champs de prix négocié, communs aux fenêtres « Nouveau client » et « Modifier ».
+function ChampsTarifs({ form, setForm }) {
+  return (
+    <div style={{ marginTop: 12, padding: 10, border: "1px solid #28395a", borderRadius: 10 }}>
+      <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 2 }}>Tarifs négociés de ce client</div>
+      <div style={{ fontSize: 12, color: "var(--muted)", marginBottom: 8 }}>
+        Laisser vide = prix de la grille Tarifs. Un prix saisi ici s'applique à toutes ses courses vers cette destination.
+      </div>
+      <div style={{ display: "flex", gap: 8 }}>
+        {["YUL", "YHU", "REM"].map((code) => (
+          <div key={code} style={{ flex: 1 }}>
+            <label style={{ fontSize: 12 }}>{code} ($)</label>
+            <input
+              className="input"
+              type="number"
+              min="0"
+              step="0.01"
+              placeholder="grille"
+              value={form[`price${code}`]}
+              onChange={(e) => setForm({ ...form, [`price${code}`]: e.target.value })}
+            />
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
 
 export default function Clients() {
   const [clients, setClients] = useState([]);
@@ -114,7 +151,11 @@ export default function Clients() {
 
   const openEdit = (client) => {
     setEditing(client);
-    setEditForm({ name: client.name || "", email: client.email || "", phone: client.phone || "", address: client.address || "", notes: client.notes || "" });
+    setEditForm({
+      name: client.name || "", email: client.email || "", phone: client.phone || "",
+      address: client.address || "", notes: client.notes || "",
+      priceYUL: client.priceYUL ?? "", priceYHU: client.priceYHU ?? "", priceREM: client.priceREM ?? "",
+    });
     setEditError("");
   };
 
@@ -247,6 +288,7 @@ export default function Clients() {
             />
             <label style={{ display: "block", marginTop: 8 }}>Mémo et préférences</label>
             <textarea className="input" style={{ minHeight: 60, fontFamily: "inherit" }} value={editForm.notes} onChange={(e) => setEditForm({ ...editForm, notes: e.target.value })} />
+            <ChampsTarifs form={editForm} setForm={setEditForm} />
             {editError && <div style={{ color: "#e85d4c", fontSize: 13, marginTop: 8 }}>{editError}</div>}
             <button className="btn" style={{ marginTop: 14, width: "100%" }} onClick={saveEdit}>Enregistrer les modifications</button>
           </div>
@@ -272,6 +314,7 @@ export default function Clients() {
             />
             <label style={{ display: "block", marginTop: 8 }}>Préférences ou mémo (optionnel)</label>
             <textarea className="input" style={{ minHeight: 60, fontFamily: "inherit" }} value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} />
+            <ChampsTarifs form={form} setForm={setForm} />
             {error && <div style={{ color: "#e85d4c", fontSize: 13, marginTop: 8 }}>{error}</div>}
             <button className="btn" style={{ marginTop: 14, width: "100%" }} onClick={createClient}>Créer le client</button>
           </div>

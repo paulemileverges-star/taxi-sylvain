@@ -46,6 +46,11 @@ model User {
   notes   String?
   address String?
 
+  // Prix negocie avec ce client pour chaque destination (vide = grille de la page Tarifs).
+  priceYUL Float?
+  priceYHU Float?
+  priceREM Float?
+
   // Jeton de notification push (Expo) de l'appareil actuellement connecté — permet d'alerter un
   // chauffeur ou un client même quand l'app est fermée ou l'écran verrouillé.
   pushToken String?
