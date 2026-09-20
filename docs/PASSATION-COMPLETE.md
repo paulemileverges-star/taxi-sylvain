@@ -259,7 +259,6 @@ Le détail par domaine est dans les fichiers de vérification conservés avec le
 
 | Élément | Ce qu'il doit faire | Ce qui se débloque |
 |---|---|---|
-| **Clé Firebase sur expo.dev** | Téléverser `taxi-sylvain-firebase-adminsdk-*.json` dans Credentials → Android → FCM V1, pour les deux projets | **Aucune notification n'arrive sur Android sans cela**, quel que soit le code |
 | **Twilio** | Identifiants, numéro canadien, service Proxy, et un numéro sortant pour l'appel de rappel | Appel masqué client ↔ chauffeur, appel de rappel d'urgence |
 | **Connexion Apple** | `eas build --platform ios` en mode interactif, une fois, pour créer le certificat | Toute version iPhone |
 | **Compte Google Play d'entreprise** | Créer, payer 25 USD, vérification d'identité | Publication sur le Play Store |
@@ -310,7 +309,7 @@ Le détail par domaine est dans les fichiers de vérification conservés avec le
 | **LWS** | Hébergement du site vitrine WordPress | ✅ payant | Panneau `panel.lws.fr`. `taxisylvain.ca` y est un **domaine externe** : le DNS reste chez Vercel, seuls les enregistrements A et AAAA pointent vers le serveur LWS. WordPress reste à installer dans l'espace du domaine. |
 | **Brevo** | Envoi des courriels (confirmations, rappels, agenda) | ✅ gratuit, actif | `app.brevo.com`. Domaine `taxisylvain.ca` authentifié (DKIM, DMARC, brevo-code déjà posés dans le DNS Vercel). Expéditeur : `reservations@taxisylvain.ca`. Variables Railway : `BREVO_API_KEY`, `MAIL_FROM`. |
 | **Expo / EAS** | Compilation des applications, notifications push | ✅ compte gratuit | Équipe `taxisylvains-team`, projets `taxi-sylvain-chauffeur` et `taxi-sylvain-client`. Se connecter avec `EXPO_TOKEN` (dans `cles.txt`) ou `npx eas-cli login`. Variables de fichier déjà créées : `GOOGLE_SERVICES_JSON`, `GOOGLE_SERVICE_INFO_PLIST`. |
-| **Firebase** | Notifications push Android/iOS | ⚠️ projet créé, **clé non déposée** | Projet `taxi-sylvain` sur `console.firebase.google.com`. Les fichiers `google-services.json` et `GoogleService-Info.plist` sont dans chaque application (exclus de Git) et dans les variables EAS. **Reste : déposer la clé de compte de service sur expo.dev (FCM V1).** |
+| **Firebase** | Notifications push Android/iOS | ✅ **complet le 20 septembre** | Projet `taxi-sylvain` sur `console.firebase.google.com`. Fichiers `google-services.json` et `GoogleService-Info.plist` dans chaque application (exclus de Git) et dans les variables EAS. **Clé de compte de service déposée sur Expo et rattachée aux deux applications** (`firebase-adminsdk-fbsvc@taxi-sylvain.iam.gserviceaccount.com`), vérifiée directement auprès de Google. |
 | **Apple Developer** | Version iPhone, TestFlight, App Store | ⚠️ inscrit, certificat manquant | Team ID `DNB64CQYH6`, clé App Store Connect `2D3MR539UF`, Issuer ID `cf6fb73d-076c-4bb1-819e-b8179ebb5461` (ces trois-là ne sont pas secrets). Le fichier `.p8` est dans le dossier des clés. **Reste : une connexion Apple interactive pour créer le certificat de distribution.** |
 | **Google Play** | Publication Android | ❌ à créer | `play.google.com/console/signup`, compte **d'entreprise** (25 USD, numéro D-U-N-S en main). |
 | **Twilio** | Appel masqué et appel de rappel | ⚠️ compte créé et payé, **rien de branché** | `console.twilio.com`. Reste : acheter un numéro canadien, créer le service Proxy, et renseigner `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_PROXY_SERVICE_SID`, `TWILIO_CALLER_NUMBER` dans Railway. |
@@ -360,9 +359,13 @@ Puis lire, dans cet ordre :
 4. `backend/src/lib/pricing.js` et `backend/src/lib/addressFormat.js` — c'est là que se trouve
    l'argent.
 
-**La première chose à faire**, si le propriétaire ne dit pas autre chose : déposer la clé Firebase
-sur expo.dev. C'est le seul point qui empêche aujourd'hui toute notification d'arriver sur un
-téléphone Android, et il ne demande aucune ligne de code.
+**La première chose à faire**, si le propriétaire ne dit pas autre chose : brancher Twilio (numéro
+canadien, service Proxy, numéro sortant) puis faire créer le certificat Apple. Ce sont les deux
+derniers points qui n'attendent aucune ligne de code.
+
+À vérifier en priorité sur un vrai téléphone Android : qu'une notification arrive bien. La clé
+Firebase a été déposée et vérifiée auprès de Google le 20 septembre, mais aucune notification n'a
+encore été reçue sur un appareil réel — il n'y en a pas au banc d'essai.
 
 ---
 
