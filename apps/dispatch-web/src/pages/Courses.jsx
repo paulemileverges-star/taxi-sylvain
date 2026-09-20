@@ -6,6 +6,7 @@ import AddressInput from "../components/AddressInput.jsx";
 import Suggest from "../components/Suggest.jsx";
 import { STATUS_LABEL, statusClass, localInputToIso } from "../lib/status.js";
 import { filtrerCourses, paginer, PERIODES } from "../lib/coursesFilter.js";
+import { filterClients } from "../lib/clientSearch.js";
 
 function fmtDate(d) {
   return new Date(d).toLocaleDateString("fr-CA");
@@ -51,6 +52,18 @@ export default function Courses() {
   const changerFiltre = (patch) => { setFiltre((f) => ({ ...f, ...patch })); setPage(1); };
   const filtrees = useMemo(() => filtrerCourses(rides, filtre), [rides, filtre]);
   const pagination = paginer(filtrees, page);
+
+  // Choix du client à la création d'une course (demande du propriétaire du 20 septembre au soir) :
+  // la liste déroulante reste, et un champ au-dessus la filtre au fil de la frappe (nom, téléphone,
+  // courriel, adresse, sans accents : même règle que la page Clients). Entrée choisit le premier.
+  const [rechercheClient, setRechercheClient] = useState("");
+  const clientsFiltres = useMemo(() => filterClients(clients, rechercheClient), [clients, rechercheClient]);
+  const clientChoisi = clients.find((c) => c.id === form.clientId);
+  const choisirPremierClient = (e) => {
+    if (e.key !== "Enter") return;
+    e.preventDefault();
+    if (clientsFiltres.length > 0) selectClient(clientsFiltres[0].id);
+  };
 
   useEffect(() => { api.listDestinations().then(setDestinations).catch(() => setDestinations([])); }, []);
 
@@ -157,6 +170,7 @@ export default function Courses() {
         flightNumber: form.flightNumber || undefined,
       });
       setForm(EMPTY_FORM);
+      setRechercheClient("");
       setShowCreate(false);
       playSound("action");
       load();
@@ -271,11 +285,34 @@ export default function Courses() {
           <div className="modal">
             <div className="row"><h3>Nouvelle course</h3><button onClick={() => setShowCreate(false)}>✕</button></div>
             <label style={{ display: "block" }}>Client (optionnel)</label>
-            <select className="input" value={form.clientId} onChange={(e) => selectClient(e.target.value)}>
+            <input
+              className="input"
+              placeholder="Rechercher un client : nom, téléphone, courriel, adresse…"
+              value={rechercheClient}
+              onChange={(e) => setRechercheClient(e.target.value)}
+              onKeyDown={choisirPremierClient}
+              autoComplete="off"
+            />
+            <select
+              className="input"
+              value={form.clientId}
+              onChange={(e) => selectClient(e.target.value)}
+              size={rechercheClient.trim() ? Math.min(8, clientsFiltres.length + 2) : undefined}
+            >
               <option value="">Non spécifié</option>
-              {clients.map((c) => <option key={c.id} value={c.id}>{c.name}{c.address ? ` — ${c.address}` : ""}</option>)}
+              {clientsFiltres.map((c) => <option key={c.id} value={c.id}>{c.name}{c.address ? ` — ${c.address}` : ""}</option>)}
+              {/* Le client déjà choisi reste visible même si la recherche ne le retient plus. */}
+              {clientChoisi && !clientsFiltres.some((c) => c.id === clientChoisi.id) && (
+                <option value={clientChoisi.id}>{clientChoisi.name}{clientChoisi.address ? ` — ${clientChoisi.address}` : ""}</option>
+              )}
               <option value="__new__">+ Nouveau client…</option>
             </select>
+            <div style={{ color: "var(--muted)", fontSize: 12, marginTop: 4 }}>
+              {rechercheClient.trim()
+                ? `${clientsFiltres.length} client(s) trouvé(s) · Entrée choisit le premier`
+                : `${clients.length} client(s) · tapez pour filtrer la liste`}
+              {clientChoisi ? ` · choisi : ${clientChoisi.name}` : ""}
+            </div>
             <div style={{ marginTop: 8 }}>
               <AddressInput
                 label="Adresse de prise en charge (domicile du client par défaut)"
