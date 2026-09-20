@@ -165,3 +165,19 @@ test("un collaborateur sans la permission Courses ne peut pas fixer un prix, et 
   assert.equal(clientPriceData({ priceYUL: 70 }, existant, false).forbidden, false, "ré-enregistrer sans rien changer reste permis");
   assert.deepEqual(clientPriceData({ priceYUL: "50" }, existant, false).data, {}, "rien n'est écrit en cas de refus");
 });
+
+// Protection du montant : seul Taxi Sylvain fixe les prix. Une vieille version de l'application
+// client (celle du 13 septembre) envoyait 20 $ en dur ; le serveur ne doit jamais le retenir.
+test("un montant envoyé par l'application d'un client n'est jamais facturé tel quel", () => {
+  // Règle appliquée dans backend/src/routes/rides.js à la création d'une course :
+  //   if (isClientBooking && !destinationCode) fare = 0;
+  const montantRetenu = ({ isClientBooking, destinationCode, fareEnvoye, prixCatalogue }) => {
+    let fare = fareEnvoye;
+    if (destinationCode && prixCatalogue !== undefined && (isClientBooking || !fare)) fare = prixCatalogue ?? 0;
+    if (isClientBooking && !destinationCode) fare = 0;
+    return fare;
+  };
+  assert.equal(montantRetenu({ isClientBooking: true, destinationCode: null, fareEnvoye: 20 }), 0, "adresse libre : montant à confirmer");
+  assert.equal(montantRetenu({ isClientBooking: true, destinationCode: "YUL", fareEnvoye: 20, prixCatalogue: 85 }), 85, "le catalogue s'impose au client");
+  assert.equal(montantRetenu({ isClientBooking: false, destinationCode: null, fareEnvoye: 40 }), 40, "le Dispatch, lui, fixe le montant");
+});

@@ -142,6 +142,12 @@ router.post("/", requirePermission("courses", "CLIENT"), async (req, res) => {
     precisionArrivee = arrivee.confidence || precisionArrivee;
   }
 
+  // Un montant envoyé par l'application d'un client n'est JAMAIS retenu : seul Taxi Sylvain fixe
+  // les prix. Sans cette ligne, une vieille version installée (celle du 13 septembre envoyait
+  // 20 $ en dur) créait une course affichée à ce montant dès que la destination n'était pas au
+  // catalogue. La course part alors « montant à confirmer », comme demandé.
+  if (isClientBooking && !destinationCode) fare = 0;
+
   // Un client qui réserve dans l'app ne connaît pas le tarif : sans destination au catalogue, le
   // montant reste à 0 (« à confirmer ») jusqu'à ce que Taxi Sylvain le fixe. Le Dispatch, lui,
   // doit toujours saisir un montant.
