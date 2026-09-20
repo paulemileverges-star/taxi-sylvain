@@ -316,9 +316,9 @@ Le détail par domaine est dans les fichiers de vérification conservés avec le
 - **Réglage du volume des alertes sonores** : annoncé fait autrefois, introuvable dans le code.
 - **Environnement d'essai séparé**, alerte automatique d'erreurs (Sentry), tests de parcours sur
   les interfaces, sauvegardes de base vérifiées.
-- **Remise en forme des adresses déjà enregistrées** : le script existe
-  (`backend/scripts/reformater-adresses.mjs`, simulation par défaut, refuse une base distante sans
-  `--production`). Il reste à le lancer une fois sur la production, après lecture de la simulation.
+- **Remise en forme des adresses déjà enregistrées** : faite le 20 septembre à 17 h 30 (script
+  `backend/scripts/reformater-adresses.mjs`, 10 adresses réécrites, 0 refusée). Rien à faire, sauf
+  après un import massif d'anciennes adresses.
 
 ---
 

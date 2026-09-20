@@ -149,6 +149,14 @@ railway logs --service backend               # attendre « Taxi Sylvain API en �
 
 - **Toujours lancer depuis `backend/`.** Depuis la racine, la CLI est liée à un service parasite nommé
   `taxi-sylvain`, en échec (§ 8).
+- **Lancer un script sur la base de production** (la base n'est joignable que depuis Railway, hôte
+  `postgres-9vej.railway.internal`) : `railway ssh --service backend -- sh -c "cd /app && node scripts/<script>.mjs"`.
+  Prérequis, faits le 20 septembre : une clé SSH locale (`C:\Users\PC\.ssh\id_ed25519`, sans mot de passe,
+  commentaire `taxi-sylvain-railway`) enregistrée chez Railway sous le nom `pc-taxi-sylvain`
+  (`railway ssh keys add --key taxi-sylvain-railway`), le bloc de configuration écrit par
+  `railway ssh config --service backend --alias taxi-sylvain-backend` dans `~/.ssh/config`, et l'empreinte de
+  `ssh.railway.com` dans `~/.ssh/known_hosts` (`ssh-keyscan ssh.railway.com >> ~/.ssh/known_hosts`), sinon
+  « Host key verification failed ».
 - Le démarrage exécute `prisma migrate deploy` : une migration mal écrite bloque la mise en ligne.
 - Diagnostics affichés au démarrage : nombre de photos dans `/app/uploads` et état des courriels.
 - Projet Railway `taxi-sylvain` (id `24c08cdf-1275-41a8-8f46-a1ad1052f8bb`), service `backend`, base
@@ -329,7 +337,7 @@ sinon l'application s'affiche mais ne peut plus se connecter. Les APK ne sont pa
 7. **Sauvegardes de la base** : vérifier et activer les sauvegardes Postgres sur Railway.
 8. **Registre des demandes** : tenir à jour la section 11 à chaque nouvelle vague.
 9. **Distribuer et tester les APK 1.3.0** (compilés le 20 septembre à 17 h, voir la ligne Expo du tableau ci-dessus) : envoyer les liens aux chauffeurs et clients, puis dérouler sur un vrai téléphone les sections 5.6 à 5.9 du plan de vérification (notification écran verrouillé, GPS avec Waze ouvert, code de confirmation, sélecteur de date).
-10. **Remise en forme des adresses déjà enregistrées** : script écrit (`backend/scripts/reformater-adresses.mjs`, simulation par défaut, refuse une base distante sans `--production`). À lancer une fois sur la production après lecture de la simulation ; une adresse dont la municipalité reconnue changerait n'est jamais touchée.
+10. **Remise en forme des adresses déjà enregistrées** : **fait le 20 septembre à 17 h 30** avec l'accord du propriétaire. Script `backend/scripts/reformater-adresses.mjs` (simulation par défaut, refuse une base distante sans `--production`, ne touche jamais une adresse dont la municipalité reconnue changerait). Lancé dans le conteneur Railway : simulation lue (10 adresses à réécrire, 0 refusée), puis application (10 réécrites, 8 fiches clients avec espaces en trop, 2 courses allégées de « Canada » et de la province en toutes lettres), puis contre-simulation (0 à réécrire, 68 propres). À relancer seulement si des adresses anciennes réapparaissent (import).
 11. **Courriels à chaque étape de la course** (en route, démarrée, terminée) : non demandés, non faits ; seuls confirmation, annulation, rappels, code et récap partent.
 
 ---
@@ -401,6 +409,7 @@ sinon l'application s'affiche mais ne peut plus se connecter. Les APK ne sont pa
 | 20 sept. (reprise) | Défauts relevés par la revue du code : semaine du récap comptée en UTC, tâches planifiées à l'heure du serveur, correction d'une course qui faisait sonner le chauffeur comme une nouvelle affectation, client qui n'entendait un changement que sur l'écran de suivi, abonnement au suivi perdu après une coupure réseau, jetons push périmés jamais effacés, pas de canal Android prioritaire, son iPhone coupé en mode silencieux | Fait : bornes de semaine et tâches à l'heure du Québec (test : une course terminée le dimanche à 22 h compte dans la semaine écoulée) ; `ride:updated` au lieu de `ride:assigned` pour une correction ; évènement personnel `ride:client-update` pour le client ; réabonnement automatique ; jeton `DeviceNotRegistered` effacé ; canal « urgence » ; mode audio réglé. Web en ligne ; son, canal et réabonnement sur les téléphones à la prochaine compilation |
 | 20 sept. (reprise) | Accueil des applications trié (à prendre, puis à faire par heure, historique après) ; notation à rattraper proposée à l'ouverture ; sélecteur de date et d'heure natif dans l'app client ; page Courses de la console avec recherche, filtres (statut, période, chauffeur) et pagination par 20 ; récap hebdomadaire envoyé par courriel aux chauffeurs chaque lundi ; script de remise en forme des adresses existantes | Fait (suite de tests passée de 201 à 232). Le web garde les champs de date du navigateur ; le sélecteur natif est dans les APK 1.3.0 |
 | 20 sept. 16 h 50 | « Je te donne mon accord pour recompiler les 2 APK » | **Fait** : versions 1.3.0 (versionCode 4) compilées sur EAS pour le chauffeur et le client, fichiers Firebase inclus, APK et liens rangés dans le dossier de passation OneDrive (`01-Applications/Android`), anciennes 1.2.0 archivées. Les cinq changements natifs (écran du code, sélecteur de date, canal « urgence », son en mode silencieux, réabonnement au suivi) sont donc sur les téléphones dès l'installation. Reste au propriétaire : distribuer les liens et tester sur un vrai téléphone |
+| 20 sept. 17 h 20 | « Lance la simulation et applique » (remise en forme des adresses existantes) | **Fait** : simulation lue puis appliquée dans le conteneur Railway (voir § 10, point 10) : 10 adresses réécrites, 0 refusée, contre-simulation à zéro |
 
 ---
 
