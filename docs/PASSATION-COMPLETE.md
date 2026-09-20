@@ -19,8 +19,8 @@ Tout ce qui est décrit ici fonctionne réellement, sauf mention contraire expli
 compte 201 tests automatiques, 20 migrations de base de données, et un script de vérification qui
 contrôle les adresses publiques après chaque mise en ligne.
 
-**Ce qui bloque aujourd'hui** n'est pas du code : ce sont des comptes fournisseurs à finir de
-brancher (Twilio, clé Firebase, Apple) et trois décisions d'entreprise. Voir § 6 et § 7.
+**Ce qui bloque aujourd'hui** n'est pas du code : ce sont deux comptes fournisseurs à finir de
+brancher (Twilio, Apple) et trois décisions d'entreprise. Voir § 6 et § 7.
 
 ---
 
