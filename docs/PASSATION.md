@@ -50,6 +50,14 @@ APK Android : produits par EAS Build, profil `preview`. Derniers APK : **1.3.0 (
 `01-Applications/Android` avec les liens d'installation (`Liens-de-telechargement.txt`). Ils embarquent
 `api.taxisylvain.ca`. Tout ce qui sera livré après n'existe que sur les versions web tant qu'on ne recompile pas.
 
+Depuis le 20 septembre à 20 h 45, les deux APK sont aussi servis par le serveur lui-même, sur le disque persistant
+(`/app/uploads/apk/`, déposés par `railway ssh` avec un téléchargement Node depuis les artefacts Expo) :
+`https://api.taxisylvain.ca/uploads/apk/Taxi-Sylvain-Chauffeur-1.3.0.apk` et
+`https://api.taxisylvain.ca/uploads/apk/Taxi-Sylvain-Client-1.3.0.apk` (type `application/vnd.android.package-archive`,
+75 Mo chacun, 148 Mo sur les 434 Mo du volume). Ce sont les liens à donner aux chauffeurs et aux clients ; les liens Expo
+restent en secours. À chaque nouvelle version : déposer les nouveaux fichiers, supprimer les anciens, mettre à jour
+`Liens-de-telechargement.txt`. À supprimer du volume quand le Play Store prendra le relais.
+
 ---
 
 ## 3. Architecture et organisation du dépôt
