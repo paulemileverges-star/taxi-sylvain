@@ -93,6 +93,10 @@ export default function AddressInput({ label, value, onChange, placeholder }) {
               onMouseDown={(e) => e.preventDefault()}
             >
               {s.label}
+              {/* Le nom du lieu aide à choisir (centre commercial, station), mais il n'entre pas
+                  dans l'adresse enregistrée : devant une adresse civique, il ferait reconnaître la
+                  mauvaise municipalité et changerait le prix. */}
+              {s.nomLieu && <span style={{ color: "var(--muted)", fontSize: 11, marginLeft: 6 }}>· {s.nomLieu}</span>}
               {s.known && <span style={{ color: "var(--amber)", fontSize: 11, marginLeft: 6 }}>déjà utilisée</span>}
             </div>
           ))}

@@ -318,7 +318,11 @@ export default function Courses() {
                 <label style={{ display: "block", marginTop: 8 }}>Courriel du nouveau client (optionnel)</label>
                 <input className="input" type="email" value={form.clientEmail} onChange={(e) => setForm({ ...form, clientEmail: e.target.value })} />
                 <label style={{ display: "block", marginTop: 8 }}>Adresse du nouveau client (domicile — par défaut, l'adresse de prise en charge)</label>
-                <input className="input" value={form.clientAddress} onChange={(e) => setForm({ ...form, clientAddress: e.target.value })} placeholder={form.pickupAddress || "ex. 12 Rue Bourgogne, Chambly, QC"} />
+                <AddressInput
+                  value={form.clientAddress}
+                  onChange={({ address }) => setForm({ ...form, clientAddress: address })}
+                  placeholder={form.pickupAddress || "ex. 12 Rue Bourgogne, Chambly, QC"}
+                />
                 <label style={{ display: "block", marginTop: 8 }}>Préférences ou mémo (optionnel)</label>
                 <textarea className="input" style={{ minHeight: 60, fontFamily: "inherit" }} value={form.clientNotes} onChange={(e) => setForm({ ...form, clientNotes: e.target.value })} />
                 <div style={{ color: "var(--muted)", fontSize: 12, marginTop: 4 }}>

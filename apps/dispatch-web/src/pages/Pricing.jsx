@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { api } from "../lib/api.js";
 import { playSound } from "../lib/sound.js";
+import AddressInput from "../components/AddressInput.jsx";
 
 function PriceInput({ value, onChange }) {
   return (
@@ -54,6 +55,7 @@ export default function Pricing() {
   // n'est pas dans la grille ci-dessous — sauf pour le REM, dont la grille est vide : là, ce prix
   // s'applique à tout le monde.
   const [prixDefaut, setPrixDefaut] = useState({});
+  const [adresses, setAdresses] = useState({});
   const [message, setMessage] = useState("");
 
   const load = async () => {
@@ -61,6 +63,7 @@ export default function Pricing() {
     setDestinations(d);
     setZones(z);
     setPrixDefaut(Object.fromEntries(d.map((x) => [x.code, x.price ?? ""])));
+    setAdresses(Object.fromEntries(d.map((x) => [x.code, x.address ?? ""])));
   };
   useEffect(() => { load(); }, []);
 
@@ -78,6 +81,13 @@ export default function Pricing() {
 
   const removeZone = async (zone) => {
     await api.deletePriceZone(zone.id);
+    playSound("action");
+    load();
+  };
+
+  const saveAdresse = async (code) => {
+    const coords = adresses[`${code}_coords`];
+    await api.updateDestination(code, { address: adresses[code], ...(coords ? { lat: coords.lat, lng: coords.lng } : {}) });
     playSound("action");
     load();
   };
@@ -107,9 +117,16 @@ export default function Pricing() {
       <div className="card">
         {destinations.map((d) => (
           <div key={d.code} className="row" style={{ padding: "6px 0", gap: 12 }}>
-            <div>
+            <div style={{ flex: 1, minWidth: 260 }}>
               <div><strong>{d.code}</strong> — {d.label}</div>
-              <div style={{ color: "var(--muted)", fontSize: 13 }}>{d.address}</div>
+              {/* L'adresse de la destination est celle que le chauffeur ouvre dans Waze : elle doit
+                  pouvoir être corrigée ici, et passer par les suggestions pour rester exacte. */}
+              <AddressInput
+                value={adresses[d.code] ?? d.address ?? ""}
+                onChange={({ address, lat, lng }) => setAdresses((a) => ({ ...a, [d.code]: address, [`${d.code}_coords`]: lat != null ? { lat, lng } : a[`${d.code}_coords`] }))}
+                placeholder="Adresse de la destination"
+              />
+              <button className="btn outline" style={{ marginTop: 6 }} onClick={() => saveAdresse(d.code)}>Enregistrer l'adresse</button>
             </div>
             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
               <span style={{ fontSize: 13, color: "var(--muted)" }}>Prix par défaut ($)</span>

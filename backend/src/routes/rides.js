@@ -12,6 +12,7 @@ import { clearDriverLocation, getDriverLocation } from "../lib/driverLocations.j
 import { quote } from "../lib/pricing.js";
 import { sendRideConfirmation, sendRideCancellation, loadRideForEmail } from "../lib/rideEmails.js";
 import { pageDeCourses } from "../lib/ridesOrder.js";
+import { normaliserAdresse, chargerZones } from "../lib/rideAddresses.js";
 
 // Réservation par téléphone (besoin #5) : le Dispatch peut créer une course pour un client sans
 // compte — on retrouve son compte existant par téléphone, ou on lui en crée un à la volée. Si le
@@ -111,20 +112,33 @@ router.post("/", requirePermission("courses", "CLIENT"), async (req, res) => {
     quoteClientId = connu?.id ?? null;
   }
 
+  // Adresses mises à la forme unique AVANT le calcul du tarif : c'est ce texte qui sera enregistré,
+  // affiché partout et ouvert dans Waze. La mise en forme ne peut jamais changer la municipalité
+  // reconnue (garde-fou dans addressFormat.js) : aucun prix ne bouge en silence.
+  const zones = await chargerZones();
+  const depart = await normaliserAdresse(pickupAddress, { zones, coords: { lat: pickupLat, lng: pickupLng } });
+  let pickupAddressFinale = depart.address || pickupAddress;
+  let pickup = depart.coords || { lat: pickupLat, lng: pickupLng };
+  const avertissements = depart.avertissement && depart.avertissement !== "adresse-vide" ? [depart.avertissement] : [];
+
   if (destinationCode) {
-    const q = await quote({ pickupAddress, destinationCode, clientId: quoteClientId });
+    const q = await quote({ pickupAddress: pickupAddressFinale, destinationCode, clientId: quoteClientId });
     if (q.destination) {
       destAddress = q.destination.address;
       destLat = q.destination.lat;
       destLng = q.destination.lng;
       if (isClientBooking || !fare) fare = q.price ?? 0;
     }
+  } else if (destAddress) {
+    const arrivee = await normaliserAdresse(destAddress, { zones, coords: { lat: destLat, lng: destLng } });
+    if (arrivee.address) destAddress = arrivee.address;
+    if (arrivee.coords) { destLat = arrivee.coords.lat; destLng = arrivee.coords.lng; }
   }
 
   // Un client qui réserve dans l'app ne connaît pas le tarif : sans destination au catalogue, le
   // montant reste à 0 (« à confirmer ») jusqu'à ce que Taxi Sylvain le fixe. Le Dispatch, lui,
   // doit toujours saisir un montant.
-  if (!pickupAddress || !destAddress || (!fare && !isClientBooking)) {
+  if (!pickupAddressFinale || !destAddress || (!fare && !isClientBooking)) {
     return res.status(400).json({ error: "Adresse de prise en charge, destination et montant requis." });
   }
 
@@ -132,7 +146,7 @@ router.post("/", requirePermission("courses", "CLIENT"), async (req, res) => {
   if (!clientId && isStaff && clientName && clientPhone) {
     // Nouveau client créé pendant la réservation : sans adresse de domicile explicite, on retient
     // l'adresse de prise en charge (c'est presque toujours chez lui) — les deux écrans concordent.
-    const result = await findOrCreateClientByPhone(clientName, clientPhone, clientEmail, clientAddress || pickupAddress, clientNotes);
+    const result = await findOrCreateClientByPhone(clientName, clientPhone, clientEmail, clientAddress || pickupAddressFinale, clientNotes);
     clientId = result.id;
     clientTempPassword = result.tempPassword;
   }
@@ -148,16 +162,13 @@ router.post("/", requirePermission("courses", "CLIENT"), async (req, res) => {
     }
   }
 
-  // Adresse de départ sans coordonnées (domicile du client, saisie libre) : on tente de la
-  // géocoder pour pouvoir calculer la distance.
-  let pickup = { lat: pickupLat, lng: pickupLng };
-  if (typeof pickup.lat !== "number" || typeof pickup.lng !== "number") pickup = (await geocodeAddress(pickupAddress)) || pickup;
+  // Les coordonnées viennent de la mise en forme ci-dessus quand l'adresse a dû être géocodée.
   const dest = { lat: destLat, lng: destLng };
   const computedDistance = typeof distanceKm === "number" ? distanceKm : await computeDistanceKm(pickup, dest);
 
   const ride = await prisma.ride.create({
     data: {
-      pickupAddress,
+      pickupAddress: pickupAddressFinale,
       destAddress,
       distanceKm: computedDistance,
       fare: isClientBooking ? Number(fare) || 0 : Number(fare),
@@ -201,7 +212,9 @@ router.post("/", requirePermission("courses", "CLIENT"), async (req, res) => {
       data: { type: "ride:broadcast", rideId: ride.id },
     });
   }
-  res.status(201).json({ ...ride, clientTempPassword, driverTempPassword });
+  // « ville-non-reconnue » : la course est bien créée, mais aucun tarif du catalogue ne peut
+  // s'appliquer. « zone-differente » : la mise en forme a été refusée pour ne pas changer le prix.
+  res.status(201).json({ ...ride, clientTempPassword, driverTempPassword, avertissementsAdresse: avertissements });
 });
 
 // Affecter / réaffecter un chauffeur (Dispatch)
@@ -426,8 +439,20 @@ router.post("/:id/call", async (req, res) => {
 router.patch("/:id", requirePermission("courses"), async (req, res) => {
   const { pickupAddress, destAddress, fare, flightNumber, scheduledFor, pickupLat, pickupLng, destLat, destLng } = req.body;
   const data = {};
-  if (pickupAddress !== undefined) data.pickupAddress = pickupAddress;
-  if (destAddress !== undefined) data.destAddress = destAddress;
+  // Corriger une adresse la remet à la forme unique et, si elle arrive sans coordonnées, la
+  // géocode : avant, la course gardait l'ancien point et la carte en direct montrait le mauvais
+  // endroit après une correction.
+  const zonesEdition = pickupAddress !== undefined || destAddress !== undefined ? await chargerZones() : [];
+  if (pickupAddress !== undefined) {
+    const r = await normaliserAdresse(pickupAddress, { zones: zonesEdition, coords: { lat: pickupLat, lng: pickupLng } });
+    data.pickupAddress = r.address ?? pickupAddress;
+    if (r.coords && pickupLat === undefined) { data.pickupLat = r.coords.lat; data.pickupLng = r.coords.lng; }
+  }
+  if (destAddress !== undefined) {
+    const r = await normaliserAdresse(destAddress, { zones: zonesEdition, coords: { lat: destLat, lng: destLng } });
+    data.destAddress = r.address ?? destAddress;
+    if (r.coords && destLat === undefined) { data.destLat = r.coords.lat; data.destLng = r.coords.lng; }
+  }
   if (fare !== undefined) data.fare = Number(fare);
   if (flightNumber !== undefined) data.flightNumber = flightNumber || null;
   if (scheduledFor !== undefined) data.scheduledFor = scheduledFor ? new Date(scheduledFor) : null;

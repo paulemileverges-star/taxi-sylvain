@@ -19,14 +19,16 @@ function hasCoords(p) {
 export async function geocodeAddress(address) {
   if (!address || String(address).trim().length < 5) return null;
   try {
-    const params = new URLSearchParams({ q: address, format: "jsonv2", limit: "1", countrycodes: "ca,us" });
+    // addressdetails : sans lui, on ne récupère que la longue chaîne d'OpenStreetMap, alors que
+    // la mise en forme unique des adresses a besoin des éléments séparés (numéro, rue, ville...).
+    const params = new URLSearchParams({ q: address, format: "jsonv2", limit: "1", countrycodes: "ca,us", addressdetails: "1" });
     const res = await fetch(`https://nominatim.openstreetmap.org/search?${params}`, {
       headers: { "User-Agent": "TaxiSylvain/1.0 (+https://taxisylvain.ca)" },
       signal: AbortSignal.timeout(4000),
     });
     if (!res.ok) return null;
     const [first] = await res.json();
-    return first ? { lat: parseFloat(first.lat), lng: parseFloat(first.lon) } : null;
+    return first ? { lat: parseFloat(first.lat), lng: parseFloat(first.lon), raw: first } : null;
   } catch {
     return null;
   }

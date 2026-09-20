@@ -9,6 +9,7 @@ import { streamListPdf, streamListXlsx } from "../lib/exportReport.js";
 import { realEmailOrNull, generateTempPassword } from "../lib/placeholderEmail.js";
 import { parseImportFile, pick } from "../lib/bulkImport.js";
 import { quoteAll, clientPriceData, parsePrice } from "../lib/pricing.js";
+import { cleanAddressText } from "../lib/addressFormat.js";
 
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024 } });
 
@@ -33,7 +34,7 @@ async function createClientAccount({ name, email, phone, address, notes, passwor
   const passwordHash = await bcrypt.hash(tempPassword, 10);
   const client = await prisma.user.create({
     data: {
-      role: "CLIENT", name, email: finalEmail, phone, address: address || null, notes: notes || null, passwordHash,
+      role: "CLIENT", name, email: finalEmail, phone, address: cleanAddressText(address), notes: notes || null, passwordHash,
       priceYUL: parsePrice(priceYUL), priceYHU: parsePrice(priceYHU), priceREM: parsePrice(priceREM),
     },
     select: { id: true, name: true, email: true, phone: true, address: true, ratingAvg: true, createdAt: true, notes: true, priceYUL: true, priceYHU: true, priceREM: true },
@@ -143,7 +144,7 @@ router.patch("/:id", async (req, res) => {
   const data = { ...prixData };
   if (name !== undefined) data.name = String(name).trim();
   if (phone !== undefined) data.phone = String(phone).trim();
-  if (address !== undefined) data.address = address ? String(address).trim() : null;
+  if (address !== undefined) data.address = cleanAddressText(address);
   if (notes !== undefined) data.notes = notes ? String(notes).trim() : null;
   if (email !== undefined) {
     const trimmed = String(email || "").trim();
@@ -172,7 +173,7 @@ router.patch("/:id/address", async (req, res) => {
 
   const client = await prisma.user.update({
     where: { id: req.params.id },
-    data: { address: address ?? null },
+    data: { address: cleanAddressText(address) },
     select: { id: true, address: true },
   });
   res.json(client);

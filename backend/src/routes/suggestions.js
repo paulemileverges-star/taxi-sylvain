@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { prisma } from "../lib/prisma.js";
 import { requireAuth } from "../middleware/auth.js";
+import { cleanAddressText } from "../lib/addressFormat.js";
 import { realEmailOrNull } from "../lib/placeholderEmail.js";
 
 // Saisie intuitive côté Dispatch : propose, au fur et à mesure de la frappe, ce que la base
@@ -56,7 +57,10 @@ router.get("/", async (req, res) => {
       prisma.ride.findMany({ where: { destAddress: like }, select: { destAddress: true, destLat: true, destLng: true }, take: LIMIT, orderBy: { createdAt: "desc" } }),
     ]);
     const seen = new Map();
-    const add = (address, lat, lng) => {
+    const add = (brut, lat, lng) => {
+      // Les adresses déjà en base peuvent dater d'avant la forme unique : on les propose nettoyées,
+      // sinon une ancienne forme se recycle indéfiniment d'une course à l'autre.
+      const address = cleanAddressText(brut);
       const key = String(address || "").trim().toLowerCase();
       if (!key || seen.has(key)) return;
       seen.set(key, { value: address, label: address, detail: "déjà utilisée", data: { lat: lat ?? null, lng: lng ?? null } });
