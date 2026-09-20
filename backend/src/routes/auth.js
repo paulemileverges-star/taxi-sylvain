@@ -4,9 +4,10 @@ import jwt from "jsonwebtoken";
 import { prisma } from "../lib/prisma.js";
 import { requireAuth, requireRole } from "../middleware/auth.js";
 import { rateLimit } from "../middleware/rateLimit.js";
-import { deleteUserCascade, announceDeletion } from "../lib/deleteUser.js";
-import { motifDeRefus, courseEnCoursBloque } from "../lib/accountDeletion.js";
+import { motifDeRefus, dateLimite, messageDemandeEnvoyee, texteAlerteDispatch, courrielDemandeRecue, courrielAlerteDispatch } from "../lib/accountDeletion.js";
 import { confirmationRequise, demanderCode, verifierCode, messagePourEtat } from "../lib/verification.js";
+import { isMailConfigured, sendMail } from "../lib/mailer.js";
+import { realEmailOrNull } from "../lib/placeholderEmail.js";
 
 const router = Router();
 
@@ -177,9 +178,10 @@ router.post("/change-password", requireAuth, async (req, res) => {
   res.json({ ok: true });
 });
 
-// Suppression définitive de son propre compte, depuis l'application (exigence Google Play).
-// Le mot de passe actuel est toujours exigé : personne ne doit pouvoir effacer un compte avec un
-// téléphone laissé déverrouillé.
+// Demande de suppression de son propre compte, depuis l'application (exigence Google Play).
+// Décision du propriétaire du 20 septembre 2026 : la suppression n'est plus immédiate, c'est une
+// DEMANDE que le Dispatch valide ou refuse (routes/admins.js). Le mot de passe actuel est toujours
+// exigé : personne ne doit pouvoir engager cela avec un téléphone laissé déverrouillé.
 router.post("/delete-account", requireAuth, async (req, res) => {
   const { password } = req.body || {};
   if (!isText(password)) return res.status(400).json({ error: "Mot de passe requis." });
@@ -187,12 +189,12 @@ router.post("/delete-account", requireAuth, async (req, res) => {
   const user = await prisma.user.findUnique({ where: { id: req.user.id } });
   if (!user) return res.status(401).json({ error: "Session invalide ou expirée." });
 
-  return supprimerCompte(req, res, user, password, "Mot de passe incorrect.");
+  return demanderSuppression(req, res, user, password, "Mot de passe incorrect.", "app");
 });
 
-// Même suppression, mais depuis une page web publique : Google Play exige qu'elle soit possible
-// sans installer l'application. Pas de jeton, donc courriel + mot de passe, limiteur de tentatives,
-// et un message d'échec unique pour ne jamais révéler si un courriel existe chez Taxi Sylvain.
+// Même demande, mais depuis une page web publique : Google Play exige qu'elle soit possible sans
+// installer l'application. Pas de jeton, donc courriel + mot de passe, limiteur de tentatives, et
+// un message d'échec unique pour ne jamais révéler si un courriel existe chez Taxi Sylvain.
 router.post("/delete-account-web", deleteAccountLimiter, async (req, res) => {
   const { email, password } = req.body || {};
   if (!isText(email) || !isText(password)) return res.status(400).json({ error: "Courriel et mot de passe requis." });
@@ -200,7 +202,20 @@ router.post("/delete-account-web", deleteAccountLimiter, async (req, res) => {
   const user = await chercherParCourriel(prisma, email);
   if (!user) return res.status(401).json({ error: "Identifiants invalides." });
 
-  return supprimerCompte(req, res, user, password, "Identifiants invalides.");
+  return demanderSuppression(req, res, user, password, "Identifiants invalides.", "web");
+});
+
+// La personne change d'avis tant que le Dispatch n'a pas tranché : la demande est retirée.
+router.post("/cancel-deletion", requireAuth, async (req, res) => {
+  const user = await prisma.user.findUnique({ where: { id: req.user.id }, select: { id: true, name: true, deletionRequestedAt: true } });
+  if (!user) return res.status(401).json({ error: "Session invalide ou expirée." });
+  if (user.deletionRequestedAt) {
+    await prisma.user.update({ where: { id: user.id }, data: { deletionRequestedAt: null, deletionRequestVia: null } });
+    const io = req.app.get("io");
+    io?.to("dispatch").emit("ride:notification", { text: `${user.name} a annulé sa demande de suppression de compte.` });
+    io?.to("dispatch").emit("account:deletion-changed", { userId: user.id });
+  }
+  res.json({ ok: true });
 });
 
 // Jeton de notification push (Expo) de l'appareil — pour recevoir une alerte (nouvelle course,
@@ -244,31 +259,44 @@ router.patch("/notification-prefs", requireAuth, async (req, res) => {
   res.json(user);
 });
 
-// Parcours commun aux deux routes de suppression (application et page web) pour que les règles ne
-// se dédoublent pas : mot de passe, rôle autorisé, aucune course en cours (client seulement),
-// puis effacement.
+// Parcours commun aux deux routes (application et page web) pour que les règles ne se dédoublent
+// pas : mot de passe, rôle autorisé, puis enregistrement de la demande. Le compte reste actif ; la
+// vérification « aucune course en cours » se fait au moment où le Dispatch valide (deleteUser.js).
 // « erreurMotDePasse » change selon la route : côté web, il ne doit rien révéler sur le courriel.
-async function supprimerCompte(req, res, user, password, erreurMotDePasse) {
+async function demanderSuppression(req, res, user, password, erreurMotDePasse, via) {
   const valid = await bcrypt.compare(password, user.passwordHash);
   if (!valid) return res.status(401).json({ error: erreurMotDePasse });
 
   const motif = motifDeRefus(user.role);
   if (motif) return res.status(403).json({ error: motif });
 
-  let result;
-  try {
-    // Client : la présence d'une course en cours est vérifiée dans la transaction même de la
-    // suppression. Chauffeur : aucune vérification, ses courses repartent chez le Dispatch.
-    result = await deleteUserCascade(user.id, { refuseIfActive: courseEnCoursBloque(user.role) });
-  } catch (e) {
-    if (e.code === "COURSE_EN_COURS" || e.code === "COMPTE_PROTEGE") return res.status(e.status).json({ error: e.message });
-    if (e.code === "COMPTE_INTROUVABLE") return res.status(401).json({ error: erreurMotDePasse });
-    throw e;
+  // Une demande déjà en attente n'est pas dédoublée : même réponse, sans nouvelle alerte.
+  let requestedAt = user.deletionRequestedAt;
+  if (!requestedAt) {
+    requestedAt = new Date();
+    await prisma.user.update({ where: { id: user.id }, data: { deletionRequestedAt: requestedAt, deletionRequestVia: via } });
+    const io = req.app.get("io");
+    io?.to("dispatch").emit("ride:notification", { text: texteAlerteDispatch({ name: user.name, role: user.role, via }) });
+    io?.to("dispatch").emit("account:deletion-changed", { userId: user.id });
+    envoyerCourrielsDemande(user, requestedAt, via);
   }
+  res.json({ ok: true, pending: true, requestedAt, deadline: dateLimite(requestedAt), message: messageDemandeEnvoyee() });
+}
 
-  // Courses à venir annulées ou remises à réaffecter : la console et les chauffeurs sont prévenus.
-  announceDeletion(req.app.get("io"), result, user.name);
-  res.json({ ok: true });
+// Accusé de réception à la personne et alerte aux comptes Dispatch. Jamais bloquant.
+async function envoyerCourrielsDemande(user, requestedAt, via) {
+  if (!isMailConfigured()) return;
+  try {
+    const adresse = realEmailOrNull(user.email);
+    if (adresse) await sendMail({ to: adresse, toName: user.name, ...courrielDemandeRecue({ nom: user.name, requestedAt }) });
+    const dispatchs = await prisma.user.findMany({ where: { role: "DISPATCH" }, select: { name: true, email: true } });
+    for (const d of dispatchs) {
+      const a = realEmailOrNull(d.email);
+      if (a) await sendMail({ to: a, toName: d.name, ...courrielAlerteDispatch({ name: user.name, role: user.role, via, requestedAt }) });
+    }
+  } catch (e) {
+    console.error("Courriels de demande de suppression non envoyés :", e.message);
+  }
 }
 
 function signToken(user) {

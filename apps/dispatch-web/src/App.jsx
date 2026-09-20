@@ -16,6 +16,7 @@ import Groups from "./pages/Groups.jsx";
 import LiveMap from "./pages/LiveMap.jsx";
 import Search from "./pages/Search.jsx";
 import Admins from "./pages/Admins.jsx";
+import Suppressions from "./pages/Suppressions.jsx";
 import Pricing from "./pages/Pricing.jsx";
 import ChangePasswordModal from "./components/ChangePasswordModal.jsx";
 import logo from "./assets/logo.png";
@@ -34,6 +35,7 @@ const NAV = [
   { key: "messages", label: "Messagerie" },
   { key: "groups", label: "Groupes", permission: "groups" },
   { key: "admins", label: "Administrateurs", dispatchOnly: true },
+  { key: "suppressions", label: "Suppressions", dispatchOnly: true },
 ];
 
 // Session ouverte : jeton et profil gardés dans le navigateur.
@@ -54,6 +56,17 @@ export default function App() {
   const [unread, setUnread] = useState({ direct: { total: 0, byDriver: {} }, groups: { total: 0, byConversation: {} }, total: 0 });
   const refreshUnread = () => api.unreadMessages().then(setUnread).catch(() => null);
   const [showChangePassword, setShowChangePassword] = useState(false);
+  // Demandes de suppression de compte en attente (pastille du menu, compte Dispatch seulement).
+  const [deletionCount, setDeletionCount] = useState(0);
+  const refreshDeletions = () => api.listDeletionRequests().then((l) => setDeletionCount(l.length)).catch(() => null);
+
+  useEffect(() => {
+    if (!user || user.role !== "DISPATCH") return undefined;
+    const socket = getSocket();
+    refreshDeletions();
+    socket.on("account:deletion-changed", refreshDeletions);
+    return () => socket.off("account:deletion-changed", refreshDeletions);
+  }, [user]);
 
   useEffect(() => {
     if (!user) return undefined;
@@ -129,6 +142,7 @@ export default function App() {
               {n.label}
               {n.key === "messages" && unread.direct.total > 0 && <span className="nav-badge">{unread.direct.total}</span>}
               {n.key === "groups" && unread.groups.total > 0 && <span className="nav-badge">{unread.groups.total}</span>}
+              {n.key === "suppressions" && deletionCount > 0 && <span className="nav-badge">{deletionCount}</span>}
             </button>
           ))}
         </div>
@@ -151,6 +165,7 @@ export default function App() {
         {screen === "messages" && <Messages unread={unread.direct.byDriver} onRead={refreshUnread} />}
         {screen === "groups" && <Groups unread={unread.groups.byConversation} onRead={refreshUnread} />}
         {screen === "admins" && user.role === "DISPATCH" && <Admins />}
+        {screen === "suppressions" && user.role === "DISPATCH" && <Suppressions onChanged={setDeletionCount} />}
       </div>
       {showChangePassword && <ChangePasswordModal onClose={() => setShowChangePassword(false)} />}
       <div className="toasts" aria-live="polite">

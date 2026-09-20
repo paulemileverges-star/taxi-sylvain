@@ -49,19 +49,23 @@ d'Apple demandent une adresse en anglais : c'est à ça que servent celles de la
 
 - La personne entre son **mot de passe actuel** pour confirmer. Dans l'app elle est déjà connectée ;
   sur la page web elle entre son courriel et son mot de passe.
-- Un **client** et un **chauffeur** peuvent supprimer leur compte eux-mêmes.
+- Un **client** et un **chauffeur** peuvent **demander** la suppression de leur compte eux-mêmes.
+  **Depuis le 20 septembre 2026, ce n'est plus immédiat** : la demande arrive dans la console
+  (page Suppressions), vous la validez (le compte est alors effacé) ou la refusez, **sous 30 jours**
+  (engagement écrit dans les pages légales). En attendant, le compte reste utilisable et la personne
+  peut annuler sa demande. Elle reçoit un courriel à la demande et à la décision.
 - Le compte **Dispatch** (le vôtre) ne peut jamais être supprimé de cette façon : cela fermerait
   l'entreprise.
 - Un compte **administrateur** ne se supprime pas lui-même : il vous le demande.
-- La suppression est **refusée tant qu'une course est en cours** (chauffeur accepté, en route, ou
-  course démarrée), que la personne soit le client ou le chauffeur.
+- La validation est **refusée tant qu'une course du client est en cours** (chauffeur accepté, en
+  route, ou course démarrée). Pour un chauffeur, ses courses non terminées repartent chez vous.
 - **Ce qui est effacé :** le compte et les informations personnelles (nom, courriel, téléphone,
   adresse, photos, mémo), les messages envoyés, les notations, la cédule, les groupes créés et le
   jeton de notification.
 - **Ce qui est conservé :** les courses passées restent dans vos registres, mais **ne sont plus
   reliées à personne**. C'est une obligation comptable : la redevance de 10 % doit rester
   justifiable.
-- La suppression est **immédiate et définitive**. Aucune récupération n'est possible.
+- Une fois validée, la suppression est **définitive**. Aucune récupération n'est possible.
 
 ---
 
@@ -104,7 +108,7 @@ Répondez ceci :
 | Question de Google | Votre réponse |
 |---|---|
 | Les utilisateurs peuvent-ils créer un compte dans l'application ? | **Oui** |
-| Offrez-vous un moyen de demander la suppression du compte ? | **Oui** |
+| Offrez-vous un moyen de demander la suppression du compte ? | **Oui** (demande traitée par vous sous 30 jours) |
 | Adresse web de la suppression de compte | `https://api.taxisylvain.ca/suppression-compte` |
 | La suppression est-elle possible depuis l'application ? | **Oui** — écran d'accueil, lien « Supprimer mon compte » |
 | Certaines données sont-elles conservées après la suppression ? | **Oui** |
@@ -113,8 +117,9 @@ Répondez ceci :
 Texte à coller dans la case « données conservées » (Google accepte le français ; ajoutez la version
 anglaise si le formulaire l'exige) :
 
-> Le compte et toutes les informations personnelles (nom, courriel, téléphone, adresse, photos,
-> messages, notations) sont supprimés immédiatement et définitivement. Les courses déjà effectuées
+> La demande de suppression est examinée par l'entreprise et traitée sous 30 jours ; le compte et
+> toutes les informations personnelles (nom, courriel, téléphone, adresse, photos, messages,
+> notations) sont alors supprimés définitivement. Les courses déjà effectuées
 > sont conservées dans les registres comptables de l'entreprise, sans aucun lien avec la personne
 > supprimée : ni nom, ni courriel, ni téléphone. Cette conservation répond à une obligation
 > comptable liée à la redevance de 10 % versée par les chauffeurs.

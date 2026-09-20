@@ -89,3 +89,49 @@ test("le message de course en cours dit aussi quoi faire", () => {
   assert.match(message, /course en cours/);
   assert.match(message, /annuler/);
 });
+
+// Décision du propriétaire du 20 septembre 2026 : la suppression devient une DEMANDE, validée par
+// le Dispatch. Le compte reste utilisable en attendant, la demande est annulable, réponse sous 30 jours.
+const {
+  DELAI_TRAITEMENT_JOURS, dateLimite, demandeEnAttente, messageDemandeEnvoyee, texteAlerteDispatch,
+  courrielDemandeRecue, courrielDecision, courrielAlerteDispatch,
+} = await import("../src/lib/accountDeletion.js");
+
+test("la réponse est promise sous 30 jours, et la date limite le dit", () => {
+  assert.equal(DELAI_TRAITEMENT_JOURS, 30);
+  assert.equal(dateLimite(new Date("2026-09-20T20:00:00Z")).toISOString(), "2026-10-20T20:00:00.000Z");
+  assert.match(messageDemandeEnvoyee(), /30 jours/);
+  assert.match(messageDemandeEnvoyee(), /reste utilisable/);
+});
+
+test("une demande en attente se lit sur le compte", () => {
+  assert.equal(demandeEnAttente({ deletionRequestedAt: new Date() }), true);
+  assert.equal(demandeEnAttente({ deletionRequestedAt: null }), false);
+  assert.equal(demandeEnAttente(null), false);
+});
+
+test("le Dispatch est alerté avec le nom, le rôle et l'origine de la demande", () => {
+  const texte = texteAlerteDispatch({ name: "Jean Roy", role: "DRIVER", via: "web" });
+  assert.match(texte, /Jean Roy/);
+  assert.match(texte, /chauffeur/);
+  assert.match(texte, /page web/);
+  assert.match(texteAlerteDispatch({ name: "Marie", role: "CLIENT", via: "app" }), /client.*l'application/);
+});
+
+test("les courriels : accusé de réception avec la date limite, décision favorable, refus avec la raison", () => {
+  const recu = courrielDemandeRecue({ nom: "Marie Tremblay", requestedAt: new Date("2026-09-20T20:00:00Z") });
+  assert.match(recu.subject, /demande de suppression/);
+  assert.match(recu.text, /Bonjour Marie,/);
+  assert.match(recu.text, /20 octobre 2026/);
+  assert.match(recu.text, /annulez la demande/);
+  const oui = courrielDecision({ nom: "Marie Tremblay", approuvee: true });
+  assert.match(oui.subject, /a été supprimé/);
+  assert.match(oui.html, /Taxi Sylvain/);
+  const non = courrielDecision({ nom: "Marie Tremblay", approuvee: false, raison: "une course est encore en cours" });
+  assert.match(non.subject, /n'a pas été acceptée/);
+  assert.match(non.text, /une course est encore en cours/);
+  assert.match(non.text, /reste actif/);
+  const alerte = courrielAlerteDispatch({ name: "Jean Roy", role: "DRIVER", via: "app", requestedAt: new Date("2026-09-20T20:00:00Z") });
+  assert.match(alerte.subject, /Jean Roy/);
+  assert.match(alerte.text, /avant le 20 octobre 2026/);
+});

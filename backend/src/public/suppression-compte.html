@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<meta name="description" content="Supprimer définitivement votre compte Taxi Sylvain, sans installer l'application." />
+<meta name="description" content="Demander la suppression de votre compte Taxi Sylvain, sans installer l'application. Taxi Sylvain traite la demande sous 30 jours." />
 <title>Supprimer mon compte Taxi Sylvain</title>
 <!-- Page autonome : aucun fichier CSS, aucune police et aucun script venant d'ailleurs. Elle doit
      s'ouvrir même si tout le reste est en panne, parce que Google Play la vérifie. -->
@@ -99,17 +99,21 @@
   <div class="logo">Taxi <span>Sylvain</span></div>
   <h1>Supprimer mon compte Taxi Sylvain</h1>
   <p class="intro">
-    Cette page permet à un <strong>client</strong> ou à un <strong>chauffeur</strong> de supprimer
-    lui-même son compte, sans installer l'application. Prenez une minute pour lire ce qui suit : la suppression ne s'annule pas.
+    Cette page permet à un <strong>client</strong> ou à un <strong>chauffeur</strong> de demander
+    lui-même la suppression de son compte, sans installer l'application. Taxi Sylvain examine la
+    demande et l'accepte ou la refuse <strong>sous 30 jours</strong> ; d'ici là, votre compte reste
+    utilisable et vous pouvez annuler la demande dans l'application. Prenez une minute pour lire ce
+    qui suit : une fois validée, la suppression ne s'annule pas.
   </p>
-  <p class="doux">Page mise à jour le 19 septembre 2026.</p>
+  <p class="doux">Page mise à jour le 20 septembre 2026.</p>
 
   <section class="carte carte-accent">
     <h2>Vous êtes chauffeur ?</h2>
     <p>
-      Vous pouvez supprimer votre compte chauffeur vous-même, sur cette page (formulaire plus bas) ou
-      dans l'application, avec le lien <strong>Supprimer mon compte</strong>. La suppression est
-      immédiate, <strong>même si une course vous est confiée</strong> : les courses qui vous étaient
+      Vous pouvez demander la suppression de votre compte chauffeur vous-même, sur cette page
+      (formulaire plus bas) ou dans l'application, avec le lien <strong>Supprimer mon compte</strong>.
+      Taxi Sylvain valide ou refuse la demande sous 30 jours et vous l'écrit. Quand la suppression
+      est validée, <strong>même si une course vous est confiée</strong>, les courses qui vous étaient
       affectées et qui ne sont pas terminées vous sont retirées et repassent en attente d'un chauffeur.
       Taxi Sylvain les confie à quelqu'un d'autre.
     </p>
@@ -174,15 +178,18 @@
   <section class="carte carte-alerte">
     <h2>C'est définitif</h2>
     <p>
-      La suppression est immédiate et définitive. Il n'y a aucun moyen de récupérer votre compte,
-      votre historique ou vos messages par la suite. Pour revenir, il faudra créer un nouveau compte.
+      Une fois votre demande validée par Taxi Sylvain, la suppression est définitive. Il n'y a aucun
+      moyen de récupérer votre compte, votre historique ou vos messages par la suite. Pour revenir,
+      il faudra créer un nouveau compte. Tant que la demande n'est pas validée, vous pouvez l'annuler
+      dans l'application.
     </p>
   </section>
 
   <section class="carte">
-    <h2>Quand la suppression est refusée</h2>
+    <h2>Quand la demande est refusée ou reportée</h2>
     <ul>
-      <li><strong>Vous êtes client et une de vos courses est acceptée par un chauffeur ou en cours.</strong> Attendez la fin de la course, ou appelez Taxi Sylvain pour la faire annuler, puis revenez ici.</li>
+      <li><strong>Taxi Sylvain peut refuser ou reporter une demande</strong>, par exemple tant qu'une course vous est confiée ou qu'un point reste à régler avec vous. Vous en êtes informé par courriel, avec la raison, et votre compte reste actif.</li>
+      <li><strong>Vous êtes client et une de vos courses est acceptée par un chauffeur ou en cours.</strong> La suppression ne peut pas être validée avant la fin de la course : attendez, ou appelez Taxi Sylvain pour la faire annuler.</li>
       <li><strong>Vous êtes le compte Dispatch.</strong> Ce compte fait fonctionner l'entreprise : il ne peut pas être supprimé.</li>
       <li><strong>Vous êtes un collaborateur (compte administrateur).</strong> Ces comptes sont gérés par Taxi Sylvain. Demandez au Dispatch de le retirer.</li>
     </ul>
@@ -197,8 +204,8 @@
     </p>
     <p>
       Pour obtenir une copie de vos renseignements ou les faire corriger, faites une demande par
-      écrit à la personne responsable. Taxi Sylvain n'a pas encore d'adresse courriel : appelez le
-      438-499-1120 pour obtenir l'adresse postale où envoyer votre demande.
+      écrit à la personne responsable, par la poste : Taxi Sylvain, 2060, rue Saint-Georges,
+      Longueuil (Québec) J4K 2C8, Canada. Vous pouvez aussi appeler le 438-499-1120.
     </p>
     <p>
       <strong>Si vous voulez une copie, demandez-la avant de supprimer votre compte</strong> : après
@@ -207,7 +214,7 @@
   </section>
 
   <section class="carte">
-    <h2>Supprimer mon compte</h2>
+    <h2>Demander la suppression de mon compte</h2>
     <p class="doux">Votre courriel et votre mot de passe actuel sont exigés, pour être certain que c'est bien vous.</p>
     <p class="doux">
       Vous êtes client, votre compte a été créé par Taxi Sylvain (par exemple lors d'une réservation
@@ -226,10 +233,10 @@
 
       <div class="case">
         <input id="confirmation" type="checkbox" required />
-        <label for="confirmation">Je comprends que la suppression est définitive.</label>
+        <label for="confirmation">Je comprends qu'une fois validée par Taxi Sylvain, la suppression est définitive.</label>
       </div>
 
-      <button id="bouton" type="submit">Supprimer définitivement mon compte</button>
+      <button id="bouton" type="submit">Demander la suppression de mon compte</button>
     </form>
 
     <div id="message" role="status" aria-live="polite"></div>
@@ -238,8 +245,8 @@
   <section class="carte">
     <h2>Deux autres façons de faire</h2>
     <p>
-      Vous pouvez aussi supprimer votre compte directement dans l'application, avec le lien
-      <strong>Supprimer mon compte</strong>.
+      Vous pouvez aussi faire la demande directement dans l'application, avec le lien
+      <strong>Supprimer mon compte</strong>, et l'annuler au même endroit tant qu'elle n'est pas traitée.
     </p>
     <p class="doux">Vous préférez parler à quelqu'un ? Appelez-nous, on s'en occupe.</p>
     <p class="appel"><a href="tel:+14384991120">438-499-1120</a></p>
@@ -270,7 +277,7 @@
 
   function reactiverBouton() {
     bouton.disabled = false;
-    bouton.textContent = "Supprimer définitivement mon compte";
+    bouton.textContent = "Demander la suppression de mon compte";
   }
 
   formulaire.addEventListener("submit", function (evenement) {
@@ -284,16 +291,16 @@
       return;
     }
     if (!caseConfirmation.checked) {
-      afficher("Cochez la case pour confirmer que vous comprenez que la suppression est définitive.", "erreur");
+      afficher("Cochez la case pour confirmer que vous comprenez qu'une fois validée, la suppression est définitive.", "erreur");
       return;
     }
     // Dernier filet avant l'envoi : une fois la demande partie, on ne revient pas en arrière.
-    if (!window.confirm("Supprimer définitivement le compte " + courriel + " ?\n\nCette action ne peut pas être annulée.")) {
+    if (!window.confirm("Demander la suppression du compte " + courriel + " ?\n\nTaxi Sylvain traitera la demande sous 30 jours. Vous pourrez l'annuler dans l'application tant qu'elle n'est pas validée.")) {
       return;
     }
 
     bouton.disabled = true;
-    bouton.textContent = "Suppression en cours...";
+    bouton.textContent = "Envoi de la demande...";
     zoneMessage.className = "";
 
     fetch("/api/auth/delete-account-web", {
@@ -309,13 +316,13 @@
       .then(function (resultat) {
         if (resultat.ok && resultat.donnees.ok) {
           formulaire.style.display = "none";
-          afficher("Votre compte a été supprimé. Les renseignements de votre compte ont été effacés. Merci d'avoir fait confiance à Taxi Sylvain.", "succes");
+          afficher("Votre demande a été envoyée à Taxi Sylvain. Elle sera traitée sous 30 jours et vous recevrez un courriel à la décision. D'ici là, votre compte reste utilisable.", "succes");
           return;
         }
         // On reprend le message français renvoyé par l'API. Jamais de message technique brut :
         // si la réponse n'est pas une phrase lisible, on affiche la nôtre.
         var raison = typeof resultat.donnees.error === "string" ? resultat.donnees.error.trim() : "";
-        afficher(raison || "La suppression n'a pas pu être faite. Vérifiez votre courriel et votre mot de passe, puis réessayez.", "erreur");
+        afficher(raison || "La demande n'a pas pu être envoyée. Vérifiez votre courriel et votre mot de passe, puis réessayez.", "erreur");
         reactiverBouton();
       })
       .catch(function () {

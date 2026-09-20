@@ -46,7 +46,9 @@ export const api = {
   resendCode: (email, password) => request("/auth/resend-code", { method: "POST", body: { email, password } }),
   me: () => request("/auth/me"),
   changePassword: (currentPassword, newPassword) => request("/auth/change-password", { method: "POST", body: { currentPassword, newPassword } }),
+  // Depuis le 20 septembre 2026 : une DEMANDE de suppression, validée par Taxi Sylvain ; annulable.
   deleteAccount: (password) => request("/auth/delete-account", { method: "POST", body: { password } }),
+  cancelDeletion: () => request("/auth/cancel-deletion", { method: "POST" }),
   registerPushToken: (token) => request("/auth/push-token", { method: "POST", body: { token } }),
   clearPushToken: () => request("/auth/push-token", { method: "DELETE" }),
   // Notifications Web Push (version web seulement, voir lib/webNotify.js).

@@ -149,6 +149,10 @@ export const api = {
   createAdmin: (payload) => request("/admins", { method: "POST", body: payload }),
   updateAdminPermissions: (id, permissions) => request(`/admins/${id}/permissions`, { method: "PATCH", body: { permissions } }),
   deleteAdmin: (id) => request(`/admins/${id}`, { method: "DELETE" }),
+  // Demandes de suppression de compte, validées ou refusées par le Dispatch.
+  listDeletionRequests: () => request("/admins/deletion-requests"),
+  approveDeletion: (userId) => request(`/admins/deletion-requests/${userId}/approve`, { method: "POST" }),
+  refuseDeletion: (userId, raison) => request(`/admins/deletion-requests/${userId}/refuse`, { method: "POST", body: { raison } }),
   emailStatus: () => request("/admins/email-status"),
   sendTestEmail: (to) => request("/admins/email-test", { method: "POST", body: to ? { to } : {} }),
   setToken: (t) => localStorage.setItem("ts_token", t),

@@ -51,3 +51,21 @@ test("le courriel de récap reprend les chiffres du rapport et la période en fr
   assert.match(seule.text, /1 course\b/);
   assert.match(seule.html, /Bonjour,/);
 });
+
+// Demande du propriétaire (20 septembre, soir) : le récap part aussi par courriel au Dispatch.
+test("la synthèse au Dispatch liste chaque chauffeur et les totaux, et dit quand la semaine est vide", async () => {
+  const { messageRecapDispatch } = await import("../src/jobs/weeklyReport.js");
+  const semaine = { weekStart: new Date("2026-09-14T04:00:00Z"), weekEnd: new Date("2026-09-21T03:59:59.999Z") };
+  const m = messageRecapDispatch({ ...semaine, lignes: [
+    { name: "Jean Roy", rideCount: 7, totalFare: 812.5, royaltyDue: 81.25 },
+    { name: "Paul Côté", rideCount: 3, totalFare: 200, royaltyDue: 20 },
+  ] });
+  assert.match(m.subject, /du 14 septembre au 20 septembre 2026/);
+  assert.match(m.text, /10 course\(s\), 1012\.50 \$ de courses, 101\.25 \$ de redevance/);
+  assert.match(m.html, /Jean Roy/);
+  assert.match(m.html, /Paul Côté/);
+  assert.match(m.text, /- Paul Côté : 3 course\(s\), 200\.00 \$, redevance 20\.00 \$/);
+  const vide = messageRecapDispatch({ ...semaine, lignes: [] });
+  assert.match(vide.text, /Aucune course terminée cette semaine/);
+  assert.match(vide.html, /Aucune course terminée cette semaine/);
+});

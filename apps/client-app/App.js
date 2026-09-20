@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { SafeAreaView, StatusBar } from "react-native";
+import { SafeAreaView, StatusBar, View, Text } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import LoginScreen from "./src/screens/LoginScreen";
 import RegisterScreen from "./src/screens/RegisterScreen";
@@ -34,6 +34,21 @@ export default function App() {
   const [activeRideId, setActiveRideId] = useState(null);
   const [unread, setUnread] = useState(EMPTY_UNREAD);
   const refreshUnread = () => api.unreadMessages().then(setUnread).catch(() => null);
+
+  // Profil relu depuis le serveur (demande de suppression envoyée ou annulée, adresse modifiée...).
+  // Compte disparu (suppression validée par Taxi Sylvain) : la session locale est fermée.
+  const rafraichirProfil = async () => {
+    try {
+      const fresh = await api.me();
+      await AsyncStorage.setItem("ts_user", JSON.stringify(fresh));
+      setUser(fresh);
+    } catch (e) {
+      if (e.status === 401 || e.status === 404) {
+        await clearSession();
+        setUser(null);
+      }
+    }
+  };
 
   useEffect(() => {
     (async () => {
@@ -116,6 +131,16 @@ export default function App() {
         notifyWeb(title || "Taxi Sylvain", body || "");
         if (status === "COMPLETED" && rideId) { setActiveRideId(rideId); setScreen("rate"); }
       });
+      // Décision de Taxi Sylvain sur une demande de suppression de compte (validée : le compte
+      // n'existe plus, on ferme la session ; refusée : le compte reste actif, avec la raison).
+      s.on("account:deletion-decided", ({ approved, raison }) => {
+        if (approved) {
+          showAlert("Compte supprimé", "Taxi Sylvain a validé la suppression de votre compte. Merci d'avoir voyagé avec nous.", [{ text: "OK", onPress: () => logout({ server: false }) }]);
+        } else {
+          showAlert("Demande de suppression refusée", raison ? `Taxi Sylvain n'a pas accepté votre demande : ${raison}` : "Taxi Sylvain n'a pas accepté votre demande. Votre compte reste actif.");
+          rafraichirProfil();
+        }
+      });
     });
     registerForPushNotifications();
     // Version web : abonnement aux notifications du serveur, si la permission a été accordée.
@@ -127,6 +152,7 @@ export default function App() {
       sock?.off("ride:reminder");
       sock?.off("message:ride");
       sock?.off("ride:client-update");
+      sock?.off("account:deletion-decided");
     };
   }, [user]);
 
@@ -184,6 +210,15 @@ export default function App() {
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: "#0f1b2d" }}>
       <StatusBar barStyle="light-content" />
+      {/* Demande de suppression en attente : rappel discret, avec accès à l'écran pour l'annuler. */}
+      {user.deletionRequestedAt ? (
+        <View style={{ backgroundColor: "#2a1f12", borderBottomWidth: 1, borderBottomColor: "#f5a623", paddingHorizontal: 16, paddingVertical: 8 }}>
+          <Text style={{ color: "#f5a623", fontSize: 12, lineHeight: 17 }}>
+            Suppression de votre compte demandée le {new Date(user.deletionRequestedAt).toLocaleDateString("fr-CA")}. Taxi Sylvain la traitera sous 30 jours ; votre compte reste utilisable d'ici là.{" "}
+            <Text style={{ textDecorationLine: "underline", fontWeight: "700" }} onPress={() => setScreen("deleteAccount")}>Voir ou annuler</Text>
+          </Text>
+        </View>
+      ) : null}
       {screen === "book" && (
         <BookScreen
           user={user}
@@ -214,9 +249,15 @@ export default function App() {
       )}
       {screen === "groups" && <GroupsScreen user={user} onBack={() => setScreen("book")} unread={unread.groups.byConversation} onRead={refreshUnread} />}
       {screen === "changePassword" && <ChangePasswordScreen onBack={() => setScreen("book")} />}
-      {/* Après la suppression, le compte n'existe plus : déconnexion locale, sans appel au serveur. */}
+      {/* Depuis le 20 septembre 2026 : une demande, validée par Taxi Sylvain. Le profil est relu pour
+          afficher (ou retirer) le rappel de demande en attente. */}
       {screen === "deleteAccount" && (
-        <DeleteAccountScreen onBack={() => setScreen("book")} onDeleted={() => logout({ server: false })} />
+        <DeleteAccountScreen
+          user={user}
+          onBack={() => setScreen("book")}
+          onRequested={async () => { await rafraichirProfil(); setScreen("book"); }}
+          onCancelled={async () => { await rafraichirProfil(); setScreen("book"); }}
+        />
       )}
       {screen === "notifications" && (
         <NotificationSettingsScreen

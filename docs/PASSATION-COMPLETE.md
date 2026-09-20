@@ -109,7 +109,7 @@ Expo Push.
 | `lib/rideAddresses.js` | Le seul endroit qui décide de l'adresse et des coordonnées enregistrées, à la création **comme** à la correction d'une course. |
 | `lib/ridesOrder.js` | L'ordre des listes de courses et le découpage en journées, **à l'heure du Québec** (`FUSEAU_TAXI`), envoyé déjà calculé aux applications. |
 | `lib/rappels.js` | Quand un rappel est dû, et quand l'escalade se déclenche (60 min, chauffeur hors ligne ou pas en route). |
-| `lib/accountDeletion.js` | Qui a le droit de supprimer son compte. **Décision du propriétaire : un chauffeur supprime le sien automatiquement, sans aucune vérification.** Un client reste bloqué pendant une course. |
+| `lib/accountDeletion.js` | La suppression de compte. **Décision du propriétaire du 20 septembre (remplace celle du 19) : un client ou un chauffeur en fait la demande, le Dispatch valide ou refuse, sous 30 jours ; le compte reste utilisable et la demande est annulable.** À la validation, un client avec une course en cours est refusé (409), un chauffeur est supprimé même avec une course (elle repart chez le Dispatch). Courriels d'accusé, d'alerte et de décision. |
 | `lib/deleteUser.js` | La suppression elle-même, en une transaction : courses annulées ou remises au Dispatch, photos effacées, sockets coupés, agendas mis à jour. Le compte Dispatch est protégé partout. |
 | `lib/calendar.js` + `lib/rideEmails.js` | Les courriels et l'invitation d'agenda (RFC 5545, UID stable `course-{id}@taxi-sylvain`, SEQUENCE qui s'incrémente). |
 | `lib/mailer.js` | L'envoi (Brevo ou Resend). **Ne lève jamais** : un courriel ne doit jamais faire échouer une action. |
@@ -213,6 +213,11 @@ ligne, écrites puis **vérifiées phrase par phrase contre le code** (33 écart
 
 ### Reprise du 20 septembre (après-midi) : ce que le plan de révision a fait livrer
 
+- **Suppression de compte sur demande, validée par le Dispatch** (décision du propriétaire, 17 h 45) :
+  le compte reste utilisable jusqu'à la décision, la demande est annulable, réponse promise sous
+  30 jours, page Suppressions dans la console, courriels d'accusé, d'alerte et de décision, pages
+  légales réécrites avec l'adresse postale et la raison sociale. Scénario local de 29 vérifications.
+- **Récapitulatif hebdomadaire par courriel** : à chaque chauffeur et, en synthèse, au Dispatch.
 - **Confirmation du courriel par code** (demande du propriétaire) : inscription dans l'app,
   chauffeurs et clients créés par le Dispatch, collaborateurs. Code à six chiffres gardé en
   empreinte, 15 minutes, 5 essais, renvoi après une minute ; aucune session tant que le code n'est
@@ -288,8 +293,7 @@ Le détail par domaine est dans les fichiers de vérification conservés avec le
 | **Twilio** | Identifiants, numéro canadien, service Proxy, et un numéro sortant pour l'appel de rappel | Appel masqué client ↔ chauffeur, appel de rappel d'urgence |
 | **Connexion Apple** | `eas build --platform ios` en mode interactif, une fois, pour créer le certificat | Toute version iPhone |
 | **Compte Google Play d'entreprise** | Créer, payer 25 USD, vérification d'identité | Publication sur le Play Store |
-| **Adresse postale et raison sociale** | Les fournir | Exigées par la Loi 25 dans les pages légales, et par Apple |
-| **Relecture juridique des conditions** | Faire relire | Un avis le signale en haut de la page |
+| **Relecture juridique des conditions** | Faire relire | Un avis le signale en haut de la page. Adresse postale (2060, rue Saint-Georges, Longueuil (Québec) J4K 2C8) et raison sociale (« Taxi Sylvain ») fournies et écrites le 20 septembre |
 | **Prix REM, règle Plattsburgh** | Saisir dans la page Tarifs, décider la règle | Tarification complète |
 | **Boîte courriel `reservations@taxisylvain.ca`** | La créer chez l'hébergeur | Les réponses des clients n'arrivent nulle part aujourd'hui |
 
@@ -345,8 +349,9 @@ Le détail par domaine est dans les fichiers de vérification conservés avec le
 | **D-U-N-S** | Exigé par Google et Apple pour un compte d'entreprise | ✅ obtenu | — |
 | **OpenStreetMap / OSRM** | Adresses, cartes, distances | ✅ gratuit, sans compte | Aucun compte. Respecter la limite d'une requête par seconde. |
 
-**Raison sociale du compte Brevo** : Groupe NSK Inc. À confirmer avant de l'écrire dans les pages
-légales.
+**Raison sociale** : « Taxi Sylvain », confirmée par le propriétaire le 20 septembre, écrite dans les
+pages légales avec l'adresse postale 2060, rue Saint-Georges, Longueuil (Québec) J4K 2C8. Le compte
+Brevo a été ouvert au nom de Groupe NSK Inc. : à harmoniser dans Brevo si besoin.
 
 ---
 

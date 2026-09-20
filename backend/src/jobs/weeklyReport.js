@@ -86,6 +86,47 @@ export function messageRecap({ nom, weekStart, weekEnd, rideCount, totalFare, ro
   return { subject, html, text };
 }
 
+/** Courriel de synthèse envoyé au Dispatch : une ligne par chauffeur, et les totaux. */
+export function messageRecapDispatch({ weekStart, weekEnd, lignes }) {
+  const periode = `du ${DATE_COURTE.format(new Date(weekStart))} au ${DATE_LONGUE.format(new Date(weekEnd))}`;
+  const montant = (n) => `${Number(n || 0).toFixed(2)} $`;
+  const totaux = (lignes || []).reduce((t, l) => ({ courses: t.courses + l.rideCount, total: t.total + l.totalFare, redevance: t.redevance + l.royaltyDue }), { courses: 0, total: 0, redevance: 0 });
+  const rangees = (lignes || []).map((l) =>
+    `<tr><td style="padding:6px 8px;border-bottom:1px solid #e5e7eb">${l.name}</td><td style="padding:6px 8px;text-align:right;border-bottom:1px solid #e5e7eb">${l.rideCount}</td><td style="padding:6px 8px;text-align:right;border-bottom:1px solid #e5e7eb">${montant(l.totalFare)}</td><td style="padding:6px 8px;text-align:right;border-bottom:1px solid #e5e7eb">${montant(l.royaltyDue)}</td></tr>`
+  ).join("\n      ");
+  const subject = `Récapitulatif hebdomadaire des chauffeurs, semaine ${periode}`;
+  const html = `<!doctype html><html lang="fr"><body style="margin:0;background:#f3f4f6;font-family:Segoe UI,Helvetica,Arial,sans-serif">
+<div style="max-width:640px;margin:0 auto;padding:24px">
+  <div style="background:#16233a;color:#f5a623;padding:16px 20px;border-radius:12px 12px 0 0;font-size:18px;font-weight:700">Taxi Sylvain</div>
+  <div style="background:#ffffff;padding:20px;border-radius:0 0 12px 12px">
+    <p style="margin:0 0 12px;color:#111827;font-size:15px">Récapitulatif de la semaine ${periode} : ${totaux.courses} course${totaux.courses > 1 ? "s" : ""}, ${montant(totaux.total)} de courses, ${montant(totaux.redevance)} de redevance.</p>
+    <table style="width:100%;border-collapse:collapse;font-size:14px;color:#111827">
+      <tr><th style="text-align:left;padding:6px 8px;color:#6b7280">Chauffeur</th><th style="text-align:right;padding:6px 8px;color:#6b7280">Courses</th><th style="text-align:right;padding:6px 8px;color:#6b7280">Total</th><th style="text-align:right;padding:6px 8px;color:#6b7280">Redevance</th></tr>
+      ${rangees || `<tr><td colspan="4" style="padding:6px 8px;color:#6b7280">Aucune course terminée cette semaine.</td></tr>`}
+    </table>
+    <p style="margin:16px 0 0;color:#6b7280;font-size:13px">Le détail, les exports PDF et Excel et les rapports par client sont dans la console, page Rapports.</p>
+  </div>
+</div></body></html>`;
+  const text = `Récapitulatif de la semaine ${periode} : ${totaux.courses} course(s), ${montant(totaux.total)} de courses, ${montant(totaux.redevance)} de redevance.\n\n` +
+    ((lignes || []).map((l) => `- ${l.name} : ${l.rideCount} course(s), ${montant(l.totalFare)}, redevance ${montant(l.royaltyDue)}`).join("\n") || "Aucune course terminée cette semaine.") +
+    "\n\nLe détail est dans la console, page Rapports.";
+  return { subject, html, text };
+}
+
+async function courrielRecapDispatch({ weekStart, weekEnd, lignes }) {
+  if (!isMailConfigured()) return;
+  try {
+    const dispatchs = await prisma.user.findMany({ where: { role: "DISPATCH" }, select: { name: true, email: true } });
+    const message = messageRecapDispatch({ weekStart, weekEnd, lignes });
+    for (const d of dispatchs) {
+      const adresse = realEmailOrNull(d.email);
+      if (adresse) await sendMail({ to: adresse, toName: d.name, ...message });
+    }
+  } catch (e) {
+    console.error("Courriel de récap au Dispatch non envoyé :", e.message);
+  }
+}
+
 async function courrielRecap(driver, report) {
   const adresse = realEmailOrNull(driver?.email);
   if (!adresse || !isMailConfigured()) return;
@@ -135,6 +176,14 @@ export async function generateWeeklyReports(io, range, { courriel = false } = {}
   }
   if (io && results.length > 0) {
     io.to("dispatch").emit("report:generated", { weekStart, weekEnd, count: results.length });
+  }
+  // Le Dispatch reçoit la synthèse de tous les chauffeurs, même une semaine sans course (pour
+  // savoir que la tâche a bien tourné).
+  if (courriel) {
+    await courrielRecapDispatch({
+      weekStart, weekEnd,
+      lignes: results.map((r) => ({ name: r.driver?.name || r.driverId, rideCount: r.rideCount, totalFare: r.totalFare, royaltyDue: r.royaltyDue })),
+    });
   }
   return results;
 }

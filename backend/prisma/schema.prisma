@@ -62,6 +62,12 @@ model User {
   // Navigateurs abonnés aux notifications Web Push (versions web des applications).
   webPushSubscriptions WebPushSubscription[]
 
+  // Demande de suppression du compte faite par la personne elle-même, en attente de la décision du
+  // Dispatch (décision du propriétaire du 20 septembre 2026 : plus de suppression immédiate).
+  // Le compte reste utilisable tant que le Dispatch n’a pas tranché ; la demande est annulable.
+  deletionRequestedAt DateTime?
+  deletionRequestVia  String? // « app » ou « web »
+
   // Rappels de course programmés (besoin #1) : décalages en minutes avant l'heure de prise en
   // charge auxquels envoyer un rappel push. Ex. [60, 10] = 1h avant et 10min avant. Vide = désactivé.
   reminderOffsets Int[] @default([60, 10])

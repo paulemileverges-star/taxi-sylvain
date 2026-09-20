@@ -2,7 +2,8 @@ import { Router } from "express";
 import bcrypt from "bcryptjs";
 import { prisma } from "../lib/prisma.js";
 import { requireAuth, requireRole } from "../middleware/auth.js";
-import { deleteUserCascade } from "../lib/deleteUser.js";
+import { deleteUserCascade, announceDeletion } from "../lib/deleteUser.js";
+import { RIDE_STATUSES_BLOQUANTS, courseEnCoursBloque, dateLimite, courrielDecision } from "../lib/accountDeletion.js";
 import { generateTempPassword, realEmailOrNull } from "../lib/placeholderEmail.js";
 import { isMailConfigured, mailProvider, parseFrom, sendMail } from "../lib/mailer.js";
 
@@ -78,6 +79,71 @@ router.delete("/:id", async (req, res) => {
   res.status(204).end();
 });
 
+
+// Demandes de suppression de compte (décision du propriétaire du 20 septembre 2026) : la personne
+// demande depuis l'app ou la page web, le Dispatch valide (compte effacé) ou refuse. Réservé au
+// compte DISPATCH (router.use plus haut). La règle « aucune course en cours » d'un client est
+// revérifiée par deleteUserCascade au moment de valider.
+router.get("/deletion-requests", async (req, res) => {
+  const demandes = await prisma.user.findMany({
+    where: { deletionRequestedAt: { not: null } },
+    select: { id: true, role: true, name: true, email: true, phone: true, deletionRequestedAt: true, deletionRequestVia: true },
+    orderBy: { deletionRequestedAt: "asc" },
+  });
+  const ids = demandes.map((d) => d.id);
+  const enCours = ids.length
+    ? await prisma.ride.findMany({ where: { status: { in: RIDE_STATUSES_BLOQUANTS }, OR: [{ clientId: { in: ids } }, { driverId: { in: ids } }] }, select: { clientId: true, driverId: true } })
+    : [];
+  res.json(demandes.map((d) => ({
+    ...d,
+    email: realEmailOrNull(d.email),
+    coursesEnCours: enCours.filter((r) => r.clientId === d.id || r.driverId === d.id).length,
+    deadline: dateLimite(d.deletionRequestedAt),
+  })));
+});
+
+router.post("/deletion-requests/:userId/approve", async (req, res) => {
+  const user = await prisma.user.findUnique({ where: { id: req.params.userId }, select: { id: true, role: true, name: true, email: true, deletionRequestedAt: true } });
+  if (!user || !user.deletionRequestedAt) return res.status(404).json({ error: "Aucune demande de suppression en attente pour ce compte." });
+  const io = req.app.get("io");
+  // Prévenu avant l'effacement : après, sa connexion est coupée et le compte n'existe plus.
+  io?.to(`user:${user.id}`).emit("account:deletion-decided", { approved: true });
+  let result;
+  try {
+    result = await deleteUserCascade(user.id, { refuseIfActive: courseEnCoursBloque(user.role) });
+  } catch (e) {
+    if (e.code === "COURSE_EN_COURS" || e.code === "COMPTE_PROTEGE") return res.status(e.status).json({ error: e.message });
+    if (e.code === "COMPTE_INTROUVABLE") return res.status(404).json({ error: e.message });
+    throw e;
+  }
+  announceDeletion(io, result, user.name);
+  io?.to("dispatch").emit("account:deletion-changed", { userId: user.id });
+  courrielDeDecision(user, { approuvee: true });
+  res.json({ ok: true });
+});
+
+router.post("/deletion-requests/:userId/refuse", async (req, res) => {
+  const raison = typeof req.body?.raison === "string" ? req.body.raison.trim().slice(0, 500) : "";
+  const user = await prisma.user.findUnique({ where: { id: req.params.userId }, select: { id: true, role: true, name: true, email: true, deletionRequestedAt: true } });
+  if (!user || !user.deletionRequestedAt) return res.status(404).json({ error: "Aucune demande de suppression en attente pour ce compte." });
+  await prisma.user.update({ where: { id: user.id }, data: { deletionRequestedAt: null, deletionRequestVia: null } });
+  const io = req.app.get("io");
+  io?.to("dispatch").emit("account:deletion-changed", { userId: user.id });
+  io?.to(`user:${user.id}`).emit("account:deletion-decided", { approved: false, raison });
+  courrielDeDecision(user, { approuvee: false, raison });
+  res.json({ ok: true });
+});
+
+// Décision envoyée par courriel à la personne (vrai courriel seulement). Jamais bloquant.
+async function courrielDeDecision(user, { approuvee, raison }) {
+  const adresse = realEmailOrNull(user.email);
+  if (!adresse || !isMailConfigured()) return;
+  try {
+    await sendMail({ to: adresse, toName: user.name, ...courrielDecision({ nom: user.name, approuvee, raison }) });
+  } catch (e) {
+    console.error("Courriel de décision non envoyé :", e.message);
+  }
+}
 
 // État des courriels automatiques et essai d'envoi — pour que Taxi Sylvain vérifie lui-même,
 // depuis la console, que la clé du fournisseur est bien en place, sans avoir à lire des journaux.
