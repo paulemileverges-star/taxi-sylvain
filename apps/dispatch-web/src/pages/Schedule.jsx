@@ -1,7 +1,8 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { api } from "../lib/api.js";
 import { playSound } from "../lib/sound.js";
 import RideEditModal from "../components/RideEditModal.jsx";
+import { startOfWeek, addDays, scheduleItemsForDay } from "../lib/scheduleOrder.js";
 
 const DAYS = ["Lun", "Mar", "Mer", "Jeu", "Ven", "Sam", "Dim"];
 const STATUS_LABEL = {
@@ -9,14 +10,6 @@ const STATUS_LABEL = {
   EN_ROUTE: "En route", STARTED: "En cours", COMPLETED: "Terminée",
   CANCELLED: "Annulée", REFUSED: "Refusée",
 };
-
-function startOfWeek(d) {
-  const date = new Date(d);
-  const day = date.getDay() || 7;
-  date.setHours(0, 0, 0, 0);
-  date.setDate(date.getDate() - day + 1);
-  return date;
-}
 
 export default function Schedule() {
   const [weekStart, setWeekStart] = useState(() => startOfWeek(new Date()));
@@ -62,77 +55,64 @@ export default function Schedule() {
     load();
   };
 
-  const entriesForDay = (dayIndex) => {
-    return entries.filter((e) => {
-      const d = new Date(e.startsAt);
-      const idx = (d.getDay() + 6) % 7; // lundi = 0
-      const diffDays = Math.floor((d - weekStart) / 86400000);
-      return idx === dayIndex && diffDays >= 0 && diffDays < 7;
-    });
-  };
-
-  // Toute course avec une heure de prise en charge vient remplir la cédule automatiquement
-  // (besoin #19) — cliquer dessus ouvre la fiche complète pour la corriger si nécessaire.
-  const ridesForDay = (dayIndex) => {
-    return rides.filter((r) => {
-      const d = new Date(r.scheduledFor);
-      const idx = (d.getDay() + 6) % 7;
-      const diffDays = Math.floor((d - weekStart) / 86400000);
-      return idx === dayIndex && diffDays >= 0 && diffDays < 7;
-    });
-  };
+  // Une seule liste par journée : les courses (besoin #19, cliquables pour ouvrir la fiche) et les
+  // créneaux mélangés, classés par heure. Le calcul est mémorisé car la page se re-rend à chaque
+  // frappe du formulaire « Nouveau créneau », et la liste des courses peut être longue.
+  const jours = useMemo(
+    () => Array.from({ length: 7 }, (_, i) => scheduleItemsForDay({ rides, entries, weekStart, dayIndex: i })),
+    [rides, entries, weekStart]
+  );
 
   return (
     <div>
       <div className="row">
         <h1>Cédule de la semaine</h1>
         <div style={{ display: "flex", gap: 8 }}>
-          <button className="btn outline" onClick={() => setWeekStart(new Date(weekStart.getTime() - 7 * 86400000))}>← Semaine précédente</button>
-          <button className="btn outline" onClick={() => setWeekStart(new Date(weekStart.getTime() + 7 * 86400000))}>Semaine suivante →</button>
+          <button className="btn outline" onClick={() => setWeekStart(addDays(weekStart, -7))}>← Semaine précédente</button>
+          <button className="btn outline" onClick={() => setWeekStart(addDays(weekStart, 7))}>Semaine suivante →</button>
           <button className="btn" onClick={() => setShowAdd(true)}>Ajouter un créneau</button>
         </div>
       </div>
 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(150px, 1fr))", gap: 8 }}>
         {DAYS.map((label, i) => {
-          const date = new Date(weekStart.getTime() + i * 86400000);
+          const date = addDays(weekStart, i);
           return (
             <div key={label} className="card" style={{ minHeight: 160 }}>
               <div style={{ fontSize: 12, color: "#8b99b5", marginBottom: 8 }}>
                 {label} {date.getDate()}/{date.getMonth() + 1}
               </div>
-              {ridesForDay(i).map((ride) => (
+              {jours[i].map((item) => (item.kind === "ride" ? (
                 <div
-                  key={ride.id}
-                  onClick={() => setOpenRideId(ride.id)}
+                  key={item.id}
+                  onClick={() => setOpenRideId(item.ride.id)}
                   style={{ background: "rgba(245,166,35,0.12)", border: "1px solid var(--amber)", borderRadius: 8, padding: "6px 8px", marginBottom: 6, fontSize: 12, cursor: "pointer" }}
                 >
                   <div className="row">
-                    <strong>{new Date(ride.scheduledFor).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</strong>
-                    <span style={{ color: "var(--amber)", fontSize: 11 }}>{STATUS_LABEL[ride.status] || ride.status}</span>
+                    <strong>{new Date(item.ride.scheduledFor).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</strong>
+                    <span style={{ color: "var(--amber)", fontSize: 11 }}>{STATUS_LABEL[item.ride.status] || item.ride.status}</span>
                   </div>
-                  <div>{ride.pickupAddress} → {ride.destAddress}</div>
+                  <div>{item.ride.pickupAddress} → {item.ride.destAddress}</div>
                   <div style={{ color: "#8b99b5" }}>
-                    {ride.client?.name || "Client non spécifié"}{ride.driver?.name ? ` · ${ride.driver.name}` : ""}
+                    {item.ride.client?.name || "Client non spécifié"}{item.ride.driver?.name ? ` · ${item.ride.driver.name}` : ""}
                   </div>
                 </div>
-              ))}
-              {entriesForDay(i).map((entry) => (
-                <div key={entry.id} style={{ background: "#1d2c46", borderRadius: 8, padding: "6px 8px", marginBottom: 6, fontSize: 12 }}>
+              ) : (
+                <div key={item.id} style={{ background: "#1d2c46", borderRadius: 8, padding: "6px 8px", marginBottom: 6, fontSize: 12 }}>
                   <div className="row">
-                    <strong>{new Date(entry.startsAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</strong>
+                    <strong>{new Date(item.entry.startsAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</strong>
                     <button
-                      onClick={() => remove(entry.id)}
+                      onClick={() => remove(item.entry.id)}
                       title="Supprimer ce créneau"
                       style={{ background: "rgba(232,93,76,0.12)", border: "1px solid #e85d4c", borderRadius: 6, color: "#e85d4c", cursor: "pointer", width: 20, height: 20, lineHeight: 1, fontSize: 12 }}
                     >
                       ✕
                     </button>
                   </div>
-                  <div>{entry.driver.name}</div>
-                  <div style={{ color: "#8b99b5" }}>{entry.label}</div>
+                  <div>{item.entry.driver.name}</div>
+                  <div style={{ color: "#8b99b5" }}>{item.entry.label}</div>
                 </div>
-              ))}
+              )))}
             </div>
           );
         })}
