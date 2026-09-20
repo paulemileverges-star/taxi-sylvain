@@ -9,11 +9,20 @@ const EXPO_PUSH_URL = "https://exp.host/--/api/v2/push/send";
 async function sendExpoPush(messages) {
   if (messages.length === 0) return;
   try {
-    await fetch(EXPO_PUSH_URL, {
+    const res = await fetch(EXPO_PUSH_URL, {
       method: "POST",
       headers: { "Content-Type": "application/json", Accept: "application/json" },
       body: JSON.stringify(messages),
+      // Sans délai maximal, un appel suspendu bloquait toute la boucle des rappels, relancée
+      // chaque minute : les rappels suivants ne partaient plus du tout.
+      signal: AbortSignal.timeout(10000),
     });
+    // Expo répond « ok » même quand chaque message échoue : c'est dans le détail que se lit
+    // l'absence de clé Firebase, qui empêche toute notification d'arriver sur Android.
+    const reponse = await res.json().catch(() => null);
+    for (const item of reponse?.data || []) {
+      if (item?.status === "error") console.error("Notification refusée :", item.message, item.details?.error || "");
+    }
   } catch (err) {
     console.error("Erreur d'envoi de notification push:", err.message);
   }

@@ -194,9 +194,12 @@ model SentReminder {
   userId         String
   user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   offsetMinutes  Int
+  // Canal du rappel : « push », « courriel », « urgence ». Un même rappel peut partir par
+  // plusieurs canaux sans que l'un empêche l'autre.
+  canal          String   @default("push")
   sentAt         DateTime @default(now())
 
-  @@unique([rideId, userId, offsetMinutes])
+  @@unique([rideId, userId, offsetMinutes, canal])
 }
 
 model Schedule {

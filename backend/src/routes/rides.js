@@ -13,6 +13,7 @@ import { quote } from "../lib/pricing.js";
 import { sendRideConfirmation, sendRideCancellation, loadRideForEmail } from "../lib/rideEmails.js";
 import { pageDeCourses } from "../lib/ridesOrder.js";
 import { normaliserAdresse, chargerZones } from "../lib/rideAddresses.js";
+import { oublierRappels } from "../jobs/rideReminders.js";
 
 // Réservation par téléphone (besoin #5) : le Dispatch peut créer une course pour un client sans
 // compte — on retrouve son compte existant par téléphone, ou on lui en crée un à la volée. Si le
@@ -499,6 +500,12 @@ router.patch("/:id", requirePermission("courses"), async (req, res) => {
       return a !== b;
     });
     if (agendaChanged && (ride.driverId || ride.clientId)) sendRideConfirmation(ride.id);
+
+    // L'heure a changé : les rappels déjà notés n'ont plus de sens. Sans cet effacement, une
+    // course déplacée ne redéclenchait plus jamais de rappel — personne ne l'avait vu.
+    if (data.scheduledFor !== undefined && before && new Date(before.scheduledFor).getTime() !== new Date(ride.scheduledFor).getTime()) {
+      await oublierRappels(ride.id);
+    }
 
     // Taxi Sylvain vient de fixer (ou corriger) le montant : le client reçoit le récapitulatif.
     if (ride.clientId && data.fare !== undefined && ride.fare > 0 && ride.fare !== before?.fare) {

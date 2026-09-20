@@ -70,6 +70,17 @@ export default function App() {
       s.on("ride:broadcast", () => playSound("alert"));
       s.on("ride:assigned", (ride) => { playSound("alert"); setActiveRideId(ride.id); setScreen("active"); });
       s.on("report:ready", () => { setNewReport(true); playSound("notify"); });
+      // Rappel de course envoyé par le serveur : son immédiat, et alerte visible quand c'est
+      // le rappel d'urgence d'une heure avant. Le son « alert » est volontairement le plus fort.
+      s.on("ride:reminder", ({ texte, urgent }) => {
+        playSound(urgent ? "alert" : "notify");
+        if (urgent) {
+          showAlert("Rappel urgent", texte);
+          notifyWeb("Rappel urgent — Taxi Sylvain", texte);
+        } else {
+          notifyWeb("Course à venir", texte);
+        }
+      });
       // Son + badge + notification navigateur pour tout message reçu, quel que soit l'écran ouvert
       s.on("message:group", ({ message }) => {
         if (message.sender.id === user.id) return;

@@ -31,6 +31,7 @@ import { mailStatusLine } from "./lib/mailer.js";
 import { registerSocketHandlers } from "./sockets/index.js";
 import { generateWeeklyReports } from "./jobs/weeklyReport.js";
 import { sendRideReminders } from "./jobs/rideReminders.js";
+import { voiceStatusLine } from "./lib/twilioVoice.js";
 
 const app = express();
 app.set("trust proxy", 1); // derrière le proxy Railway — nécessaire pour que req.ip soit la vraie IP (limiteur de tentatives)
@@ -47,6 +48,7 @@ app.use(express.json({ limit: "1mb" }));
 
 ensureUploadsDir();
 console.log(mailStatusLine());
+  console.log(voiceStatusLine());
 // Photos servies en lecture seule : jamais interprétées comme une page (nosniff) ni exécutées
 // (sandbox), même si un fichier piégé avait été déposé avant le verrouillage de l'envoi.
 app.use(
@@ -98,7 +100,7 @@ registerSocketHandlers(io);
 cron.schedule("5 0 * * 1", () => generateWeeklyReports(io));
 
 // Rappels de course programmés (besoin #1) — voir src/jobs/rideReminders.js.
-cron.schedule("* * * * *", () => sendRideReminders().catch((e) => console.error("Erreur rappels de course:", e.message)));
+cron.schedule("* * * * *", () => sendRideReminders(io).catch((e) => console.error("Erreur rappels de course:", e.message)));
 
 const port = process.env.PORT || 4000;
 server.listen(port, () => console.log(`Taxi Sylvain API en écoute sur le port ${port}`));

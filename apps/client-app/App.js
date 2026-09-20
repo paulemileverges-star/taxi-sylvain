@@ -75,6 +75,11 @@ export default function App() {
         if (message.sender.id === user.id) return;
         playSound("notify"); notifyWeb(`${message.sender.name} (groupe)`, message.text); refreshUnread();
       });
+      // Rappel de course envoyé par le serveur : son et notification du navigateur.
+      s.on("ride:reminder", ({ texte }) => {
+        playSound("notify");
+        notifyWeb("Course à venir — Taxi Sylvain", texte);
+      });
       s.on("message:ride", (m) => {
         if (m.sender.id === user.id) return;
         playSound("notify"); notifyWeb(`Message de ${m.sender.name}`, m.text); refreshUnread();
