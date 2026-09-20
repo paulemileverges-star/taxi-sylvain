@@ -60,8 +60,16 @@ app.use(
   "/uploads",
   express.static(uploadsDir, {
     fallthrough: true,
-    setHeaders: (res) => {
+    setHeaders: (res, filePath) => {
       res.setHeader("X-Content-Type-Options", "nosniff");
+      if (filePath.endsWith(".apk")) {
+        // Fichiers d'installation Android (dossier apk/ du disque persistant, déposés à la main) :
+        // servis comme pièce jointe nommée, sans bac à sable, pour que Chrome Android termine le
+        // téléchargement et propose l'installation.
+        const nom = filePath.split(/[\\/]/).pop();
+        res.setHeader("Content-Disposition", `attachment; filename="${nom}"`);
+        return;
+      }
       res.setHeader("Content-Security-Policy", "default-src 'none'; img-src 'self'; sandbox");
     },
   })
