@@ -304,10 +304,10 @@ Le détail par domaine est dans les fichiers de vérification conservés avec le
 
 ### C. À construire
 
-- **Recompilation des deux APK** (accord du propriétaire) : depuis les APK 1.2.0 du 20 septembre
-  au matin, cinq changements n'existent que sur le web : écran du code de confirmation, sélecteur
-  de date natif (app client, nouvelle dépendance native `@react-native-community/datetimepicker`),
-  canal Android « urgence », son en mode silencieux iPhone, réabonnement au suivi après coupure.
+- **Distribution et test des APK 1.3.0** : compilés le 20 septembre à 17 h avec l'accord du
+  propriétaire (ils contiennent l'écran du code de confirmation, le sélecteur de date natif, le
+  canal Android « urgence », le son en mode silencieux iPhone et le réabonnement au suivi). Reste
+  à envoyer les liens aux chauffeurs et clients, et à tester sur un vrai téléphone.
 - **Version iPhone** : jamais compilée.
 - **Courriels à chaque étape** (en route, démarrée, terminée) : seules la confirmation, l'annulation,
   les rappels, le code de confirmation et le récap hebdomadaire partent.
