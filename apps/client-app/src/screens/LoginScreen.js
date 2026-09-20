@@ -3,7 +3,7 @@ import { View, Text, TextInput, TouchableOpacity, StyleSheet, Image } from "reac
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { api } from "../lib/api";
 
-export default function LoginScreen({ onLogin }) {
+export default function LoginScreen({ onLogin, onCreerCompte }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
@@ -27,6 +27,12 @@ export default function LoginScreen({ onLogin }) {
       <TextInput style={styles.input} placeholder="Mot de passe" placeholderTextColor="#8b99b5" value={password} onChangeText={setPassword} secureTextEntry />
       {!!error && <Text style={{ color: "#e85d4c", marginBottom: 8 }}>{error}</Text>}
       <TouchableOpacity style={styles.btn} onPress={submit}><Text style={styles.btnText}>Se connecter</Text></TouchableOpacity>
+
+      {/* Sans cette porte, un nouveau client n'avait aucun moyen d'ouvrir un compte lui-même. */}
+      <TouchableOpacity style={styles.btnSecond} onPress={onCreerCompte}>
+        <Text style={styles.btnSecondText}>Créer mon compte</Text>
+      </TouchableOpacity>
+      <Text style={styles.aide}>Première course ? Créez votre compte, ou appelez le 438-499-1120.</Text>
     </View>
   );
 }
@@ -38,4 +44,7 @@ const styles = StyleSheet.create({
   input: { backgroundColor: "#1d2c46", color: "#edeff3", borderRadius: 10, padding: 12, marginBottom: 10, borderWidth: 1, borderColor: "#28395a" },
   btn: { backgroundColor: "#f5a623", borderRadius: 10, padding: 14, alignItems: "center", marginTop: 8 },
   btnText: { color: "#1a1200", fontWeight: "700" },
+  btnSecond: { borderRadius: 10, padding: 14, alignItems: "center", marginTop: 10, borderWidth: 1, borderColor: "#f5a623" },
+  btnSecondText: { color: "#f5a623", fontWeight: "700" },
+  aide: { color: "#8b99b5", fontSize: 12, textAlign: "center", marginTop: 14, lineHeight: 17 },
 });

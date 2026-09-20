@@ -4,14 +4,35 @@
     {
       "name": "dispatch-web",
       "runtimeExecutable": "npm",
-      "runtimeArgs": ["run", "dev", "--prefix", "apps/dispatch-web"],
+      "runtimeArgs": [
+        "run",
+        "dev",
+        "--prefix",
+        "apps/dispatch-web"
+      ],
       "port": 5173
     },
     {
       "name": "driver-app-static",
       "runtimeExecutable": "npx",
-      "runtimeArgs": ["serve", "apps/driver-app/dist", "-p", "8084", "-s"],
+      "runtimeArgs": [
+        "serve",
+        "apps/driver-app/dist",
+        "-p",
+        "8084",
+        "-s"
+      ],
       "port": 8084
+    },
+    {
+      "name": "client-app-static",
+      "runtimeExecutable": "node",
+      "runtimeArgs": [
+        "C:/Users/PC/AppData/Local/Temp/claude/C--Users-PC-code-taxi-sylvain/ae15cf3d-df92-467c-a5d3-515f875d3f9e/scratchpad/servir.cjs",
+        "apps/client-app/dist",
+        "8085"
+      ],
+      "port": 8085
     }
   ]
 }

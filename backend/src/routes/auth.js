@@ -11,6 +11,19 @@ const router = Router();
 
 // Les champs d'identification doivent être du texte. Un nombre ou un objet envoyé à la place
 // faisait lever une erreur à bcrypt ou à Prisma, et une seule requête anonyme arrêtait le serveur.
+// Un courriel tapé sur un téléphone commence souvent par une majuscule, et le correcteur en ajoute.
+// « Paul@exemple.ca » et « paul@exemple.ca » sont la même adresse : on la range en minuscules à
+// l'inscription, et on la cherche sans tenir compte de la casse, pour que les comptes déjà
+// enregistrés avec des majuscules continuent de fonctionner. Sans cela, un client s'inscrirait
+// deux fois, ou ne pourrait plus se connecter.
+export function normaliserCourriel(value) {
+  return String(value || "").trim().toLowerCase();
+}
+
+export function chercherParCourriel(db, email) {
+  return db.user.findFirst({ where: { email: { equals: String(email || "").trim(), mode: "insensitive" } } });
+}
+
 export function isText(value, { max = 500 } = {}) {
   return typeof value === "string" && value.length > 0 && value.length <= max;
 }
@@ -40,12 +53,12 @@ router.post("/register", authLimiter, async (req, res) => {
   if (password.length < 6) {
     return res.status(400).json({ error: "Le mot de passe doit contenir au moins 6 caractères." });
   }
-  const existing = await prisma.user.findUnique({ where: { email } });
+  const existing = await chercherParCourriel(prisma, email);
   if (existing) return res.status(409).json({ error: "Ce courriel est déjà utilisé." });
 
   const passwordHash = await bcrypt.hash(password, 10);
   const user = await prisma.user.create({
-    data: { name, email, phone, passwordHash, role: "CLIENT" },
+    data: { name: name.trim(), email: normaliserCourriel(email), phone: phone.trim(), passwordHash, role: "CLIENT" },
   });
 
   const token = signToken(user);
@@ -55,7 +68,7 @@ router.post("/register", authLimiter, async (req, res) => {
 router.post("/login", authLimiter, async (req, res) => {
   const { email, password } = req.body || {};
   if (!isText(email) || !isText(password)) return res.status(400).json({ error: "Courriel et mot de passe requis." });
-  const user = await prisma.user.findUnique({ where: { email } });
+  const user = await chercherParCourriel(prisma, email);
   if (!user) return res.status(401).json({ error: "Identifiants invalides." });
 
   const valid = await bcrypt.compare(password, user.passwordHash);
@@ -113,7 +126,7 @@ router.post("/delete-account-web", deleteAccountLimiter, async (req, res) => {
   const { email, password } = req.body || {};
   if (!isText(email) || !isText(password)) return res.status(400).json({ error: "Courriel et mot de passe requis." });
 
-  const user = await prisma.user.findUnique({ where: { email } });
+  const user = await chercherParCourriel(prisma, email);
   if (!user) return res.status(401).json({ error: "Identifiants invalides." });
 
   return supprimerCompte(req, res, user, password, "Identifiants invalides.");

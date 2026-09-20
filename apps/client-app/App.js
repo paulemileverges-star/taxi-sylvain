@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import { SafeAreaView, StatusBar } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import LoginScreen from "./src/screens/LoginScreen";
+import RegisterScreen from "./src/screens/RegisterScreen";
 import BookScreen from "./src/screens/BookScreen";
 import TrackingScreen from "./src/screens/TrackingScreen";
 import RateScreen from "./src/screens/RateScreen";
@@ -22,6 +23,8 @@ const EMPTY_UNREAD = { direct: { total: 0, byDriver: {} }, groups: { total: 0, b
 
 export default function App() {
   const [user, setUser] = useState(null);
+  // Écran d'ouverture de compte, atteint depuis la connexion (le site public y envoie des clients).
+  const [inscription, setInscription] = useState(false);
   const [screen, setScreen] = useState("book");
   const [activeRideId, setActiveRideId] = useState(null);
   const [unread, setUnread] = useState(EMPTY_UNREAD);
@@ -116,7 +119,11 @@ export default function App() {
     return (
       <SafeAreaView style={{ flex: 1, backgroundColor: "#0f1b2d" }}>
         <StatusBar barStyle="light-content" />
-        <LoginScreen onLogin={setUser} />
+        {inscription ? (
+          <RegisterScreen onRegistered={setUser} onBack={() => setInscription(false)} />
+        ) : (
+          <LoginScreen onLogin={setUser} onCreerCompte={() => setInscription(true)} />
+        )}
       </SafeAreaView>
     );
   }
