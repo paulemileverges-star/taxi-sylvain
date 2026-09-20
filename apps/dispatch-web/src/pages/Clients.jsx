@@ -1,9 +1,10 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { api } from "../lib/api.js";
 import { playSound } from "../lib/sound.js";
 import AddressInput from "../components/AddressInput.jsx";
+import { matchedFields } from "../lib/clientSearch.js";
 
-function ClientCard({ client, onDelete, onEdit }) {
+function ClientCard({ client, onDelete, onEdit, masque, trouvePar }) {
   const [notes, setNotes] = useState(client.notes || "");
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -26,11 +27,20 @@ function ClientCard({ client, onDelete, onEdit }) {
     }
   };
 
+  // Une fiche écartée par la recherche est MASQUÉE, jamais retirée de la page : la retirer
+  // détruirait le mémo en cours de saisie et la position de lecture.
   return (
-    <div className="card">
+    <div className="card" style={masque ? { display: "none" } : undefined}>
       <div className="row">
         <div>
-          <div>{client.name}</div>
+          <div>
+            {client.name}
+            {/* « jean » ramène aussi les habitants de Saint-Jean-sur-Richelieu : sans cette
+                mention, la fiche semble apparaître sans raison. */}
+            {trouvePar?.length > 0 && !trouvePar.includes("nom") && (
+              <span className="chip" style={{ marginLeft: 8 }}>trouvé par : {trouvePar.join(", ")}</span>
+            )}
+          </div>
           <div style={{ color: "#8b99b5", fontSize: 13 }}>{client.email || "(pas de courriel)"} · {client.phone}</div>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
@@ -96,6 +106,7 @@ export default function Clients() {
   const [importing, setImporting] = useState(false);
   const [importResult, setImportResult] = useState(null);
   const [credentials, setCredentials] = useState(null);
+  const [query, setQuery] = useState("");
   const [editing, setEditing] = useState(null); // client en cours de modification
   const [editForm, setEditForm] = useState(EMPTY_FORM);
   const [editError, setEditError] = useState("");
@@ -170,6 +181,13 @@ export default function Clients() {
     }
   };
 
+  // Une entrée par client : la liste des champs qui correspondent, ou null s'il est écarté.
+  const correspondances = useMemo(
+    () => new Map(clients.map((c) => [c.id, matchedFields(c, query)])),
+    [clients, query]
+  );
+  const nbVisibles = useMemo(() => [...correspondances.values()].filter((v) => v !== null).length, [correspondances]);
+
   return (
     <div>
       <div className="row">
@@ -185,9 +203,32 @@ export default function Clients() {
         </div>
       </div>
 
-      {clients.map((c) => (
-        <ClientCard key={c.id} client={c} onDelete={remove} onEdit={openEdit} />
-      ))}
+      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
+        <input
+          className="input"
+          style={{ flex: 1, marginBottom: 0 }}
+          placeholder="Rechercher : nom, téléphone, courriel, adresse…"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+        />
+        {query && <button className="btn outline" onClick={() => setQuery("")}>✕</button>}
+      </div>
+      <div style={{ color: "#8b99b5", fontSize: 13, marginBottom: 14 }}>
+        {query.trim() ? `${nbVisibles} client(s) trouvé(s) sur ${clients.length}` : `${clients.length} client(s)`}
+        {query.trim() ? ` · les exports PDF et Excel contiennent toute la base, pas le résultat de la recherche` : ""}
+      </div>
+
+      {clients.map((c) => {
+        const m = correspondances.get(c.id);
+        return <ClientCard key={c.id} client={c} onDelete={remove} onEdit={openEdit} masque={m === null} trouvePar={m} />;
+      })}
+
+      {clients.length > 0 && nbVisibles === 0 && (
+        <div style={{ color: "#8b99b5", fontSize: 14 }}>
+          Aucun client ne correspond à « {query} ».{" "}
+          <button className="btn outline" style={{ marginLeft: 8 }} onClick={() => setQuery("")}>Effacer la recherche</button>
+        </div>
+      )}
 
       {editing && (
         <div className="modal-backdrop">
