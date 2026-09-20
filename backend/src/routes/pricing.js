@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { prisma } from "../lib/prisma.js";
 import { requireAuth, requirePermission } from "../middleware/auth.js";
-import { quote, parsePrice } from "../lib/pricing.js";
+import { quote, parsePrice, trierZonesParNom } from "../lib/pricing.js";
 
 const router = Router();
 router.use(requireAuth);
@@ -26,7 +26,9 @@ router.post("/quote", async (req, res) => {
 
 // Grille tarifaire (page Tarifs du Dispatch)
 router.get("/zones", async (req, res) => {
-  res.json(await prisma.priceZone.findMany({ orderBy: [{ sortOrder: "asc" }, { name: "asc" }] }));
+  // Ordre alphabétique des municipalités (voir lib/pricing.js) : une ville ajoutée après coup ne
+  // reste plus en bas de la page Tarifs.
+  res.json(trierZonesParNom(await prisma.priceZone.findMany()));
 });
 
 router.post("/zones", requirePermission("courses"), async (req, res) => {

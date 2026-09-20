@@ -90,7 +90,7 @@ export default function Schedule() {
                 >
                   <div className="row">
                     <strong>{new Date(item.ride.scheduledFor).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</strong>
-                    <span style={{ color: "var(--amber)", fontSize: 11 }}>{STATUS_LABEL[item.ride.status] || item.ride.status}</span>
+                    <span style={{ color: "var(--amber)", fontSize: 11 }}>{STATUS_LABEL[item.ride.status] || item.ride.status} · ✎ modifier</span>
                   </div>
                   <div>{item.ride.pickupAddress} → {item.ride.destAddress}</div>
                   <div style={{ color: "#8b99b5" }}>

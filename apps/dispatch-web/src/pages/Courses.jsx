@@ -4,6 +4,7 @@ import { getSocket } from "../lib/socket.js";
 import { playSound } from "../lib/sound.js";
 import AddressInput from "../components/AddressInput.jsx";
 import Suggest from "../components/Suggest.jsx";
+import RideEditModal from "../components/RideEditModal.jsx";
 import { STATUS_LABEL, statusClass, localInputToIso } from "../lib/status.js";
 import { filtrerCourses, paginer, PERIODES } from "../lib/coursesFilter.js";
 import { filterClients } from "../lib/clientSearch.js";
@@ -49,6 +50,8 @@ export default function Courses() {
   // mémoire, seule la page affichée change. Un changement de filtre ramène à la première page.
   const [filtre, setFiltre] = useState(FILTRE_VIDE);
   const [page, setPage] = useState(1);
+  // Fenêtre de modification complète (client, chauffeur, statut, adresses, heure, montant...).
+  const [openRideId, setOpenRideId] = useState(null);
   const changerFiltre = (patch) => { setFiltre((f) => ({ ...f, ...patch })); setPage(1); };
   const filtrees = useMemo(() => filtrerCourses(rides, filtre), [rides, filtre]);
   const pagination = paginer(filtrees, page);
@@ -260,6 +263,7 @@ export default function Courses() {
                 {drivers.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
               </select>
               <div style={{ display: "flex", gap: 8 }}>
+                <button className="btn" onClick={() => setOpenRideId(ride.id)}>Modifier</button>
                 {ride.status === "REQUESTED" && (
                   <button className="btn outline" onClick={() => broadcastToAll(ride.id)}>Diffuser à tous</button>
                 )}
@@ -463,6 +467,8 @@ export default function Courses() {
           </div>
         </div>
       )}
+
+      {openRideId && <RideEditModal rideId={openRideId} onClose={() => setOpenRideId(null)} onSaved={load} />}
 
       {credentials && (
         <div className="modal-backdrop">

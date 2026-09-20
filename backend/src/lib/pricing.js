@@ -133,3 +133,14 @@ export async function quote({ pickupAddress, destinationCode, clientId }) {
     zonePrice: priceFor(destination, zone),
   };
 }
+
+/**
+ * Grille tarifaire rangée par ordre alphabétique des municipalités, accents et majuscules
+ * ignorés (« Éloi » entre « D » et « F », « Saint-Jean » avant « Sainte-Julie »). Demande du
+ * propriétaire du 20 septembre 2026 : une ville ajoutée arrivait en bas de la page Tarifs.
+ */
+export function trierZonesParNom(zones) {
+  return [...(zones || [])].sort((a, b) =>
+    String(a?.name || "").localeCompare(String(b?.name || ""), "fr", { sensitivity: "base", numeric: true })
+  );
+}

@@ -14,6 +14,7 @@ import { sendRideConfirmation, sendRideCancellation, loadRideForEmail } from "..
 import { pageDeCourses, ordreAccueil } from "../lib/ridesOrder.js";
 import { normaliserAdresse, chargerZones } from "../lib/rideAddresses.js";
 import { oublierRappels } from "../jobs/rideReminders.js";
+import { changementDeStatut, montantValide, texteChangementDeStatut } from "../lib/rideEdit.js";
 
 // Réservation par téléphone (besoin #5) : le Dispatch peut créer une course pour un client sans
 // compte — on retrouve son compte existant par téléphone, ou on lui en crée un à la volée. Si le
@@ -459,89 +460,204 @@ router.post("/:id/call", async (req, res) => {
   }
 });
 
-// Corriger les détails d'une course (Dispatch) — utilisé notamment depuis le lien "Voir la
-// course" d'un message envoyé par un chauffeur à propos d'une course précise (besoin #3).
+// Corriger une course (Dispatch) : adresses, destination du catalogue, montant, heure, vol,
+// distance, client, chauffeur et statut. Demande du propriétaire du 20 septembre 2026 : toutes les
+// modifications doivent pouvoir se faire depuis Courses et depuis la Cédule. Seuls les champs
+// envoyés sont modifiés ; chaque changement déclenche les mêmes effets que l'action équivalente
+// (affectation, diffusion, annulation) : agenda, notifications, temps réel. Règles de statut dans
+// lib/rideEdit.js.
 router.patch("/:id", requirePermission("courses"), async (req, res) => {
-  const { pickupAddress, destAddress, fare, flightNumber, scheduledFor, pickupLat, pickupLng, destLat, destLng } = req.body;
+  const {
+    pickupAddress, destAddress, destinationCode, fare, flightNumber, scheduledFor,
+    pickupLat, pickupLng, destLat, destLng, distanceKm, clientId, driverId, status,
+  } = req.body;
+  const before = await loadRideForEmail(req.params.id);
+  if (!before) return res.status(404).json({ error: "Course introuvable." });
   const data = {};
-  // Corriger une adresse la remet à la forme unique et, si elle arrive sans coordonnées, la
-  // géocode : avant, la course gardait l'ancien point et la carte en direct montrait le mauvais
-  // endroit après une correction.
-  const zonesEdition = pickupAddress !== undefined || destAddress !== undefined ? await chargerZones() : [];
+
+  // Adresses : mise à la forme unique et géocodage si besoin (voir lib/rideAddresses.js).
+  const zonesEdition = pickupAddress !== undefined || destAddress !== undefined || destinationCode ? await chargerZones() : [];
   if (pickupAddress !== undefined) {
     const r = await normaliserAdresse(pickupAddress, { zones: zonesEdition, coords: { lat: pickupLat, lng: pickupLng, confidence: req.body.pickupConfidence } });
     data.pickupAddress = r.address ?? pickupAddress;
     data.pickupConfidence = r.confidence || null;
     if (r.coords && pickupLat === undefined) { data.pickupLat = r.coords.lat; data.pickupLng = r.coords.lng; }
   }
-  if (destAddress !== undefined) {
+
+  // Client : un compte CLIENT existant, ou aucun.
+  if (clientId !== undefined && (clientId || null) !== (before.clientId || null)) {
+    if (clientId) {
+      const c = await prisma.user.findUnique({ where: { id: clientId }, select: { role: true } });
+      if (!c || c.role !== "CLIENT") return res.status(400).json({ error: "Client introuvable." });
+    }
+    data.clientId = clientId || null;
+  }
+
+  // Destination du catalogue (YUL, YHU, REM) : adresse et point vérifiés, tarif recalculé pour ce
+  // client sauf si un montant est saisi en même temps. Sinon, adresse libre.
+  if (destinationCode) {
+    const q = await quote({ pickupAddress: data.pickupAddress ?? before.pickupAddress, destinationCode, clientId: data.clientId !== undefined ? data.clientId : before.clientId });
+    if (!q.destination) return res.status(400).json({ error: "Destination du catalogue inconnue." });
+    data.destAddress = q.destination.address;
+    data.destLat = q.destination.lat;
+    data.destLng = q.destination.lng;
+    data.destConfidence = "verifie";
+    if (fare === undefined && q.price != null) data.fare = q.price;
+  } else if (destAddress !== undefined) {
     const r = await normaliserAdresse(destAddress, { zones: zonesEdition, coords: { lat: destLat, lng: destLng, confidence: req.body.destConfidence } });
     data.destAddress = r.address ?? destAddress;
     data.destConfidence = r.confidence || null;
     if (r.coords && destLat === undefined) { data.destLat = r.coords.lat; data.destLng = r.coords.lng; }
   }
-  if (fare !== undefined) data.fare = Number(fare);
+  if (fare !== undefined) {
+    const n = montantValide(fare);
+    if (n === null) return res.status(400).json({ error: "Montant invalide." });
+    data.fare = n;
+  }
   if (flightNumber !== undefined) data.flightNumber = flightNumber || null;
-  if (scheduledFor !== undefined) data.scheduledFor = scheduledFor ? new Date(scheduledFor) : null;
+  if (scheduledFor !== undefined) {
+    if (scheduledFor && Number.isNaN(new Date(scheduledFor).getTime())) return res.status(400).json({ error: "Date invalide." });
+    data.scheduledFor = scheduledFor ? new Date(scheduledFor) : null;
+  }
   if (pickupLat !== undefined) data.pickupLat = typeof pickupLat === "number" ? pickupLat : null;
   if (pickupLng !== undefined) data.pickupLng = typeof pickupLng === "number" ? pickupLng : null;
-  if (destLat !== undefined) data.destLat = typeof destLat === "number" ? destLat : null;
-  if (destLng !== undefined) data.destLng = typeof destLng === "number" ? destLng : null;
+  if (destLat !== undefined && !destinationCode) data.destLat = typeof destLat === "number" ? destLat : null;
+  if (destLng !== undefined && !destinationCode) data.destLng = typeof destLng === "number" ? destLng : null;
+  if (distanceKm !== undefined) {
+    const vide = distanceKm === null || distanceKm === "";
+    const d = Number(distanceKm);
+    if (!vide && (!Number.isFinite(d) || d < 0)) return res.status(400).json({ error: "Distance invalide." });
+    data.distanceKm = vide ? null : d;
+  }
 
-  try {
-    // Recalcule la distance si une adresse (avec coordonnées) a changé.
-    if (pickupLat !== undefined || pickupLng !== undefined || destLat !== undefined || destLng !== undefined) {
-      const current = await prisma.ride.findUnique({ where: { id: req.params.id } });
-      if (!current) return res.status(404).json({ error: "Course introuvable." });
-      const merged = { ...current, ...data };
-      data.distanceKm = await computeDistanceKm({ lat: merged.pickupLat, lng: merged.pickupLng }, { lat: merged.destLat, lng: merged.destLng });
+  // Chauffeur : un compte DRIVER existant, ou aucun. Même règle que « Affecter » : la course passe
+  // à « acceptée » avec un chauffeur, « en attente » sans, sauf statut imposé plus bas.
+  const nouveauChauffeur = driverId !== undefined && (driverId || null) !== (before.driverId || null);
+  if (nouveauChauffeur) {
+    if (driverId) {
+      const d = await prisma.user.findUnique({ where: { id: driverId }, select: { role: true } });
+      if (!d || d.role !== "DRIVER") return res.status(400).json({ error: "Chauffeur introuvable." });
     }
-    const before = await loadRideForEmail(req.params.id);
-    const ride = await prisma.ride.update({
-      where: { id: req.params.id },
-      data,
-      include: { client: { select: { id: true, name: true } }, driver: { select: { id: true, name: true, carModel: true, plate: true } } },
-    });
-    broadcast(req, "dispatch", "ride:updated", ride);
-    broadcast(req, `ride:${ride.id}`, "ride:status", ride);
-    // « ride:updated » et non « ride:assigned » : une correction de détail ne doit pas faire
-    // sonner l’application du chauffeur comme une nouvelle course ni le sortir de son écran.
-    if (ride.driverId) broadcast(req, `driver:${ride.driverId}`, "ride:updated", ride);
+    data.driverId = driverId || null;
+  }
+  const termine = ["COMPLETED", "CANCELLED", "REFUSED"].includes(before.status);
+  let statutImpose = false;
+  if (status !== undefined && status !== before.status) {
+    const r = changementDeStatut({ status, driverId: data.driverId !== undefined ? data.driverId : before.driverId, now: new Date() });
+    if (r.error) return res.status(400).json({ error: r.error });
+    Object.assign(data, r.data);
+    statutImpose = true;
+  } else if (nouveauChauffeur && !termine) {
+    data.status = data.driverId ? "ACCEPTED" : "REQUESTED";
+    if (data.driverId) data.acceptedAt = new Date();
+  }
+  const chauffeurRetire = Boolean(before.driverId && data.driverId !== undefined && data.driverId !== before.driverId);
 
-    // Un détail qui figure dans l'agenda a changé : on renvoie l'invitation mise à jour, qui
-    // remplace l'évènement déjà présent chez le chauffeur et le client.
-    const AGENDA_FIELDS = ["scheduledFor", "pickupAddress", "destAddress", "fare", "flightNumber"];
-    const agendaChanged = AGENDA_FIELDS.some((field) => {
-      if (data[field] === undefined || !before) return false;
-      const a = before[field] instanceof Date ? before[field].getTime() : before[field];
-      const b = ride[field] instanceof Date ? ride[field].getTime() : ride[field];
-      return a !== b;
-    });
-    if (agendaChanged && (ride.driverId || ride.clientId)) sendRideConfirmation(ride.id);
+  // Distance recalculée si un point a changé et qu'aucune distance n'est saisie à la main.
+  const pointChange = ["pickupLat", "pickupLng", "destLat", "destLng"].some((k) => data[k] !== undefined);
+  if (pointChange && distanceKm === undefined) {
+    const merged = { ...before, ...data };
+    data.distanceKm = await computeDistanceKm({ lat: merged.pickupLat, lng: merged.pickupLng }, { lat: merged.destLat, lng: merged.destLng });
+  }
 
-    // L'heure a changé : les rappels déjà notés n'ont plus de sens. Sans cet effacement, une
-    // course déplacée ne redéclenchait plus jamais de rappel — personne ne l'avait vu.
-    if (data.scheduledFor !== undefined && before && new Date(before.scheduledFor).getTime() !== new Date(ride.scheduledFor).getTime()) {
-      await oublierRappels(ride.id);
-    }
+  const ride = await prisma.ride.update({
+    where: { id: req.params.id },
+    data,
+    include: { client: { select: { id: true, name: true } }, driver: { select: { id: true, name: true, carModel: true, plate: true } } },
+  });
+  broadcast(req, "dispatch", "ride:updated", ride);
+  broadcast(req, `ride:${ride.id}`, "ride:status", ride);
 
-    // Taxi Sylvain vient de fixer (ou corriger) le montant : le client reçoit le récapitulatif.
-    if (ride.clientId && data.fare !== undefined && ride.fare > 0 && ride.fare !== before?.fare) {
-      const when = ride.scheduledFor
-        ? new Date(ride.scheduledFor).toLocaleString("fr-CA", { timeZone: "America/Toronto", dateStyle: "short", timeStyle: "short" })
-        : "dès que possible";
+  // Ancien chauffeur : retiré du suivi, course sortie de son agenda.
+  if (chauffeurRetire) {
+    if (before.driver) sendRideCancellation(before, [{ person: before.driver, audience: "driver" }]);
+    leaveRideRoom(req, before.driverId, ride.id);
+    broadcast(req, `driver:${before.driverId}`, "ride:updated", ride);
+  }
+  // Nouveau chauffeur : même accueil qu'une affectation.
+  if (ride.driverId && ride.driverId !== before.driverId) {
+    broadcast(req, `driver:${ride.driverId}`, "ride:assigned", ride);
+    notifyUser(ride.driverId, { title: "Nouvelle course assignée", body: `${ride.pickupAddress} → ${ride.destAddress}`, data: { type: "ride:assigned", rideId: ride.id } });
+    if (ride.clientId && ride.driver) {
       const charge = {
-        title: `Course validée — ${ride.fare.toFixed(2)} $`,
-        body: `${ride.pickupAddress} → ${ride.destAddress} · ${when}${ride.driver ? ` · chauffeur ${ride.driver.name}` : ""}`,
+        title: "Votre chauffeur est confirmé",
+        body: `${ride.driver.name}${ride.driver.carModel ? ` · ${ride.driver.carModel}` : ""}${ride.driver.plate ? ` · ${ride.driver.plate}` : ""} — ${ride.pickupAddress} → ${ride.destAddress}`,
         data: { type: "ride:status", rideId: ride.id, status: ride.status },
       };
       notifyUser(ride.clientId, charge);
       signalerClient(req, ride.clientId, { rideId: ride.id, status: ride.status, ...charge });
     }
-    res.json(ride);
-  } catch (e) {
-    res.status(404).json({ error: "Course introuvable." });
+  } else if (ride.driverId) {
+    // « ride:updated » et non « ride:assigned » : une correction de détail ne doit pas faire
+    // sonner l'application du chauffeur comme une nouvelle course ni le sortir de son écran.
+    broadcast(req, `driver:${ride.driverId}`, "ride:updated", ride);
   }
+
+  // Ancien client : la course sort de son agenda et de son suivi ; le nouveau la reçoit plus bas.
+  if (data.clientId !== undefined && before.client) {
+    sendRideCancellation(before, [{ person: before.client, audience: "client" }]);
+    leaveRideRoom(req, before.clientId, ride.id);
+  }
+
+  if (statutImpose) {
+    broadcast(req, "dispatch", "ride:notification", { rideId: ride.id, status: ride.status, text: texteChangementDeStatut({ auteur: req.user.name, ride, status: ride.status }) });
+    if (ride.status === "BROADCAST") {
+      broadcast(req, "drivers", "ride:broadcast", ride);
+      notifyAllDrivers({ title: "Course de dernière minute", body: `${ride.pickupAddress} → ${ride.destAddress} — premier arrivé, premier servi`, data: { type: "ride:broadcast", rideId: ride.id } });
+    }
+    if (ride.status === "CANCELLED") {
+      sendRideCancellation(before, [
+        before.driver && !chauffeurRetire ? { person: before.driver, audience: "driver" } : null,
+        before.client && data.clientId === undefined ? { person: before.client, audience: "client" } : null,
+      ]);
+    }
+    if ((ride.status === "COMPLETED" || ride.status === "CANCELLED") && ride.driverId && clearDriverLocation(ride.driverId)) {
+      broadcast(req, "dispatch", "driver:location:clear", { driverId: ride.driverId });
+    }
+    const pourClient = {
+      EN_ROUTE: { title: "Votre chauffeur arrive", body: "Votre chauffeur est en route pour vous récupérer." },
+      STARTED: { title: "Départ vers votre destination", body: "Votre course a démarré." },
+      COMPLETED: { title: "Course terminée", body: "Merci d'avoir voyagé avec Taxi Sylvain." },
+      CANCELLED: { title: "Course annulée", body: `Votre course ${ride.pickupAddress} → ${ride.destAddress} a été annulée par Taxi Sylvain. Appelez le 438-499-1120 pour toute question.` },
+    }[ride.status];
+    if (ride.clientId && pourClient) {
+      const charge = { ...pourClient, data: { type: "ride:status", rideId: ride.id, status: ride.status } };
+      notifyUser(ride.clientId, charge);
+      signalerClient(req, ride.clientId, { rideId: ride.id, status: ride.status, ...charge });
+    }
+  }
+
+  // Un détail qui figure dans l'agenda a changé, ou la course a changé de mains : l'invitation
+  // mise à jour remplace l'évènement déjà présent chez le chauffeur et le client.
+  const AGENDA_FIELDS = ["scheduledFor", "pickupAddress", "destAddress", "fare", "flightNumber"];
+  const agendaChanged = AGENDA_FIELDS.some((field) => {
+    if (data[field] === undefined) return false;
+    const a = before[field] instanceof Date ? before[field].getTime() : before[field];
+    const b = ride[field] instanceof Date ? ride[field].getTime() : ride[field];
+    return a !== b;
+  }) || data.clientId !== undefined || Boolean(ride.driverId && ride.driverId !== before.driverId);
+  if (agendaChanged && ride.status !== "CANCELLED" && (ride.driverId || ride.clientId)) sendRideConfirmation(ride.id);
+
+  // L'heure a changé : les rappels déjà notés n'ont plus de sens. Sans cet effacement, une
+  // course déplacée ne redéclenchait plus jamais de rappel.
+  if (data.scheduledFor !== undefined && new Date(before.scheduledFor).getTime() !== new Date(ride.scheduledFor).getTime()) {
+    await oublierRappels(ride.id);
+  }
+
+  // Taxi Sylvain vient de fixer (ou corriger) le montant : le client reçoit le récapitulatif.
+  if (ride.clientId && data.fare !== undefined && ride.fare > 0 && ride.fare !== before.fare && !statutImpose) {
+    const when = ride.scheduledFor
+      ? new Date(ride.scheduledFor).toLocaleString("fr-CA", { timeZone: "America/Toronto", dateStyle: "short", timeStyle: "short" })
+      : "dès que possible";
+    const charge = {
+      title: `Course validée — ${ride.fare.toFixed(2)} $`,
+      body: `${ride.pickupAddress} → ${ride.destAddress} · ${when}${ride.driver ? ` · chauffeur ${ride.driver.name}` : ""}`,
+      data: { type: "ride:status", rideId: ride.id, status: ride.status },
+    };
+    notifyUser(ride.clientId, charge);
+    signalerClient(req, ride.clientId, { rideId: ride.id, status: ride.status, ...charge });
+  }
+  res.json(ride);
 });
 
 // Supprimer une course erronée (Dispatch)

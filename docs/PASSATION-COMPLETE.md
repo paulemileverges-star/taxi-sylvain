@@ -218,6 +218,11 @@ ligne, écrites puis **vérifiées phrase par phrase contre le code** (33 écart
   30 jours, page Suppressions dans la console, courriels d'accusé, d'alerte et de décision, pages
   légales réécrites avec l'adresse postale et la raison sociale. Scénario local de 29 vérifications.
 - **Récapitulatif hebdomadaire par courriel** : à chaque chauffeur et, en synthèse, au Dispatch.
+- **Modification complète d'une course** depuis Courses (bouton Modifier), la Cédule et la
+  Recherche : client (avec recherche), chauffeur, statut, adresses, destination du catalogue,
+  heure, vol, montant, distance, suppression. `PATCH /rides/:id` étendu, règles dans
+  `lib/rideEdit.js`. Recherche instantanée du client à la création d'une course. Grille tarifaire
+  triée par ordre alphabétique.
 - **Confirmation du courriel par code** (demande du propriétaire) : inscription dans l'app,
   chauffeurs et clients créés par le Dispatch, collaborateurs. Code à six chiffres gardé en
   empreinte, 15 minutes, 5 essais, renvoi après une minute ; aucune session tant que le code n'est
