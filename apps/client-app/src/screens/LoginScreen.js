@@ -39,6 +39,8 @@ export default function LoginScreen({ onLogin, onCreerCompte, onVerification }) 
         <Text style={styles.btnSecondText}>Créer mon compte</Text>
       </TouchableOpacity>
       <Text style={styles.aide}>Première course ? Créez votre compte, ou appelez le 438-499-1120.</Text>
+      {/* Mention demandée par le propriétaire le 21 septembre 2026, aussi présente sur le site et les pages légales. */}
+      <Text style={styles.signature}>Yves Christopher, Directeur Technique, Taxi Sylvain</Text>
     </View>
   );
 }
@@ -53,4 +55,5 @@ const styles = StyleSheet.create({
   btnSecond: { borderRadius: 10, padding: 14, alignItems: "center", marginTop: 10, borderWidth: 1, borderColor: "#f5a623" },
   btnSecondText: { color: "#f5a623", fontWeight: "700" },
   aide: { color: "#8b99b5", fontSize: 12, textAlign: "center", marginTop: 14, lineHeight: 17 },
+  signature: { color: "#8b99b5", fontSize: 11, textAlign: "center", marginTop: 18 },
 });

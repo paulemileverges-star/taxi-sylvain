@@ -10,7 +10,7 @@ complète `docs/PASSATION.md` du dépôt, qui reste la référence vivante à te
 
 ## 0. En dix lignes
 
-Taxi Sylvain est une entreprise de taxi et de transferts aéroport de Chambly, sur la Rive-Sud de
+Taxi Sylvain est une entreprise de taxi et de transferts aéroport de Longueuil, sur la Rive-Sud de
 Montréal. Le projet est une plateforme complète : un serveur, une console de répartition et deux
 applications mobiles (chauffeur et client), **déjà en production, avec de vrais clients et de vrais
 chauffeurs**. Le propriétaire n'est pas développeur ; il teste lui-même en production.

@@ -11,7 +11,7 @@ Lire aussi : `AGENTS.md` (règles courtes), `docs/ARCHITECTURE.md` (choix techni
 
 ## 1. Le propriétaire et la façon de travailler avec lui
 
-- **Qui** : propriétaire de Taxi Sylvain (taxi et transferts aéroport, Rive-Sud de Montréal, Chambly) et de
+- **Qui** : propriétaire de Taxi Sylvain (taxi et transferts aéroport, Rive-Sud de Montréal, Longueuil) et de
   Neomoov (SaaS taxi/VTC). Il n'est pas développeur. Il délègue entièrement et teste lui-même, en
   production, avec de vrais chauffeurs et de vrais clients.
 - **Langue** : tout en français. Messages courts, sans jargon. Il veut des liens, des APK, des PDF.
@@ -430,6 +430,9 @@ sinon l'application s'affiche mais ne peut plus se connecter. Les APK ne sont pa
 | 20 sept. 18 h 30 | « Dans Courses, un onglet recherche en haut et la possibilité de modifier tous les détails et aspects d'une course ; dans la Cédule aussi » | **Fait** : la barre de recherche et filtres de Courses est en haut de la page (depuis 17 h) ; bouton **Modifier** sur chaque course, et clic sur une course de la Cédule (et de la Recherche) : fenêtre complète (client avec recherche, chauffeur, statut, adresses, destination du catalogue avec tarif recalculé, heure, vol, montant, distance, suppression). Serveur : `PATCH /rides/:id` étendu (client, chauffeur, statut, destination du catalogue, distance) avec les mêmes effets que les actions équivalentes (agenda, notifications, temps réel), règles de statut dans `lib/rideEdit.js` (6 tests), scénario local |
 | 20 sept. 18 h 40 | « Dans la grille tarifaire, une nouvelle ville se met en bas ; la ranger par ordre alphabétique » | **Fait** : `GET /pricing/zones` renvoie la grille triée par nom, accents et majuscules ignorés (`trierZonesParNom`, 1 test) |
 | 20 sept. 17 h 55 | « Faire en sorte que le récapitulatif soit envoyé par courriel chaque semaine aussi » | Déjà fait l'après-midi pour chaque chauffeur (lundi 00 h 05, heure du Québec) ; ajouté : une synthèse de tous les chauffeurs envoyée au compte Dispatch, même une semaine sans course (1 test) |
+| 21 sept. | « Taxi Sylvain est basé à Longueuil, pas Chambly. Corrige dans tous les documents et sur le site » | **Fait et vérifié en ligne le 21 septembre** (serveur redéployé, 244 tests verts, script de vérification vert) : pages légales (`conditions.html`, `confidentialite.html`), `PASSATION.md`, `PASSATION-COMPLETE.md`, `CONFORMITE-MAGASINS.md` (texte et mots-clés des magasins). Chambly reste une municipalité desservie et une adresse d'exemple dans les tests |
+| 21 sept. | « Indique à ces 4 emplacements : Yves Christopher, Directeur Technique, Taxi Sylvain » (site, application de réservation, conditions, confidentialité) | **Fait et vérifié en ligne** (serveur et app Client redéployés, alias de l'ancienne adresse refait). Mention ajoutée au pied de page et à la page Contact du site WordPress, sous l'aide de l'écran de connexion de l'app Client (`LoginScreen.js`, version web seulement, les APK la prendront à la prochaine compilation), et dans la section « Nous joindre » de `conditions.html` et `confidentialite.html` (date de mise à jour portée au 21 septembre). La personne responsable au sens de la Loi 25 reste « le propriétaire » : non modifiée, à confirmer |
+| 21 sept. | Site vitrine WordPress sur `taxisylvain.ca` et `www` | **Fait et vérifié en ligne** : WordPress 7.1.1 installé à la main chez LWS (base partagée avec nskgroup.org, préfixe `ts_`), sept pages publiées, non indexé jusqu'à validation du propriétaire. Outil de publication et compte rendu dans le Jarvis : `livrables/sites-web/taxisylvain-site-wordpress/`. Ne dépend pas de ce dépôt |
 
 ---
 

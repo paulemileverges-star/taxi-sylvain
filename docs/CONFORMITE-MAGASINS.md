@@ -417,7 +417,7 @@ réelle ne doit apparaître : c'est un motif de refus chez les deux magasins.
 
 **Description complète :**
 
-> Taxi Sylvain dessert la Rive-Sud de Montréal et la région de Chambly, pour vos déplacements de tous
+> Taxi Sylvain dessert la Rive-Sud de Montréal et la région de Longueuil, pour vos déplacements de tous
 > les jours comme pour vos transferts vers les aéroports Montréal-Trudeau et Saint-Hubert, et vers la
 > station du REM.
 >
@@ -441,7 +441,7 @@ réelle ne doit apparaître : c'est un motif de refus chez les deux magasins.
 > Vous préférez parler à quelqu'un ? Appelez le 438-499-1120.
 
 **Mots-clés Apple, 100 caractères :**
-`taxi,aéroport,Trudeau,YUL,Saint-Hubert,transfert,Chambly,Rive-Sud,REM,navette,réservation`
+`taxi,aéroport,Trudeau,YUL,Saint-Hubert,transfert,Longueuil,Rive-Sud,REM,navette,réservation`
 
 ### 4.6 Textes prêts à coller — App Chauffeur
 
