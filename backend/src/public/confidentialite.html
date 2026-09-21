@@ -92,16 +92,14 @@
     <p class="appel"><a href="tel:+14384991120">438-499-1120</a></p>
   </section>
 
-  <section class="carte carte-accent">
-    <span class="etiquette">À compléter</span>
+  <section class="carte">
     <h2>Adresse courriel de contact</h2>
-    <p>
-      Taxi Sylvain possède le nom de domaine taxisylvain.ca, mais aucune adresse courriel n'y est
-      encore active. L'adresse courriel de contact sera ajoutée ici dès qu'elle existera.
-    </p>
+    <p class="appel"><a href="mailto:contact@taxisylvain.ca">contact@taxisylvain.ca</a></p>
     <p class="doux">
-      En attendant, toutes les demandes commencent par un appel au 438-499-1120. Nous ne publions
-      volontairement aucune adresse qui n'existe pas.
+      Les courriels envoyés à cette adresse sont acheminés par le service de redirection ImprovMX
+      vers une boîte Gmail (Google), et nos réponses partent par Brevo. Ces fournisseurs sont situés
+      hors du Québec. Pour une réservation ou un changement de dernière minute, le plus rapide reste
+      le 438-499-1120.
     </p>
   </section>
 
@@ -249,7 +247,7 @@
       <li><strong>OSRM</strong> (service d'itinéraires basé sur OpenStreetMap) : calcule la distance d'une course par la route. Reçoit, de notre serveur, les coordonnées du départ et de la destination, rien d'autre : ni nom, ni téléphone.</li>
       <li><strong>Serveurs de cartes d'OpenStreetMap et unpkg</strong> : les fonds de carte affichés dans l'application du client et dans la console de Taxi Sylvain viennent des serveurs d'OpenStreetMap, et le module qui affiche la carte du suivi dans l'application du client vient d'unpkg. Ils voient alors l'adresse Internet de l'appareil et, pour OpenStreetMap, la zone de carte demandée.</li>
       <li><strong>Waze ou Google Maps</strong> : quand un chauffeur lance l'itinéraire, l'adresse de départ ou la destination de la course est ouverte dans l'application qu'il choisit.</li>
-      <li><strong>Brevo ou Resend</strong> : enverront au chauffeur et au client les courriels de confirmation de course, avec une invitation d'agenda, ainsi que les avis de modification et d'annulation. Recevront votre nom, votre courriel et le récapitulatif de la course (adresses, date et heure, numéro de vol, montant, et le nom du chauffeur avec son véhicule, ou le nom du client). <em>Ce service n'est pas encore activé</em> : tant qu'il ne l'est pas, aucun courriel ne part et rien ne leur est transmis.</li>
+      <li><strong>Brevo</strong> : envoie au chauffeur et au client les courriels de confirmation de course, avec une invitation d'agenda, ainsi que les avis de modification et d'annulation. Reçoit votre nom, votre courriel et le récapitulatif de la course (adresses, date et heure, numéro de vol, montant, et le nom du chauffeur avec son véhicule, ou le nom du client). Ce service est actif depuis le 20 septembre 2026.</li>
       <li><strong>Twilio</strong> : assurera l'appel masqué entre le client et le chauffeur. Recevra le nom et le numéro de téléphone du client et du chauffeur, pour relier l'appel sans jamais montrer le numéro de l'un à l'autre. Serveurs aux États-Unis. L'appel ne sera possible que pour une course confirmée ou en cours, et le numéro relais cessera de fonctionner 4 heures après sa dernière utilisation. <em>Ce service n'est pas encore activé</em> : rien ne lui est transmis pour l'instant.</li>
     </ul>
 
@@ -431,7 +429,7 @@
     <h3>Comment faire une demande</h3>
     <ul>
       <li>Adressez-vous à la personne responsable de la protection des renseignements personnels, le propriétaire de Taxi Sylvain, au <a href="tel:+14384991120">438-499-1120</a>.</li>
-      <li>Une demande d'accès ou de correction doit être faite <strong>par écrit</strong>. Envoyez-la par la poste à : Taxi Sylvain, 2060, rue Saint-Georges, Longueuil (Québec) J4K 2C8, Canada. Vous pouvez aussi appeler le 438-499-1120.</li>
+      <li>Une demande d'accès ou de correction doit être faite <strong>par écrit</strong>. Envoyez-la par courriel à <a href="mailto:contact@taxisylvain.ca">contact@taxisylvain.ca</a>, ou par la poste à : Taxi Sylvain, 2060, rue Saint-Georges, Longueuil (Québec) J4K 2C8, Canada. Vous pouvez aussi appeler le 438-499-1120.</li>
       <li>Nous pouvons vous demander de confirmer votre identité, pour ne jamais remettre vos renseignements à quelqu'un d'autre.</li>
       <li>Nous répondons dans les meilleurs délais, et au plus tard dans les 30 jours suivant la réception de la demande, comme le prévoit la loi.</li>
     </ul>
@@ -455,7 +453,7 @@
     <p>Taxi Sylvain, Longueuil, Québec, Canada. Site web : taxisylvain.ca.</p>
     <p>Yves Christopher, Directeur Technique, Taxi Sylvain.</p>
     <p class="appel"><a href="tel:+14384991120">438-499-1120</a></p>
-    <p class="doux">Aucune adresse courriel n'est encore active sur le domaine taxisylvain.ca. Elle sera ajoutée ici dès qu'elle existera.</p>
+    <p>Courriel : <a href="mailto:contact@taxisylvain.ca">contact@taxisylvain.ca</a></p>
   </section>
 
   <footer>
