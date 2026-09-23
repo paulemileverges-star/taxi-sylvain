@@ -3,6 +3,7 @@ import { View, Text, TouchableOpacity, Linking, StyleSheet } from "react-native"
 import { api } from "../lib/api";
 import { DriverAvatar, CarPhoto } from "../components/DriverPhotos";
 import { playSound } from "../lib/sound";
+import { showAlert } from "../lib/alert";
 import { getSocket, watchRide } from "../lib/socket";
 import DriverMap from "../components/DriverMap";
 
@@ -18,6 +19,10 @@ const STATUS_LABEL = {
 };
 const TAXI_SYLVAIN_PHONE = "+14384991120";
 const LIVE_STATUSES = ["EN_ROUTE", "STARTED"];
+// Statuts où l'appel masqué vers le chauffeur est possible : même liste que le serveur
+// (backend/src/lib/twilioProxy.js, CALL_STATUSES). Avant, la course n'a pas de chauffeur sûr ;
+// après, le numéro relais ne doit plus relier les deux parties.
+const CALL_STATUSES = ["ACCEPTED", "EN_ROUTE", "STARTED"];
 
 function fmtDate(d) {
   return d ? new Date(d).toLocaleDateString("fr-CA") : "—";
@@ -69,6 +74,19 @@ export default function TrackingScreen({ rideId, onOpenChat, onBack, unreadRide 
     return () => { clearInterval(interval); sock?.off("driver:location"); };
   }, [rideId]);
 
+  // Appel masqué vers le chauffeur (besoin #2) : le serveur ouvre une session Twilio Proxy pour la
+  // course et renvoie un numéro relais ; ni le client ni le chauffeur ne voient le vrai numéro de
+  // l'autre. Le téléphone compose ce numéro relais.
+  const callDriverMasked = async () => {
+    try {
+      const { proxyNumber } = await api.callMasked(rideId);
+      playSound("action");
+      Linking.openURL(`tel:${proxyNumber}`);
+    } catch (e) {
+      showAlert("Appel indisponible", e.message);
+    }
+  };
+
   const callTaxiSylvain = () => {
     playSound("action");
     Linking.openURL(`tel:${TAXI_SYLVAIN_PHONE}`);
@@ -117,6 +135,11 @@ export default function TrackingScreen({ rideId, onOpenChat, onBack, unreadRide 
                 Message au chauffeur{unreadRide ? ` (${unreadRide} nouveau${unreadRide > 1 ? "x" : ""})` : ""}
               </Text>
             </TouchableOpacity>
+            {CALL_STATUSES.includes(ride.status) && (
+              <TouchableOpacity style={styles.callBtn} onPress={callDriverMasked}>
+                <Text style={styles.callBtnText}>Appeler le chauffeur (masqué)</Text>
+              </TouchableOpacity>
+            )}
           </View>
         </View>
       )}

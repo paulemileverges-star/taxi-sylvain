@@ -155,8 +155,10 @@ railway up --service backend --detach
 railway logs --service backend               # attendre « Taxi Sylvain API en écoute »
 ```
 
-- **Toujours lancer depuis `backend/`.** Depuis la racine, la CLI est liée à un service parasite nommé
-  `taxi-sylvain`, en échec (§ 8).
+- Depuis le 23 septembre, la racine du dépôt et `backend/` sont toutes deux liées au bon projet (id `24c08cdf…`,
+  service `backend`). Le compte Railway contient un second projet, lui aussi nommé `taxi-sylvain`, vide et en
+  échec (créé par erreur, § 8) : si `railway status` affiche un service `taxi-sylvain` sans `backend`, relier avec
+  `railway link --project 24c08cdf-1275-41a8-8f46-a1ad1052f8bb --environment production --service backend`.
 - **Lancer un script sur la base de production** (la base n'est joignable que depuis Railway, hôte
   `postgres-9vej.railway.internal`) : `railway ssh --service backend -- sh -c "cd /app && node scripts/<script>.mjs"`.
   Prérequis, faits le 20 septembre : une clé SSH locale (`C:\Users\PC\.ssh\id_ed25519`, sans mot de passe,
@@ -287,8 +289,13 @@ sinon l'application s'affiche mais ne peut plus se connecter. Les APK ne sont pa
   chauffeur, pour réaffectation.
 - **Diffusion** : une course `BROADCAST` est proposée à tous ; le premier qui accepte l'obtient. Un refus est
   mémorisé dans `refusedBy` et la course ne revient plus à ce chauffeur.
-- **Téléphones** : jamais transmis à l'autre partie. Messagerie interne ; appel masqué via Twilio Proxy
-  quand le compte sera configuré.
+- **Téléphones** : jamais transmis à l'autre partie. Messagerie interne ; appel masqué via Twilio Proxy,
+  **actif depuis le 23 septembre** : bouton « Appeler (masqué) » chez le chauffeur (course en cours) et
+  « Appeler le chauffeur (masqué) » chez le client (suivi de course), tous deux seulement quand la course est
+  `ACCEPTED`, `EN_ROUTE` ou `STARTED` (`CALL_STATUSES` dans `lib/twilioProxy.js`). Le serveur ouvre une
+  session Proxy `ride-<id>` (voix seulement, 4 h) et rend le numéro relais `+1 450 912-4572` ; le téléphone
+  compose ce numéro et Twilio relie l'autre partie. Rappel vocal d'urgence 60 min avant la course
+  (`lib/twilioVoice.js`) : Taxi Sylvain appelle le chauffeur depuis ce même numéro, voix Polly Chantal fr-CA.
 - **Messages chauffeur vers client** : autorisés seulement à partir d'une heure avant l'heure prévue, ou dès
   que la course est `EN_ROUTE`, `STARTED` ou `COMPLETED`, ou si la course n'a pas d'heure programmée.
   Le client peut écrire quand il veut. Fonction `driverMayMessageClient` dans `routes/messages.js`, testée.
@@ -334,9 +341,9 @@ sinon l'application s'affiche mais ne peut plus se connecter. Les APK ne sont pa
 | Brevo | **fait le 20 septembre** : compte créé, domaine `taxisylvain.ca` authentifié, `BREVO_API_KEY` et `MAIL_FROM` dans Railway, envoi reçu | rien : courriels de course, de rappel, de code de confirmation et de récap hebdomadaire partent. Le bouton de la page Administrateurs sert de contrôle |
 | Firebase | **complet le 20 septembre : clé FCM V1 déposée sur Expo et rattachée aux deux applications, vérifiée auprès de Google.** Projet `taxi-sylvain` créé le 19 septembre, fichiers rangés : `google-services.json` et `GoogleService-Info.plist` dans chaque app (exclus de Git), clé de compte de service dans `C:\Users\PC\cles-taxi-sylvain` | reste : déposer les fichiers dans les variables EAS (`GOOGLE_SERVICES_JSON`, `GOOGLE_SERVICE_INFO_PLIST`, relayées par `app.config.js`) une fois `eas login` fait, et la clé FCM V1 sur expo.dev pour chaque projet, puis recompiler avec accord |
 | Expo | **APK 1.3.0 compilés le 20 septembre à 17 h** avec l'accord écrit du propriétaire (16 h 50), via le jeton `EXPO_TOKEN` du dossier des clés (`eas-cli` n'était plus connecté ; le jeton suffit en le passant dans l'environnement). Les fichiers Firebase arrivent par les variables EAS secrètes `GOOGLE_SERVICES_JSON` et `GOOGLE_SERVICE_INFO_PLIST` (présentes pour les deux projets, environnement `preview`) | à chaque nouvelle recompilation : accord du propriétaire, monter `version` et `versionCode` dans les deux `app.json`, `npx eas-cli build --platform android --profile preview --non-interactive --no-wait`, puis ranger les APK et les liens dans le dossier OneDrive |
-| Apple Developer | **inscription faite le 19 septembre**. Identifiants (non secrets) : Team ID `DNB64CQYH6`, clé App Store Connect Key ID `2D3MR539UF`, Issuer ID `cf6fb73d-076c-4bb1-819e-b8179ebb5461`. Le fichier de la clé (`AuthKey_2D3MR539UF.p8`, secret) est dans `C:\Users\PC\cles-taxi-sylvain`, jamais dans le dépôt | après `eas login` : confier la clé à EAS (`eas credentials`), puis builds iOS et TestFlight avec accord |
+| Apple Developer | **inscription faite le 19 septembre**. Identifiants (non secrets) : Team ID `DNB64CQYH6`, clé App Store Connect Key ID `2D3MR539UF`, Issuer ID `cf6fb73d-076c-4bb1-819e-b8179ebb5461`. Le fichier de la clé (`AuthKey_2D3MR539UF.p8`, secret) est dans `C:\Users\PC\cles-taxi-sylvain`, jamais dans le dépôt | **Compilations iPhone 1.3.1 (build 5) faites le 23 septembre** sur EAS : chauffeur `1d774682`, client `0c394576`, profils App Store avec `aps-environment` (vérifié dans le fichier). Reste, par le titulaire du compte Apple : (1) créer une clé APNs (portail Apple → Keys → +, cocher « Apple Push Notifications service », télécharger le `.p8` dans `C:UsersPCcles-taxi-sylvain`) puis `node 07-Outils/expo-cle-push.mjs <KEY_ID>` ; (2) créer les deux fiches dans App Store Connect (Mes apps → +, iOS, nom, langue Français (Canada), bundle id, SKU) puis `node 07-Outils/eas-submit-ios.mjs 1d774682-c2bf-421f-ac34-d1edf7c9c9a3 0c394576-beed-42ea-81e4-04b47a935bb0` ; (3) TestFlight : groupe externe avec lien public et examen bêta (1 à 3 jours) |
 | Google Play | compte d'entreprise, 25 USD | fiches des applications |
-| Twilio | **compte créé le 19 septembre** ; reste : passer le compte en payant, acheter un numéro canadien, créer un service Proxy avec ce numéro, puis coller `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN` et `TWILIO_PROXY_SERVICE_SID` dans Railway | mise en ligne du serveur et essai d'un vrai appel |
+| Twilio | **fait le 23 septembre** : compte payant (solde 38,85 USD), numéro canadien `+1 450 912-4572` (voix et SMS), service Proxy `taxi-sylvain` avec ce numéro, les quatre variables `TWILIO_*` déposées sur Railway (journal du serveur : « Appel vocal de rappel : actif ») ; session Proxy d'essai créée puis supprimée avec le code du serveur | essai d'un vrai appel masqué depuis un téléphone (voir § 9, « Téléphones ») ; surveiller le solde Twilio |
 | Prix REM | saisir les montants dans la page Tarifs | aucun code à écrire |
 | Plattsburgh | dire comment tarifer ce cas qui dépend du départ | modéliser |
 
@@ -366,7 +373,7 @@ sinon l'application s'affiche mais ne peut plus se connecter. Les APK ne sont pa
 |---|---|---|
 | — | Trois applications : Dispatch, Chauffeur, Client | Fait |
 | 1 | Navigation Waze ou Google Maps au choix | Fait |
-| 2 | Messagerie sans échange de contacts, appels masqués si possible | Messagerie faite ; appel en attente de Twilio |
+| 2 | Messagerie sans échange de contacts, appels masqués si possible | Fait (appel masqué actif depuis le 23 septembre, chauffeur → client et client → chauffeur) |
 | 3 | Messages chauffeur et client | Fait |
 | 4 | Messages Dispatch et chauffeur | Fait |
 | 5 | Cédule de la semaine, affectation au chauffeur choisi | Fait |
@@ -378,7 +385,7 @@ sinon l'application s'affiche mais ne peut plus se connecter. Les APK ne sont pa
 | 13 | Suivi du chauffeur en direct avec photo, voiture et infos | Fait, web ; photos confirmées en production |
 | 14 | Recherche clients, chauffeurs, courses | Fait |
 | — | Récapitulatif par période, par chauffeur, par client, envoyé chaque semaine | Fait |
-| — | Installation hors magasins Android et iPhone | Android fait ; iPhone en attente du compte Apple |
+| — | Installation hors magasins Android et iPhone | Android fait ; iPhone compilé (1.3.1), envoi TestFlight en attente de la clé push et des fiches App Store Connect |
 | — | Réservation dans l'app ou par téléphone | Fait |
 
 ### Vagues de corrections
@@ -429,6 +436,9 @@ sinon l'application s'affiche mais ne peut plus se connecter. Les APK ne sont pa
 | 20 sept. 18 h 10 | Recherche instantanée du client à la création d'une course (console) | **Fait** : champ qui filtre la liste déroulante (nom, téléphone, courriel, adresse, sans accents, règle `clientSearch.js`), Entrée choisit le premier |
 | 20 sept. 18 h 30 | « Dans Courses, un onglet recherche en haut et la possibilité de modifier tous les détails et aspects d'une course ; dans la Cédule aussi » | **Fait** : la barre de recherche et filtres de Courses est en haut de la page (depuis 17 h) ; bouton **Modifier** sur chaque course, et clic sur une course de la Cédule (et de la Recherche) : fenêtre complète (client avec recherche, chauffeur, statut, adresses, destination du catalogue avec tarif recalculé, heure, vol, montant, distance, suppression). Serveur : `PATCH /rides/:id` étendu (client, chauffeur, statut, destination du catalogue, distance) avec les mêmes effets que les actions équivalentes (agenda, notifications, temps réel), règles de statut dans `lib/rideEdit.js` (6 tests), scénario local |
 | 20 sept. 18 h 40 | « Dans la grille tarifaire, une nouvelle ville se met en bas ; la ranger par ordre alphabétique » | **Fait** : `GET /pricing/zones` renvoie la grille triée par nom, accents et majuscules ignorés (`trierZonesParNom`, 1 test) |
+| 23 sept. | Twilio : « j'ai obtenu ce qu'il fallait » (compte payant, numéro, service Proxy) | **Fait et en ligne** : SID du service Proxy lu par l'API, `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_PROXY_SERVICE_SID` et `TWILIO_CALLER_NUMBER` (`+1 450 912-4572`) déposés sur Railway, serveur redéployé (journal « Appel vocal de rappel : actif »), session Proxy d'essai créée puis supprimée avec le code du serveur. Reste : un vrai appel depuis un téléphone |
+| 23 sept. | Appels masqués dans les deux sens | **Fait** : l'app Client n'avait que le message au chauffeur ; bouton « Appeler le chauffeur (masqué) » ajouté au suivi de course (`TrackingScreen.js`), visible seulement pour une course `ACCEPTED`, `EN_ROUTE` ou `STARTED`. Version web republiée (client.taxisylvain.ca, alias refait, vérification au vert) ; sur les téléphones à la prochaine installation |
+| 23 sept. | « Apple : obtenir les versions téléchargeables » | **Compilations iPhone 1.3.1 faites** (chauffeur puis client ; pour le client, eas-cli refusait de créer les identifiants sans terminal : piloté depuis Node avec réponses automatiques, certificat réutilisé, profil créé). Versions passées à 1.3.1 (build 5) dans les deux `app.json`. Bloqué par deux actions du titulaire du compte Apple : clé APNs et fiches App Store Connect (voir § 10) |
 | 20 sept. 17 h 55 | « Faire en sorte que le récapitulatif soit envoyé par courriel chaque semaine aussi » | Déjà fait l'après-midi pour chaque chauffeur (lundi 00 h 05, heure du Québec) ; ajouté : une synthèse de tous les chauffeurs envoyée au compte Dispatch, même une semaine sans course (1 test) |
 | 21 sept. | « Taxi Sylvain est basé à Longueuil, pas Chambly. Corrige dans tous les documents et sur le site » | **Fait et vérifié en ligne le 21 septembre** (serveur redéployé, 244 tests verts, script de vérification vert) : pages légales (`conditions.html`, `confidentialite.html`), `PASSATION.md`, `PASSATION-COMPLETE.md`, `CONFORMITE-MAGASINS.md` (texte et mots-clés des magasins). Chambly reste une municipalité desservie et une adresse d'exemple dans les tests |
 | 21 sept. | « Indique à ces 4 emplacements : Yves Christopher, Directeur Technique, Taxi Sylvain » (site, application de réservation, conditions, confidentialité) | **Fait et vérifié en ligne** (serveur et app Client redéployés, alias de l'ancienne adresse refait). Mention ajoutée au pied de page et à la page Contact du site WordPress, sous l'aide de l'écran de connexion de l'app Client (`LoginScreen.js`, version web seulement, les APK la prendront à la prochaine compilation), et dans la section « Nous joindre » de `conditions.html` et `confidentialite.html` (date de mise à jour portée au 21 septembre). La personne responsable au sens de la Loi 25 reste « le propriétaire » : non modifiée, à confirmer |
