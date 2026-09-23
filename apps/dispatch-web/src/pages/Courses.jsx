@@ -60,12 +60,22 @@ export default function Courses() {
   // la liste déroulante reste, et un champ au-dessus la filtre au fil de la frappe (nom, téléphone,
   // courriel, adresse, sans accents : même règle que la page Clients). Entrée choisit le premier.
   const [rechercheClient, setRechercheClient] = useState("");
+  // La liste ne se déploie que pendant la frappe ; une fois le client choisi (clic ou Entrée), son
+  // nom remplit le champ et la liste se referme (demande du propriétaire du 23 septembre).
+  const [listeClientsOuverte, setListeClientsOuverte] = useState(false);
   const clientsFiltres = useMemo(() => filterClients(clients, rechercheClient), [clients, rechercheClient]);
   const clientChoisi = clients.find((c) => c.id === form.clientId);
+  const choisirClient = (clientId) => {
+    selectClient(clientId);
+    const client = clients.find((c) => c.id === clientId);
+    if (client) setRechercheClient(client.name);
+    else if (clientId !== "__new__") setRechercheClient("");
+    setListeClientsOuverte(false);
+  };
   const choisirPremierClient = (e) => {
     if (e.key !== "Enter") return;
     e.preventDefault();
-    if (clientsFiltres.length > 0) selectClient(clientsFiltres[0].id);
+    if (clientsFiltres.length > 0) choisirClient(clientsFiltres[0].id);
   };
 
   useEffect(() => { api.listDestinations().then(setDestinations).catch(() => setDestinations([])); }, []);
@@ -293,15 +303,15 @@ export default function Courses() {
               className="input"
               placeholder="Rechercher un client : nom, téléphone, courriel, adresse…"
               value={rechercheClient}
-              onChange={(e) => setRechercheClient(e.target.value)}
+              onChange={(e) => { setRechercheClient(e.target.value); setListeClientsOuverte(true); }}
               onKeyDown={choisirPremierClient}
               autoComplete="off"
             />
             <select
               className="input"
               value={form.clientId}
-              onChange={(e) => selectClient(e.target.value)}
-              size={rechercheClient.trim() ? Math.min(8, clientsFiltres.length + 2) : undefined}
+              onChange={(e) => choisirClient(e.target.value)}
+              size={listeClientsOuverte && rechercheClient.trim() ? Math.min(8, clientsFiltres.length + 2) : undefined}
             >
               <option value="">Non spécifié</option>
               {clientsFiltres.map((c) => <option key={c.id} value={c.id}>{c.name}{c.address ? ` — ${c.address}` : ""}</option>)}
@@ -312,7 +322,7 @@ export default function Courses() {
               <option value="__new__">+ Nouveau client…</option>
             </select>
             <div style={{ color: "var(--muted)", fontSize: 12, marginTop: 4 }}>
-              {rechercheClient.trim()
+              {listeClientsOuverte && rechercheClient.trim()
                 ? `${clientsFiltres.length} client(s) trouvé(s) · Entrée choisit le premier`
                 : `${clients.length} client(s) · tapez pour filtrer la liste`}
               {clientChoisi ? ` · choisi : ${clientChoisi.name}` : ""}

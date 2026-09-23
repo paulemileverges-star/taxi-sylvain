@@ -28,6 +28,8 @@ import pushRoutes from "./routes/push.js";
 import { ensureDefaultDestinations } from "./lib/seedDestinations.js";
 import { ensureDefaultPriceZones } from "./lib/seedPricing.js";
 import { ensureUploadsDir, uploadsDir } from "./lib/uploads.js";
+import { dernierApk, APPLICATIONS } from "./lib/apkLatest.js";
+import { readdir } from "node:fs/promises";
 import { mailStatusLine } from "./lib/mailer.js";
 import { webPushStatusLine } from "./lib/webPush.js";
 import { registerSocketHandlers } from "./sockets/index.js";
@@ -76,6 +78,24 @@ app.use(
 );
 
 app.get("/health", (req, res) => res.json({ ok: true }));
+
+// Liens de téléchargement Android définitifs, à donner aux chauffeurs et aux clients :
+// /telecharger/chauffeur.apk et /telecharger/client.apk renvoient vers le fichier le plus récent
+// du dossier apk/ du disque persistant, quelle que soit sa version (règle dans lib/apkLatest.js).
+app.get("/telecharger/:application.apk", async (req, res) => {
+  const application = String(req.params.application || "").toLowerCase();
+  if (!APPLICATIONS.includes(application)) return res.status(404).json({ error: "Application inconnue." });
+  let fichiers = [];
+  try {
+    fichiers = await readdir(path.join(uploadsDir, "apk"));
+  } catch {
+    fichiers = [];
+  }
+  const nom = dernierApk(fichiers, application);
+  if (!nom) return res.status(404).json({ error: "Aucune version Android disponible pour le moment." });
+  res.setHeader("Cache-Control", "no-store");
+  res.redirect(302, "/uploads/apk/" + encodeURIComponent(nom));
+});
 // Pages publiques (suppression de compte, confidentialité, conditions) exigées par Google Play,
 // Apple et la Loi 25. Textes réécrits le 19 septembre 2026 pour correspondre au code, puis vérifiés
 // phrase par phrase contre le code par des relecteurs indépendants.
