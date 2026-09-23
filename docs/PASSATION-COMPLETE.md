@@ -75,8 +75,8 @@ C:\Users\PC\code\taxi-sylvain          dépôt (GitHub privé paulemileverges-st
 │   ├── src/public/               3 pages légales servies publiquement
 │   └── test/                     20 fichiers, 201 tests (node --test)
 ├── apps/dispatch-web/      console Dispatch — React + Vite
-├── apps/driver-app/        application chauffeur — React Native / Expo SDK 51 (+ version web)
-├── apps/client-app/        application client — React Native / Expo SDK 51 (+ version web)
+├── apps/driver-app/        application chauffeur — React Native 0.81 / Expo SDK 54 (+ version web)
+├── apps/client-app/        application client — React Native 0.81 / Expo SDK 54 (+ version web)
 ├── scripts/verifier-mise-en-ligne.mjs
 └── docs/                   PASSATION.md, ARCHITECTURE.md, CONFORMITE-MAGASINS.md, FIREBASE-PUSH.md
 ```
