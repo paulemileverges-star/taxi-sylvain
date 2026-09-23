@@ -1,5 +1,8 @@
 import React, { useEffect, useState } from "react";
-import { SafeAreaView, StatusBar, View, Text } from "react-native";
+import { StatusBar, View, Text } from "react-native";
+// Zones sûres : la SafeAreaView de React Native est dépréciée (React Native 0.81) et ne gère pas
+// Android, où l'affichage bord à bord est imposé depuis Android 16 : on passe par la bibliothèque dédiée.
+import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import LoginScreen from "./src/screens/LoginScreen";
 import RegisterScreen from "./src/screens/RegisterScreen";
@@ -190,6 +193,7 @@ export default function App() {
 
   if (!user) {
     return (
+      <SafeAreaProvider>
       <SafeAreaView style={{ flex: 1, backgroundColor: "#0f1b2d" }}>
         <StatusBar barStyle="light-content" />
         {verification ? (
@@ -204,10 +208,12 @@ export default function App() {
           <LoginScreen onLogin={setUser} onVerification={setVerification} onCreerCompte={() => setInscription(true)} />
         )}
       </SafeAreaView>
+      </SafeAreaProvider>
     );
   }
 
   return (
+    <SafeAreaProvider>
     <SafeAreaView style={{ flex: 1, backgroundColor: "#0f1b2d" }}>
       <StatusBar barStyle="light-content" />
       {/* Demande de suppression en attente : rappel discret, avec accès à l'écran pour l'annuler. */}
@@ -267,5 +273,6 @@ export default function App() {
         />
       )}
     </SafeAreaView>
+    </SafeAreaProvider>
   );
 }

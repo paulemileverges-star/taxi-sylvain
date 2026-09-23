@@ -29,7 +29,7 @@ restants et historique complet des demandes.
 
 - API : `backend/` (Express, Prisma, PostgreSQL, Socket.io). Migrations appliquées au démarrage.
 - Console Dispatch : `apps/dispatch-web/` (React + Vite).
-- Apps Chauffeur et Client : `apps/driver-app/`, `apps/client-app/` (Expo SDK 51, aussi publiées en web).
+- Apps Chauffeur et Client : `apps/driver-app/`, `apps/client-app/` (Expo SDK 54 depuis le 23 septembre 2026, aussi publiées en web).
 - Fuseau horaire de référence : `America/Toronto`.
 - Domaine : `taxisylvain.ca` chez Vercel. Adresses officielles `dispatch.`, `chauffeur.`, `client.` et
   `api.taxisylvain.ca`. Toute nouvelle adresse web doit être ajoutée à `CORS_ORIGIN` dans Railway.

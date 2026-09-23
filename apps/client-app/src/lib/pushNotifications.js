@@ -8,8 +8,10 @@ import { api } from "./api";
 // voir le bilan de projet. Les notifications push (Expo) marchent même app fermée / écran
 // verrouillé. Web et simulateur ne supportent pas les push : on n'y fait simplement rien.
 Notifications.setNotificationHandler({
+  // Depuis SDK 53, « shouldShowAlert » est remplacé par bannière + liste (centre de notifications).
   handleNotification: async () => ({
-    shouldShowAlert: true,
+    shouldShowBanner: true,
+    shouldShowList: true,
     shouldPlaySound: true,
     shouldSetBadge: false,
   }),
@@ -19,14 +21,8 @@ export async function registerForPushNotifications() {
   if (Platform.OS === "web" || !Device.isDevice) return null;
 
   try {
-    const { status: existing } = await Notifications.getPermissionsAsync();
-    let finalStatus = existing;
-    if (existing !== "granted") {
-      const { status } = await Notifications.requestPermissionsAsync();
-      finalStatus = status;
-    }
-    if (finalStatus !== "granted") return null;
-
+    // Android 13 et plus : la fenêtre de permission n'apparaît qu'une fois un canal créé.
+    // Les canaux sont donc créés avant la demande de permission.
     if (Platform.OS === "android") {
       await Notifications.setNotificationChannelAsync("default", {
         name: "Notifications Taxi Sylvain",
@@ -45,6 +41,15 @@ export async function registerForPushNotifications() {
         bypassDnd: true,
       });
     }
+
+
+    const { status: existing } = await Notifications.getPermissionsAsync();
+    let finalStatus = existing;
+    if (existing !== "granted") {
+      const { status } = await Notifications.requestPermissionsAsync();
+      finalStatus = status;
+    }
+    if (finalStatus !== "granted") return null;
 
     const projectId = Constants.expoConfig?.extra?.eas?.projectId;
     const { data: token } = await Notifications.getExpoPushTokenAsync({ projectId });
