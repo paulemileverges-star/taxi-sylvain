@@ -164,7 +164,7 @@ export default function ActiveRideScreen({ rideId, onCompleted, onCancelled, onO
           </Text>
         </TouchableOpacity>
         <TouchableOpacity style={styles.outlineBtn} onPress={callMasked}>
-          <Text style={styles.outlineBtnText}>Appeler (masqué)</Text>
+          <Text style={styles.outlineBtnText}>Appeler (votre numéro sera masqué)</Text>
         </TouchableOpacity>
       </View>
       {onOpenMessages && (

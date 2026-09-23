@@ -137,7 +137,7 @@ export default function TrackingScreen({ rideId, onOpenChat, onBack, unreadRide 
             </TouchableOpacity>
             {CALL_STATUSES.includes(ride.status) && (
               <TouchableOpacity style={styles.callBtn} onPress={callDriverMasked}>
-                <Text style={styles.callBtnText}>Appeler le chauffeur (masqué)</Text>
+                <Text style={styles.callBtnText}>Appeler le chauffeur (votre numéro sera masqué)</Text>
               </TouchableOpacity>
             )}
           </View>
