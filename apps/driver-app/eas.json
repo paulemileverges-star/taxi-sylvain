@@ -32,7 +32,9 @@
         "appleTeamId": "DNB64CQYH6",
         "ascApiKeyPath": "C:/Users/PC/cles-taxi-sylvain/AuthKey_2D3MR539UF.p8",
         "ascApiKeyId": "2D3MR539UF",
-        "ascApiKeyIssuerId": "cf6fb73d-076c-4bb1-819e-b8179ebb5461"
+        "ascApiKeyIssuerId": "cf6fb73d-076c-4bb1-819e-b8179ebb5461",
+        "ascAppId": "6815332363",
+        "language": "fr-CA"
       }
     }
   }
