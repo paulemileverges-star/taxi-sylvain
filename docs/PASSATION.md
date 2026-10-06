@@ -1,7 +1,7 @@
 # Passation du projet Taxi Sylvain
 
 Document de reprise pour tout assistant ou développeur qui continue le projet. Il décrit l'état réel au
-**6 octobre 2026** (dernière mise à jour ; historique complet au § 11), la façon de travailler avec le propriétaire, les
+**7 octobre 2026** (dernière mise à jour ; historique complet au § 11), la façon de travailler avec le propriétaire, les
 procédures de déploiement, les règles métier à ne pas casser et tout ce qui reste à faire.
 
 Lire aussi : `AGENTS.md` (règles courtes), `docs/ARCHITECTURE.md` (choix techniques d'origine),
@@ -9,14 +9,18 @@ Lire aussi : `AGENTS.md` (règles courtes), `docs/ARCHITECTURE.md` (choix techni
 
 ---
 
-## 0. Points urgents au 6 octobre 2026
+## 0. Points urgents au 7 octobre 2026
 
-1. **Railway : la période d'essai se termine le 8 octobre 2026.** Passer à la formule Hobby (5 USD par mois)
-   avant cette date, sinon l'API s'arrête et les disques (base, photos, APK) sont effacés 30 jours plus tard (§ 8).
-2. **iPhone : les compilations TestFlight 1.4.0 ont expiré le 2 octobre 2026.** Nouvelle compilation iOS à faire
-   (accord du propriétaire) avant tout essai sur iPhone (§ 8, § 10).
-3. **Sauvegardes** : en place depuis le 6 octobre (§ 6). Copie sur le PC à lancer par le propriétaire :
-   `node scripts/recuperer-sauvegarde.mjs` (racine du dépôt), au moins chaque semaine.
+1. **Clé Google Maps à poser** (point 4 de la vague du 6 octobre) : tant que `GOOGLE_MAPS_API_KEY` n'est pas dans
+   les variables du service backend sur Railway, les adresses viennent encore d'OpenStreetMap. Marche à suivre au
+   § 6, « Adresses par Google Maps ».
+2. **Version 1.5.0 des deux applications compilée le 7 octobre 2026** (Android et iPhone, § 10) : à essayer sur de
+   vrais téléphones avant de la distribuer ; iPhone : envoi TestFlight puis informations d'examen bêta.
+3. **Rapports** : la règle de calcul a changé le 6 octobre (date de la course). `node scripts/comparer-rapports.mjs`
+   sur une copie de la base montre, semaine par semaine, l'ancien et le nouveau calcul et les courses jamais
+   terminées, à corriger dans la console avant de comparer avec le tableau de Taxi Sylvain.
+4. **Sauvegardes** : copie sur le PC chaque semaine, `node scripts/recuperer-sauvegarde.mjs` (§ 6).
+5. Railway : formule **Hobby active depuis le 6 octobre 2026 au soir** (fin de l'essai : plus de risque d'arrêt).
 
 ---
 
@@ -141,7 +145,7 @@ Les fichiers `.env`, `.env.local` et `.vercel/` sont ignorés par Git. Aucun sec
 ## 5. Tests et vérification, à faire avant chaque annonce
 
 ```bash
-cd backend && npm test                       # 256 tests au 6 octobre 2026, une vingtaine de secondes
+cd backend && npm test                       # 297 tests au 7 octobre 2026, une trentaine de secondes
 node scripts/verifier-mise-en-ligne.mjs      # à la racine, après chaque déploiement
 ```
 
@@ -153,11 +157,20 @@ node scripts/verifier-mise-en-ligne.mjs      # à la racine, après chaque dépl
 - `backend/test/sauvegarde.test.js` : nom et rotation des sauvegardes, ordre de restauration, fichier refusé, et
   **dossier `.sauvegardes/` jamais servi sous `/uploads`** (adresses encodées comprises).
 - `backend/test/alertes.test.js` : destinataires, anti-avalanche de 30 minutes, contenu du courriel d'alerte.
+- `backend/test/rapports.test.js` : la semaine du 21 au 27 septembre du tableau de Taxi Sylvain (11 courses, 1 305 $,
+  130,50 $), course comptée à sa date même terminée le lundi, à effectuer et annulées, ville, arrondis.
+- `backend/test/fenetres.test.js` : contact à 2 h, départ à 3 h, à la minute près ; heure sur 24 h.
+- `backend/test/arrets.test.js`, `aeroportYul.test.js`, `ficheChauffeur.test.js`, `googleMaps.test.js`,
+  `exportReport.test.js`, `navigationLinks.test.js` : arrêts, deux adresses YUL et tarif du P4, fiche chauffeur,
+  adresses Google (réponses au format officiel), exports PDF et Excel, liens Waze et Google Maps.
 
 Le script de vérification contrôle que l'API répond et que **chaque lien public sert la même version que la
 production**. Il a été écrit après l'incident du lien figé (§ 8). Code de sortie 0 = tout est à jour.
 
-Il n'y a pas encore de tests de bout en bout sur les interfaces (voir § 10).
+**Scénario de bout en bout** (6 octobre 2026) : `cd backend && node test-e2e/scenario-2026-10-06.mjs` crée une base
+PostgreSQL jetable (PostgreSQL installé sur le poste, `PG_BIN`), lance un vrai serveur sans aucun fournisseur réel et
+rejoue la vague du 6 octobre par l'API : 10 vérifications. Les écrans ont été contrôlés le même jour dans Edge piloté
+(banc hors dépôt, captures dans le dossier du développeur senior) ; il n'y a pas de tests automatiques d'écrans.
 
 **Surveillance automatique** (depuis le 6 octobre 2026) : `.github/workflows/surveillance.yml` rejoue ce script
 toutes les heures sur GitHub, avec une seconde tentative après 3 minutes. Un échec envoie un courriel de GitHub
@@ -229,6 +242,26 @@ tout de suite ; les suivantes sont résumées en un seul courriel au bout de 30 
 affichent « Alertes d'erreurs : … » et « Sauvegardes de la base : … ». Sentry reste possible plus tard pour les
 erreurs des écrans (compte à créer par le propriétaire).
 
+### Adresses par Google Maps (depuis le 6 octobre 2026)
+
+`src/lib/googleMaps.js` : suggestions (Places API (New), « Autocomplete »), détail du lieu choisi (Place Details,
+champs « Essentials » seulement) et géocodage d'une adresse tapée (Geocoding API). Actif dès que la variable
+`GOOGLE_MAPS_API_KEY` est posée sur le service backend ; sans elle, OpenStreetMap reste utilisé, comme avant. La clé
+ne quitte jamais le serveur. Pour la créer (titulaire du compte Google) :
+
+1. https://console.cloud.google.com, nouveau projet « taxi-sylvain » (séparé de Neomoov), compte de facturation.
+2. API et services, Bibliothèque : activer « Places API (New) » et « Geocoding API ».
+3. Identifiants, Créer une clé API ; Restrictions de clé : « Restreindre la clé » aux deux API ci-dessus.
+   Quotas : dans chaque API, onglet « Quotas », plafonner les requêtes par jour (par exemple 1 000) : les routes
+   `/api/geocode/*` sont ouvertes à tout compte connecté, un abus coûterait de l'argent sans ce plafond.
+4. Railway, service backend, onglet Variables : `GOOGLE_MAPS_API_KEY` = la clé (le service redémarre seul).
+5. Contrôle : dans la console, une adresse tapée propose des suggestions « Suggestions Google Maps » et, une fois
+   choisie, affiche « ✓ Adresse vérifiée sur la carte ».
+
+Coût : les gratuités mensuelles de Google (10 000 suggestions, 10 000 détails « Essentials », 10 000 géocodages)
+couvrent le volume de Taxi Sylvain. Pour l'aéroport Montréal-Trudeau, aucune requête Google : les deux adresses du
+catalogue (Arrivées, P4) sont proposées directement (`lib/aeroportYul.js`).
+
 ### Console Dispatch (Vercel)
 
 ```bash
@@ -295,6 +328,10 @@ eas build --platform android --profile preview
   le 19 septembre, elles pointent vers `https://api.taxisylvain.ca` : les prochains APK ne dépendront plus
   de l'adresse générée par Railway. Les APK déjà installés gardent l'ancienne adresse, qui reste active.
 - **Uniquement avec l'accord du propriétaire.**
+- Depuis le 7 octobre 2026 : `node "OneDrive/Documents/Livrables Taxi-Sylvain Claude/07-Outils/compiler-tout.cjs"`
+  [android|ios] lance les quatre compilations (APK profil `preview`, iPhone profil `production`) sans question, avec
+  le jeton Expo du dossier des clés (jamais affiché). Monter d'abord `version`, `versionCode` et `buildNumber` dans
+  les deux `app.json`, puis commettre (EAS envoie le contenu du dépôt).
 
 ---
 
@@ -302,7 +339,7 @@ eas build --platform android --profile preview
 
 | Où | Variables |
 |---|---|
-| Railway, service backend | `DATABASE_URL`, `JWT_SECRET`, `CORS_ORIGIN`, `PORT` ; optionnelles : `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_PROXY_SERVICE_SID`, `TWILIO_CALLER_NUMBER`, `BREVO_API_KEY` ou `RESEND_API_KEY`, `MAIL_FROM`, `DRIVER_APP_URL`, `CLIENT_APP_URL`, `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT` (notifications Web Push des versions web, déposées le 20 septembre ; la paire de clés est dans `C:\Users\PC\cles-taxi-sylvain\vapid-web-push.json`) ; `ALERTES_COURRIEL` (alertes d'erreurs par courriel, depuis le 6 octobre 2026 : `contact@taxisylvain.ca`) |
+| Railway, service backend | `DATABASE_URL`, `JWT_SECRET`, `CORS_ORIGIN`, `PORT` ; optionnelles : `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_PROXY_SERVICE_SID`, `TWILIO_CALLER_NUMBER`, `BREVO_API_KEY` ou `RESEND_API_KEY`, `MAIL_FROM`, `DRIVER_APP_URL`, `CLIENT_APP_URL`, `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT` (notifications Web Push des versions web, déposées le 20 septembre ; la paire de clés est dans `C:\Users\PC\cles-taxi-sylvain\vapid-web-push.json`) ; `ALERTES_COURRIEL` (alertes d'erreurs par courriel, depuis le 6 octobre 2026 : `contact@taxisylvain.ca`) ; `GOOGLE_MAPS_API_KEY` (adresses par Google Maps, § 6, à poser par le propriétaire) ; `SAUVEGARDES_DOSSIER` (essais locaux seulement, jamais en production) |
 | Vercel, dispatch | `VITE_API_URL`, `VITE_SOCKET_URL` |
 | Vercel, driver et client | `EXPO_PUBLIC_API_URL`, `EXPO_PUBLIC_SOCKET_URL` |
 | EAS | définies dans `eas.json`, profil `preview` |
@@ -371,10 +408,23 @@ sinon l'application s'affiche mais ne peut plus se connecter. Les APK ne sont pa
   session Proxy `ride-<id>` (voix seulement, 4 h) et rend le numéro relais `+1 450 912-4572` ; le téléphone
   compose ce numéro et Twilio relie l'autre partie. Rappel vocal d'urgence 60 min avant la course
   (`lib/twilioVoice.js`) : Taxi Sylvain appelle le chauffeur depuis ce même numéro, voix Polly Chantal fr-CA.
-- **Messages chauffeur vers client** : autorisés seulement à partir d'une heure avant l'heure prévue, ou dès
-  que la course est `EN_ROUTE`, `STARTED` ou `COMPLETED`, ou si la course n'a pas d'heure programmée.
-  Le client peut écrire quand il veut. Fonction `driverMayMessageClient` dans `routes/messages.js`, testée.
-- **Tarifs** : destinations prédéfinies YUL, YHU, REM (`Destination`), grille par municipalité de départ
+- **Contact chauffeur vers client** (message et appel masqué) : autorisé seulement à partir de **2 heures** avant
+  l'heure prévue (1 heure jusqu'au 6 octobre 2026, et l'appel n'avait aucun délai), ou dès que la course est
+  `EN_ROUTE`, `STARTED` ou `COMPLETED`, ou si la course n'a pas d'heure programmée. Le client peut écrire et
+  appeler quand il veut. Règle unique dans `lib/fenetres.js` (`chauffeurPeutContacter`), testée.
+- **Départ** (« en route », « démarrer ») : refusé par le serveur plus de **3 heures** avant l'heure prévue
+  (`chauffeurPeutPartir`) ; l'application affiche « Disponible à HH:MM (3 h avant) ». Le Dispatch n'est pas limité.
+- **Arrêts** : `Ride.stops`, 5 au plus, dans l'ordre (`lib/arrets.js`) ; mêmes mise en forme et géocodage que les
+  autres adresses ; distance calculée par les arrêts ; courriels et agenda les listent.
+- **Aéroport Montréal-Trudeau** : seulement deux adresses, `YUL` (Arrivées) et `YULP4` (stationnement P4, 590
+  Albert-De Niverville, débarcadère Express), au même tarif YUL (`champPrix`). Une recherche « YUL » ou « aéroport »
+  ne propose qu'elles. Leurs points de guidage sont vérifiés (`Destination.pointVerified`) ; un point non vérifié
+  (YHU au 7 octobre) guide par l'adresse écrite.
+- **Navigation** (`apps/driver-app/src/lib/navigationLinks.js`) : Google Maps reçoit l'adresse écrite (et
+  l'identifiant Google du lieu) ; des coordonnées seulement sur un point vérifié du catalogue ; Waze garde les points
+  « porte ». Avec des arrêts : une étape par arrêt et l'itinéraire complet dans Google Maps.
+- **Heure** : toujours sur 24 heures, à l'heure de Montréal, dans la console et les applications (`heure()`).
+- **Tarifs** : destinations prédéfinies YUL (Arrivées), YULP4 (P4, tarif YUL), YHU, REM (`Destination`), grille par municipalité de départ
   (`PriceZone`, 115 municipalités, colonnes YUL, YHU, REM). Reconnaissance dans `lib/pricing.js` :
   d'abord une partie exacte de l'adresse, sinon la plus longue correspondance ; « Québec » ne compte comme
   ville que suivi de Capitale-Nationale. Un prix de zone manquant retombe sur le prix fixe de la
@@ -392,8 +442,15 @@ sinon l'application s'affiche mais ne peut plus se connecter. Les APK ne sont pa
   qu'aucune clé Brevo ou Resend n'est configurée ; ne doit jamais faire échouer une action.
 - **Rappels** : chaque utilisateur choisit ses décalages (1 j, 2 h, 1 h, 30 min, 10 min ; 1 h et 10 min par
   défaut). `SentReminder` empêche les doublons.
-- **Redevance** : 10 % par course à Taxi Sylvain (`Ride.royaltyRate`), récapitulatif hebdomadaire par
-  chauffeur généré chaque lundi.
+- **Redevance** : 10 % par course à Taxi Sylvain (`Ride.royaltyRate`).
+- **Rapports** (`lib/rapports.js`, 6 octobre 2026) : une course compte à **sa date** (prise en charge prévue,
+  sinon création), heure du Québec, du lundi 00 h 00 au dimanche 23 h 59 ; montants et redevance sur les
+  courses « Effectuée » ; les courses à effectuer sont listées à part ; les annulées ne comptent pas. Chiffres
+  recalculés à chaque lecture (console, « Mes rapports », « Mes revenus », exports). Récap envoyé le **lundi à
+  04 h 00**, une seule notification par chauffeur et par semaine (`WeeklyReport.notifiedAt`) ; « Recalculer » dans
+  la console ne notifie personne.
+- **Fiche chauffeur** : modifiable par le Dispatch (nom, courriel, téléphone, véhicule, couleur, plaque),
+  `lib/ficheChauffeur.js` ; le client voit véhicule, couleur et plaque.
 - **Admins** : seul le compte `DISPATCH` crée, modifie ou supprime des admins.
 - **Suppression de compte** (décision du propriétaire du 20 septembre 2026, qui remplace celle du 19) : un
   client ou un chauffeur ne supprime plus son compte lui-même, il en fait la **demande** (app ou page web
@@ -419,7 +476,8 @@ sinon l'application s'affiche mais ne peut plus se connecter. Les APK ne sont pa
 | Apple Developer | **inscription faite le 19 septembre**. Identifiants (non secrets) : Team ID `DNB64CQYH6`, clé App Store Connect Key ID `2D3MR539UF`, Issuer ID `cf6fb73d-076c-4bb1-819e-b8179ebb5461`. Le fichier de la clé (`AuthKey_2D3MR539UF.p8`, secret) est dans `C:\Users\PC\cles-taxi-sylvain`, jamais dans le dépôt | **Compilations iPhone 1.3.1 (build 5) faites le 23 septembre** sur EAS : chauffeur `2255af9f`, client `952f7e2a`, profils App Store avec `aps-environment` (vérifié dans le fichier). Clé APNs `7853YS72UB` créée par Christopher le 23 septembre (fichier `AuthKey_7853YS72UB.p8` dans `C:UsersPCcles-taxi-sylvain`, jamais dans le dépôt), déposée chez Expo et associée aux deux applications par `07-Outils/expo-cle-push.mjs`. Fiches App Store Connect créées par Christopher le 23 septembre (« Taxi Sylvain Chauffeur » `6815332363`, « Taxi Sylvain » `6815332894`, `ascAppId` dans les deux `eas.json`). Les envois des compilations Expo SDK 51 ont été refusés par Apple (ITMS-90725 : SDK iOS 17.5, alors que Xcode 26 / SDK iOS 26 sont exigés depuis le 28 avril 2026). **Mise à niveau Expo SDK 54 faite le 23 septembre** (branche `sdk-54` fusionnée), compilations 1.4.0 (build 6) sur Xcode 26 : chauffeur `c6742ddd-d9e6-4868-839a-19a00cebcaec`, client `cf31d70e-6eeb-4203-a725-1f30ad0221df`, **toutes deux acceptées par App Store Connect**. TestFlight : groupe interne « Team (Expo) » (Christopher testeur, installation immédiate), groupe externe « Chauffeurs et clients » avec lien public chauffeur `https://testflight.apple.com/join/Fd6W5dCv` et client `https://testflight.apple.com/join/YecvTgPW`. Reste : saisir dans App Store Connect les informations de contact et le compte de démonstration pour l'examen bêta, puis `apple-testflight.mjs --soumettre` (1 à 3 jours d'examen avant que le lien public fonctionne). **6 octobre 2026 : les deux compilations ont expiré le 2 octobre** (§ 8) : nouvelle compilation iOS nécessaire avant tout essai sur iPhone |
 | Google Play | compte d'entreprise, 25 USD | fiches des applications |
 | Twilio | **fait le 23 septembre** : compte payant (solde 38,85 USD), numéro canadien `+1 450 912-4572` (voix et SMS), service Proxy `taxi-sylvain` avec ce numéro, les quatre variables `TWILIO_*` déposées sur Railway (journal du serveur : « Appel vocal de rappel : actif ») ; session Proxy d'essai créée puis supprimée avec le code du serveur | essai d'un vrai appel masqué depuis un téléphone (voir § 9, « Téléphones ») ; surveiller le solde Twilio |
-| Railway (formule) | **avant le 8 octobre 2026** : passer de l'essai à la formule Hobby (5 USD par mois, carte bancaire) dans le tableau de bord Railway | sans cela : service arrêté, puis disques effacés 30 jours après (§ 8) ; ensuite : environnement de test (point 5 ci-dessous) |
+| Railway (formule) | **fait le 6 octobre 2026 au soir** : formule Hobby active (vérifié par l'API : `ACTIVE`, essai terminé) | environnement de test (point 5 ci-dessous) |
+| Google Maps | créer la clé « taxi-sylvain » et la poser sur Railway (§ 6, « Adresses par Google Maps ») | adresses suggérées et vérifiées par Google ; vérifier en production avec une adresse réelle |
 | Prix REM | saisir les montants dans la page Tarifs | aucun code à écrire |
 | Plattsburgh | dire comment tarifer ce cas qui dépend du départ | modéliser |
 
@@ -438,14 +496,18 @@ sinon l'application s'affiche mais ne peut plus se connecter. Les APK ne sont pa
 7. **Sauvegardes de la base** : **fait le 6 octobre 2026** (§ 6) ; celles de Railway sont réservées à la formule Pro.
    Reste au propriétaire : `node scripts/recuperer-sauvegarde.mjs` chaque semaine (copie hors de Railway).
 8. **Registre des demandes** : tenir à jour la section 11 à chaque nouvelle vague.
-9. **Distribuer et tester les APK 1.4.0** (compilés le 23 septembre, liens définitifs au § 2 ; à l'origine les 1.3.0 du 20 septembre) : envoyer les liens aux chauffeurs et clients, puis dérouler sur un vrai téléphone les sections 5.6 à 5.9 du plan de vérification (notification écran verrouillé, GPS avec Waze ouvert, code de confirmation, sélecteur de date).
+9. **Distribuer et tester la version 1.5.0** (compilée le 7 octobre 2026 ; avant, 1.4.0 du 23 septembre) : envoyer les liens aux chauffeurs et clients, puis dérouler sur un vrai téléphone les sections 5.6 à 5.9 du plan de vérification (notification écran verrouillé, GPS avec Waze ouvert, code de confirmation, sélecteur de date).
 10. **Remise en forme des adresses déjà enregistrées** : **fait le 20 septembre à 17 h 30** avec l'accord du propriétaire. Script `backend/scripts/reformater-adresses.mjs` (simulation par défaut, refuse une base distante sans `--production`, ne touche jamais une adresse dont la municipalité reconnue changerait). Lancé dans le conteneur Railway : simulation lue (10 adresses à réécrire, 0 refusée), puis application (10 réécrites, 8 fiches clients avec espaces en trop, 2 courses allégées de « Canada » et de la province en toutes lettres), puis contre-simulation (0 à réécrire, 68 propres). À relancer seulement si des adresses anciennes réapparaissent (import).
 11. **Courriels à chaque étape de la course** (en route, démarrée, terminée) : non demandés, non faits ; seuls confirmation, annulation, rappels, code et récap partent.
-12. **expo-audio** (préparé le 6 octobre 2026, branche `expo-audio`, non fusionnée) : remplace `expo-av`, retiré à
-    partir d'Expo SDK 55. `expo-asset` aligné sur SDK 54 (sinon modules natifs en double, `expo-doctor` 16/18), et
-    permissions micro et services au premier plan d'`expo-audio` bloquées dans `app.json` (`expo-av` n'en déclarait
-    aucune). À fusionner avec la prochaine recompilation, puis à tester sur téléphone : son en mode silencieux, son
-    d'une course diffusée, permissions de l'APK (`aapt dump permissions`).
+12. **expo-audio** : **fusionné le 7 octobre 2026 dans la version 1.5.0** (remplace `expo-av`, retiré à partir d'Expo
+    SDK 55 ; `expo-asset` aligné sur SDK 54 ; permissions micro et services au premier plan bloquées dans
+    `app.json`). À tester sur téléphone : son en mode silencieux, son d'une course diffusée, permissions de l'APK
+    (`aapt dump permissions`). Les versions web publiées le 6 octobre au soir utilisent encore `expo-av` : la
+    prochaine publication web embarquera `expo-audio`, vérifier alors les sons dans le navigateur.
+13. **Point de guidage de YHU** : non vérifié (l'ancien point était le centre des pistes ; le nouveau terminal a ouvert
+    en juin 2026). Le Dispatch le vérifie dans la page Tarifs en choisissant l'adresse exacte dans la liste.
+14. **Courses jamais terminées** : `scripts/comparer-rapports.mjs` les liste par semaine ; à passer « Effectuée »
+    dans la console pour que les rapports correspondent au tableau de Taxi Sylvain.
 
 ---
 
@@ -539,6 +601,7 @@ Registre tenu à jour à chaque série de demandes (dernière entrée : 6 octobr
 | 21 sept. | « Comment obtenir une adresse contact@taxisylvain.ca ? », choix de la redirection gratuite | **Fait et vérifié** : `contact@taxisylvain.ca` existe. Réception : redirection ImprovMX (compte du propriétaire, offre gratuite) vers son Gmail ; envoi : Gmail « Envoyer en tant que » par le SMTP de Brevo. DNS chez Vercel : MX `mx1` et `mx2.improvmx.com`, TXT `v=spf1 include:spf.improvmx.com include:spf.brevo.com ~all` ; DKIM et DMARC de Brevo inchangés. LWS ne permet pas de boîte sur un domaine ajouté en multi-domaine. Adresse publiée sur le site WordPress et dans `conditions.html` et `confidentialite.html` (section courriel réécrite, fournisseurs ImprovMX et Google nommés, mention « Brevo pas encore activé » corrigée). Décision du propriétaire le même soir : les demandes d'accès et de correction (Loi 25) sont acceptées **par courriel ou par la poste**, écrit dans `confidentialite.html`, `conditions.html` et `suppression-compte.html`. Conséquence : surveiller cette boîte, la loi donne 30 jours pour répondre |
 | 21 sept. | Site vitrine WordPress sur `taxisylvain.ca` et `www` | **Fait et vérifié en ligne** : WordPress 7.1.1 installé à la main chez LWS (base partagée avec nskgroup.org, préfixe `ts_`), sept pages publiées, non indexé jusqu'à validation du propriétaire. Outil de publication et compte rendu dans le Jarvis : `livrables/sites-web/taxisylvain-site-wordpress/`. Ne dépend pas de ce dépôt |
 | 6 oct. | « Reprise du projet », puis « Vas-y » : exploitation (sauvegardes, alertes, environnement de test), vérification de Railway et de TestFlight, expo-audio, passation | **Fait et vérifié** : sauvegarde quotidienne de la base et restauration éprouvée, alertes d'erreurs par courriel, surveillance horaire GitHub (§ 5, § 6) ; déployé (Railway `35cf2a69`), 256 tests verts, 14 contrôles de mise en ligne verts, première sauvegarde en production (79 Ko), dossier des sauvegardes inaccessible depuis Internet (404 sur cinq adresses, encodées comprises). **Constats** (§ 8) : essai Railway qui se termine le 8 octobre, compilations TestFlight expirées le 2 octobre, disque à 175 Mo sur 500. expo-audio prêt sur une branche (§ 10, point 12). **Non fait** : environnement de test (attend la formule Hobby) ; copie de la sauvegarde sur le PC (refusée au mode automatique de Claude Code, à lancer par le propriétaire) |
+| 6 oct. (soir) | Treize demandes du propriétaire : 1 fiche chauffeur modifiable (véhicule, couleur, nom) ; 2 arrêts (client, ami du client, puis YUL) ; 3 récap hebdomadaire faux certaines semaines (captures du compte du chauffeur Christopher et tableau de Sylvain, semaine du 21 au 27 septembre juste : 11 courses, 1 305 $, 130,50 $) ; 4 adresses réelles de Google Maps ; 5 contact du client à 2 h ; 6 départ à 3 h ; 7 YUL : Arrivées et P4 seulement ; 8 rapports du Dispatch faux et sans navigation entre semaines ; 9 notification de récap reçue quatre fois ; 10 heure sur 24 h partout ; 11 Google Maps mène à une autre adresse ; 12 récap le lundi à 04 h 00 ; 13 rapport complet et dossier unique pour un développeur senior | **Fait et vérifié** (commits `f8f5cd5`, `1aab585`, `241c0fa`, `c088514`) : 1 `PATCH /drivers/:id` et fenêtre « Modifier » ; 2 `Ride.stops` partout ; 3, 8, 9, 12 règle unique `lib/rapports.js` (date de la course, recalcul à chaque lecture), page Rapports refaite, exports au format du tableau, dates des exports corrigées (le dimanche s'affichait lundi), récap à 04 h 00 notifié une fois, recalcul manuel silencieux. Causes trouvées : courses comptées à la date de « Terminer » (une course du dimanche 22 h 30 terminée après minuit passait à la semaine suivante), récap figé jamais mis à jour, chaque clic « Générer » renvoyait la notification ; 4 Google Maps prêt, actif dès la clé posée (§ 6) ; 5, 6 `lib/fenetres.js` ; 7 catalogue YUL et P4, vérifié en production ; 10 `heure()` partout ; 11 l'ancien point de YUL était le centre des pistes et Google Maps recevait un point d'OpenStreetMap au lieu de l'adresse écrite. 297 tests, scénario de bout en bout (10 vérifications), écrans contrôlés dans Edge (captures), serveur et trois sites publiés (14 contrôles verts). Version 1.5.0 compilée (accord du propriétaire, avec expo-audio). **Non fait** : comparaison sur les vraies données (copie de la base refusée au mode automatique : `scripts/comparer-rapports.mjs` à lancer par le propriétaire), clé Google Maps (propriétaire) |
 
 ---
 
