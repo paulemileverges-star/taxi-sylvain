@@ -32,7 +32,7 @@ export function CarPhoto({ driver, height = 170, style }) {
   return (
     <View style={[styles.car, styles.carFallback, { height }, style]}>
       <Text style={styles.carFallbackText}>
-        {driver?.carModel ? `${driver.carModel}${driver.plate ? ` · ${driver.plate}` : ""}` : "Photo du véhicule non disponible"}
+        {driver?.carModel ? [driver.carModel, driver.carColor, driver.plate].filter(Boolean).join(" · ") : "Photo du véhicule non disponible"}
       </Text>
     </View>
   );

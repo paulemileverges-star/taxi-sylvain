@@ -138,10 +138,15 @@ export default function BookScreen({ user, onBooked, onOpenGroups, onOpenChangeP
         pickupAddress: pickup.address,
         pickupLat: pickup.lat ?? undefined,
         pickupLng: pickup.lng ?? undefined,
+        // Précision et identifiant Google du lieu choisi dans la liste (6 octobre 2026).
+        pickupConfidence: pickup.confidence ?? undefined,
+        pickupPlaceId: pickup.placeId ?? undefined,
         destinationCode: destinationCode || undefined,
         destAddress: destinationCode ? undefined : dest.address,
         destLat: destinationCode ? undefined : dest.lat ?? undefined,
         destLng: destinationCode ? undefined : dest.lng ?? undefined,
+        destConfidence: destinationCode ? undefined : dest.confidence ?? undefined,
+        destPlaceId: destinationCode ? undefined : dest.placeId ?? undefined,
         flightNumber: flightNumber || undefined,
         scheduledFor: when,
       });
@@ -201,7 +206,7 @@ export default function BookScreen({ user, onBooked, onOpenGroups, onOpenChangeP
       <View style={styles.chips}>
         {destinations.map((d) => (
           <TouchableOpacity key={d.code} style={[styles.chip, destinationCode === d.code && styles.chipActive]} onPress={() => setDestinationCode(d.code)}>
-            <Text style={[styles.chipText, destinationCode === d.code && styles.chipTextActive]}>{d.code}</Text>
+            <Text style={[styles.chipText, destinationCode === d.code && styles.chipTextActive]}>{({ YUL: "YUL Arrivées", YULP4: "YUL P4" })[d.code] || d.code}</Text>
           </TouchableOpacity>
         ))}
         <TouchableOpacity style={[styles.chip, !destinationCode && styles.chipActive]} onPress={() => setDestinationCode("")}>

@@ -3,6 +3,7 @@ import { prisma } from "../lib/prisma.js";
 import { requireAuth } from "../middleware/auth.js";
 import { notifyUser } from "../lib/push.js";
 import { personalRoom } from "../lib/rooms.js";
+import { chauffeurPeutContacter, ouvertureContact, quandLisible } from "../lib/fenetres.js";
 
 const router = Router();
 router.use(requireAuth);
@@ -144,15 +145,12 @@ router.get("/:rideId", requireRideParty, async (req, res) => {
   res.json(messages);
 });
 
-// Un chauffeur ne peut écrire au client qu'à l'approche de la course : à partir d'une heure avant
-// l'heure de prise en charge, ou dès que la course est en cours. Avant cela, il passe par Taxi
-// Sylvain. Le client, lui, peut écrire quand il veut.
-const DRIVER_MESSAGE_WINDOW_MS = 60 * 60 * 1000;
-
+// Un chauffeur ne peut écrire au client qu'à l'approche de la course : à partir de 2 heures avant
+// l'heure de prise en charge (demande du propriétaire du 6 octobre 2026 ; 1 heure auparavant), ou
+// dès que la course est en cours. Avant cela, il passe par Taxi Sylvain. Le client, lui, peut
+// écrire quand il veut. Règle dans lib/fenetres.js, commune avec l'appel masqué.
 export function driverMayMessageClient(ride, now = new Date()) {
-  if (["EN_ROUTE", "STARTED", "COMPLETED"].includes(ride.status)) return true;
-  if (!ride.scheduledFor) return true; // course immédiate : pas d'heure programmée
-  return now.getTime() >= new Date(ride.scheduledFor).getTime() - DRIVER_MESSAGE_WINDOW_MS;
+  return chauffeurPeutContacter(ride, now);
 }
 
 router.post("/:rideId", requireRideParty, async (req, res) => {
@@ -160,10 +158,8 @@ router.post("/:rideId", requireRideParty, async (req, res) => {
   if (!text || !text.trim()) return res.status(400).json({ error: "Message vide." });
 
   if (req.user.role === "DRIVER" && !driverMayMessageClient(req.ride)) {
-    const when = new Date(new Date(req.ride.scheduledFor).getTime() - DRIVER_MESSAGE_WINDOW_MS)
-      .toLocaleString("fr-CA", { timeZone: "America/Toronto", dateStyle: "short", timeStyle: "short" });
     return res.status(403).json({
-      error: `Vous pourrez écrire au client à partir de ${when} (une heure avant la course). D'ici là, passez par Taxi Sylvain.`,
+      error: `Vous pourrez écrire au client à partir de ${quandLisible(ouvertureContact(req.ride))} (2 heures avant la course). D'ici là, passez par Taxi Sylvain.`,
     });
   }
 

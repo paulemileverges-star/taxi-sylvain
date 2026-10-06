@@ -4,6 +4,8 @@ import { playSound } from "../lib/sound.js";
 import { STATUS_LABEL, statusClass, localInputToIso, isoToLocalInput } from "../lib/status.js";
 import { filterClients } from "../lib/clientSearch.js";
 import AddressInput from "./AddressInput.jsx";
+import ArretsEditor, { arretsAEnvoyer } from "./ArretsEditor.jsx";
+import { libelleCourt } from "../lib/destinations.js";
 
 // Fenêtre de modification complète d'une course (demande du propriétaire du 20 septembre 2026 :
 // « toutes les modifications possibles doivent pouvoir se faire » depuis Courses et depuis la
@@ -30,9 +32,10 @@ export default function RideEditModal({ rideId, onClose, onSaved, onDeleted }) {
         const preset = dest.find((x) => x.address === r.destAddress);
         setForm({
           clientId: r.clientId || "", driverId: r.driverId || "", status: r.status,
-          pickupAddress: r.pickupAddress || "", pickupLat: null, pickupLng: null, pickupConfidence: null,
+          pickupAddress: r.pickupAddress || "", pickupLat: null, pickupLng: null, pickupConfidence: null, pickupPlaceId: null,
+          stops: Array.isArray(r.stops) ? r.stops : [],
           destinationCode: preset ? preset.code : "",
-          destAddress: r.destAddress || "", destLat: null, destLng: null, destConfidence: null,
+          destAddress: r.destAddress || "", destLat: null, destLng: null, destConfidence: null, destPlaceId: null,
           fare: r.fare ?? "", flightNumber: r.flightNumber || "", scheduledFor: isoToLocalInput(r.scheduledFor),
           distanceKm: r.distanceKm ?? "",
         });
@@ -76,15 +79,17 @@ export default function RideEditModal({ rideId, onClose, onSaved, onDeleted }) {
         patch.pickupAddress = form.pickupAddress;
         // Coordonnées envoyées seulement si l'adresse vient d'être choisie dans la liste ;
         // sinon le serveur géocode lui-même la nouvelle adresse.
-        if (typeof form.pickupLat === "number") Object.assign(patch, { pickupLat: form.pickupLat, pickupLng: form.pickupLng, pickupConfidence: form.pickupConfidence });
+        if (typeof form.pickupLat === "number") Object.assign(patch, { pickupLat: form.pickupLat, pickupLng: form.pickupLng, pickupConfidence: form.pickupConfidence, pickupPlaceId: form.pickupPlaceId || undefined });
       }
       if (form.destinationCode) {
         const preset = destinations.find((d) => d.code === form.destinationCode);
         if (!preset || preset.address !== ride.destAddress) patch.destinationCode = form.destinationCode;
       } else if (form.destAddress !== ride.destAddress || typeof form.destLat === "number") {
         patch.destAddress = form.destAddress;
-        if (typeof form.destLat === "number") Object.assign(patch, { destLat: form.destLat, destLng: form.destLng, destConfidence: form.destConfidence });
+        if (typeof form.destLat === "number") Object.assign(patch, { destLat: form.destLat, destLng: form.destLng, destConfidence: form.destConfidence, destPlaceId: form.destPlaceId || undefined });
       }
+      // Arrêts : la liste complète est renvoyée dès qu'elle diffère de celle enregistrée.
+      if (JSON.stringify(arretsAEnvoyer(form.stops)) !== JSON.stringify(arretsAEnvoyer(ride.stops))) patch.stops = arretsAEnvoyer(form.stops);
       if (String(form.fare) !== String(ride.fare ?? "")) patch.fare = form.fare === "" ? 0 : Number(form.fare);
       if ((form.flightNumber || "") !== (ride.flightNumber || "")) patch.flightNumber = form.flightNumber || null;
       if (form.scheduledFor !== isoToLocalInput(ride.scheduledFor)) patch.scheduledFor = localInputToIso(form.scheduledFor);
@@ -167,11 +172,13 @@ export default function RideEditModal({ rideId, onClose, onSaved, onDeleted }) {
             <AddressInput
               label="Adresse de prise en charge"
               value={form.pickupAddress}
-              onChange={({ address, lat, lng, confidence }) => setForm({ ...form, pickupAddress: address, pickupLat: lat, pickupLng: lng, pickupConfidence: confidence || null })}
+              point={form.pickupAddress !== ride.pickupAddress ? { lat: form.pickupLat, confidence: form.pickupConfidence } : undefined}
+              onChange={({ address, lat, lng, confidence, placeId }) => setForm({ ...form, pickupAddress: address, pickupLat: lat, pickupLng: lng, pickupConfidence: confidence || null, pickupPlaceId: placeId || null })}
             />
+            <ArretsEditor arrets={form.stops} onChange={(stops) => setForm((f) => ({ ...f, stops }))} />
             {label("Destination")}
             <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 4 }}>
-              {[...destinations.map((d) => ({ code: d.code, label: d.code })), { code: "", label: "Autre adresse" }].map((opt) => (
+              {[...destinations.map((d) => ({ code: d.code, label: libelleCourt(d) })), { code: "", label: "Autre adresse" }].map((opt) => (
                 <button key={opt.code || "other"} type="button" className={`btn ${form.destinationCode === opt.code ? "" : "outline"}`} onClick={() => selectDestination(opt.code)}>
                   {opt.label}
                 </button>
@@ -186,7 +193,8 @@ export default function RideEditModal({ rideId, onClose, onSaved, onDeleted }) {
               <AddressInput
                 label="Adresse de destination"
                 value={form.destAddress}
-                onChange={({ address, lat, lng, confidence }) => setForm({ ...form, destAddress: address, destLat: lat, destLng: lng, destConfidence: confidence || null })}
+                point={form.destAddress !== ride.destAddress ? { lat: form.destLat, confidence: form.destConfidence } : undefined}
+                onChange={({ address, lat, lng, confidence, placeId }) => setForm({ ...form, destAddress: address, destLat: lat, destLng: lng, destConfidence: confidence || null, destPlaceId: placeId || null })}
               />
             )}
 

@@ -26,15 +26,17 @@ const DESTINATIONS = [
 const MINUTE = 60 * 1000;
 const COURSE_A = new Date("2026-09-20T13:00:00.000Z");
 
+// Délai porté de 1 heure à 2 heures par le propriétaire le 6 octobre 2026 (lib/fenetres.js).
 test("le chauffeur ne peut pas écrire au client bien avant la course", () => {
   const ride = { status: "ACCEPTED", scheduledFor: COURSE_A };
   assert.equal(driverMayMessageClient(ride, new Date(COURSE_A.getTime() - 180 * MINUTE)), false);
-  assert.equal(driverMayMessageClient(ride, new Date(COURSE_A.getTime() - 61 * MINUTE)), false);
+  assert.equal(driverMayMessageClient(ride, new Date(COURSE_A.getTime() - 121 * MINUTE)), false);
 });
 
-test("la discussion s'ouvre exactement une heure avant la course", () => {
+test("la discussion s'ouvre exactement deux heures avant la course", () => {
   const ride = { status: "ACCEPTED", scheduledFor: COURSE_A };
-  assert.equal(driverMayMessageClient(ride, new Date(COURSE_A.getTime() - 60 * MINUTE)), true);
+  assert.equal(driverMayMessageClient(ride, new Date(COURSE_A.getTime() - 120 * MINUTE)), true);
+  assert.equal(driverMayMessageClient(ride, new Date(COURSE_A.getTime() - 61 * MINUTE)), true);
   assert.equal(driverMayMessageClient(ride, new Date(COURSE_A.getTime() - 30 * MINUTE)), true);
   assert.equal(driverMayMessageClient(ride, new Date(COURSE_A.getTime() + 5 * MINUTE)), true);
 });

@@ -12,6 +12,7 @@ import { streamListPdf, streamListXlsx } from "../lib/exportReport.js";
 import { generateTempPassword, realEmailOrNull } from "../lib/placeholderEmail.js";
 import { parseImportFile, pick } from "../lib/bulkImport.js";
 import { getAllDriverLocations } from "../lib/driverLocations.js";
+import { donneesFicheChauffeur } from "../lib/ficheChauffeur.js";
 
 const importUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024 } });
 
@@ -19,7 +20,7 @@ const importUpload = multer({ storage: multer.memoryStorage(), limits: { fileSiz
 // création "à la volée" d'un nouveau chauffeur pendant la création d'une course (rides.js).
 // Le mot de passe est optionnel : s'il n'est pas fourni, un mot de passe temporaire est généré
 // et renvoyé en clair (une seule fois) pour que le Dispatch puisse le transmettre au chauffeur.
-export async function createDriverAccount({ name, email, phone, password, carModel, plate }) {
+export async function createDriverAccount({ name, email, phone, password, carModel, carColor, plate }) {
   if (!name || !email || !phone) {
     const err = new Error("Nom, courriel et téléphone sont requis.");
     err.status = 400;
@@ -35,11 +36,11 @@ export async function createDriverAccount({ name, email, phone, password, carMod
   const passwordHash = await bcrypt.hash(tempPassword, 10);
   const driver = await prisma.user.create({
     data: {
-      role: "DRIVER", name, email, phone, passwordHash, carModel: carModel || null, plate: plate || null,
+      role: "DRIVER", name, email, phone, passwordHash, carModel: carModel || null, carColor: carColor || null, plate: plate || null,
       // Le chauffeur confirme son courriel par code à sa première connexion (lib/verification.js).
       emailVerifiedAt: realEmailOrNull(email) ? null : new Date(),
     },
-    select: { id: true, name: true, email: true, phone: true, carModel: true, plate: true, ratingAvg: true, photoUrl: true, carPhotoUrl: true },
+    select: { id: true, name: true, email: true, phone: true, carModel: true, carColor: true, plate: true, ratingAvg: true, photoUrl: true, carPhotoUrl: true },
   });
   return { driver, tempPassword };
 }
@@ -110,7 +111,9 @@ router.get("/", requirePermission("drivers"), async (req, res) => {
   const drivers = await prisma.user.findMany({
     where: { role: "DRIVER" },
     // emailVerifiedAt : la console montre qui n’a pas encore confirmé son courriel (et peut le faire à sa place).
-    select: { id: true, name: true, carModel: true, plate: true, ratingAvg: true, photoUrl: true, carPhotoUrl: true, emailVerifiedAt: true },
+    // Courriel et téléphone : pré-remplissent la fenêtre « Modifier » (route réservée à la permission chauffeurs).
+    select: { id: true, name: true, email: true, phone: true, carModel: true, carColor: true, plate: true, ratingAvg: true, photoUrl: true, carPhotoUrl: true, emailVerifiedAt: true },
+    orderBy: { name: "asc" },
   });
   const onlineIds = getOnlineDriverIds();
   res.json(drivers.map((d) => ({ ...d, online: onlineIds.has(d.id) })));
@@ -124,6 +127,38 @@ router.post("/", requirePermission("drivers"), async (req, res) => {
   } catch (e) {
     res.status(e.status || 500).json({ error: e.message });
   }
+});
+
+// Modifier la fiche d'un chauffeur depuis la console (demande du propriétaire du 6 octobre 2026) :
+// nom, courriel, téléphone, véhicule, couleur, plaque. Seuls les champs envoyés changent ; les règles
+// sont dans lib/ficheChauffeur.js. Le chauffeur et le Dispatch voient la fiche à jour sans recharger.
+router.patch("/:id", requirePermission("drivers"), async (req, res) => {
+  const id = String(req.params.id);
+  if (!isSafeId(id)) return res.status(404).json({ error: "Chauffeur introuvable." });
+  const actuel = await prisma.user.findUnique({ where: { id }, select: { role: true, email: true } });
+  if (!actuel || actuel.role !== "DRIVER") return res.status(404).json({ error: "Chauffeur introuvable." });
+
+  const { data, erreur } = donneesFicheChauffeur(req.body);
+  if (erreur) return res.status(400).json({ error: erreur });
+  if (Object.keys(data).length === 0) return res.status(400).json({ error: "Aucune modification reçue." });
+  if (data.email && data.email !== actuel.email) {
+    const pris = await prisma.user.findUnique({ where: { email: data.email }, select: { id: true } });
+    if (pris && pris.id !== id) return res.status(409).json({ error: "Ce courriel est déjà utilisé par un autre compte." });
+    // Le Dispatch connaît son chauffeur : le nouveau courriel vaut confirmé, sans code à saisir.
+    data.emailVerifiedAt = new Date();
+  }
+
+  const chauffeur = await prisma.user.update({
+    where: { id },
+    data,
+    select: { id: true, name: true, email: true, phone: true, carModel: true, carColor: true, plate: true, ratingAvg: true, photoUrl: true, carPhotoUrl: true, emailVerifiedAt: true },
+  });
+  const io = req.app.get("io");
+  if (io) {
+    io.to("dispatch").emit("driver:updated", chauffeur);
+    io.to(`driver:${id}`).emit("driver:updated", chauffeur);
+  }
+  res.json(chauffeur);
 });
 
 // Suppression d'un chauffeur depuis la console. Seul un compte CHAUFFEUR peut être visé ici :
@@ -196,7 +231,7 @@ router.get("/export", requirePermission("drivers"), async (req, res) => {
   const format = req.query.format === "xlsx" ? "xlsx" : "pdf";
   const drivers = await prisma.user.findMany({
     where: { role: "DRIVER" },
-    select: { name: true, email: true, phone: true, carModel: true, plate: true, ratingAvg: true, createdAt: true },
+    select: { name: true, email: true, phone: true, carModel: true, carColor: true, plate: true, ratingAvg: true, createdAt: true },
     orderBy: { name: "asc" },
   });
 
@@ -205,6 +240,7 @@ router.get("/export", requirePermission("drivers"), async (req, res) => {
     email: d.email,
     phone: d.phone,
     carModel: d.carModel || "",
+    carColor: d.carColor || "",
     plate: d.plate || "",
     ratingAvg: d.ratingAvg?.toFixed(1) ?? "5.0",
     createdAt: new Date(d.createdAt).toLocaleDateString("fr-CA"),
@@ -213,8 +249,9 @@ router.get("/export", requirePermission("drivers"), async (req, res) => {
     { key: "name", label: "Nom", width: 140 },
     { key: "email", label: "Courriel", width: 200 },
     { key: "phone", label: "Téléphone", width: 110 },
-    { key: "carModel", label: "Véhicule", width: 150 },
-    { key: "plate", label: "Plaque", width: 90 },
+    { key: "carModel", label: "Véhicule", width: 130 },
+    { key: "carColor", label: "Couleur", width: 70 },
+    { key: "plate", label: "Plaque", width: 80 },
     { key: "ratingAvg", label: "Note", width: 60 },
     { key: "createdAt", label: "Chauffeur depuis", width: 110 },
   ];

@@ -18,7 +18,17 @@ function Photo({ src, alt, round }) {
   );
 }
 
-const EMPTY_FORM = { name: "", email: "", phone: "", password: "", carModel: "", plate: "" };
+const EMPTY_FORM = { name: "", email: "", phone: "", password: "", carModel: "", carColor: "", plate: "" };
+// Champs de la fiche modifiables par le Dispatch (demande du propriétaire du 6 octobre 2026 :
+// « s'ils changent de voiture, la couleur, le nom, etc. »).
+const CHAMPS_FICHE = [
+  ["name", "Nom complet"],
+  ["email", "Courriel (sert à la connexion)"],
+  ["phone", "Téléphone (sert à l'appel masqué)"],
+  ["carModel", "Véhicule (marque, modèle, année)"],
+  ["carColor", "Couleur du véhicule"],
+  ["plate", "Plaque d'immatriculation"],
+];
 
 export default function Drivers() {
   const [drivers, setDrivers] = useState([]);
@@ -31,6 +41,8 @@ export default function Drivers() {
   const [importing, setImporting] = useState(false);
   const [importResult, setImportResult] = useState(null);
   const [credentials, setCredentials] = useState(null);
+  const [fiche, setFiche] = useState(null); // { id, initial, valeurs } du chauffeur en cours de modification
+  const [erreurFiche, setErreurFiche] = useState("");
   const fileInputRef = useRef(null);
 
   const load = () => api.listDrivers().then(setDrivers);
@@ -42,11 +54,14 @@ export default function Drivers() {
       setDrivers((prev) => prev.map((d) => (d.id === driverId ? { ...d, online } : d)));
     const onOnline = ({ driverId }) => setOnline(driverId, true);
     const onOffline = ({ driverId }) => setOnline(driverId, false);
+    const onUpdated = (d) => setDrivers((prev) => prev.map((x) => (x.id === d.id ? { ...x, ...d } : x)));
     socket.on("driver:online", onOnline);
     socket.on("driver:offline", onOffline);
+    socket.on("driver:updated", onUpdated);
     return () => {
       socket.off("driver:online", onOnline);
       socket.off("driver:offline", onOffline);
+      socket.off("driver:updated", onUpdated);
     };
   }, []);
 
@@ -106,6 +121,26 @@ export default function Drivers() {
     }
   };
 
+  const ouvrirFiche = (d) => {
+    const initial = Object.fromEntries(CHAMPS_FICHE.map(([cle]) => [cle, d[cle] || ""]));
+    setErreurFiche("");
+    setFiche({ id: d.id, initial, valeurs: { ...initial } });
+  };
+
+  // Seuls les champs changés partent au serveur (PATCH /drivers/:id).
+  const enregistrerFiche = async () => {
+    const modifs = Object.fromEntries(CHAMPS_FICHE.map(([cle]) => [cle, fiche.valeurs[cle]]).filter(([cle, v]) => v.trim() !== fiche.initial[cle].trim()));
+    if (Object.keys(modifs).length === 0) { setFiche(null); return; }
+    try {
+      await api.updateDriver(fiche.id, modifs);
+      playSound("action");
+      setFiche(null);
+      load();
+    } catch (e) {
+      setErreurFiche(e.message);
+    }
+  };
+
   const exportAs = async (format) => {
     setExporting(true);
     try {
@@ -159,13 +194,14 @@ export default function Drivers() {
                 background: d.online ? "#3fa796" : "#e85d4c",
               }}
             />
-            <span>{d.name} — {d.carModel} · {d.plate}</span>
+            <span>{d.name} — {[d.carModel, d.carColor, d.plate].filter(Boolean).join(" · ") || "véhicule non renseigné"}</span>
             {d.emailVerifiedAt === null && (
               <button className="btn outline" title={"Ce compte n’a pas encore saisi le code reçu par courriel. Confirmer à sa place le laisse se connecter sans code."} onClick={() => confirmerCourriel(d)}>Courriel non confirmé · Confirmer</button>
             )}
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
             <span className="chip">★ {d.ratingAvg?.toFixed(1) ?? "5.0"}</span>
+            <button className="btn" onClick={() => ouvrirFiche(d)}>Modifier</button>
             <button className="btn outline" onClick={() => photoInputs.current[d.id]?.click()}>Photo chauffeur</button>
             <input
               type="file" accept="image/*" style={{ display: "none" }}
@@ -198,10 +234,31 @@ export default function Drivers() {
             <input className="input" type="password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} />
             <label style={{ display: "block", marginTop: 8 }}>Modèle du véhicule</label>
             <input className="input" value={form.carModel} onChange={(e) => setForm({ ...form, carModel: e.target.value })} placeholder="ex. Toyota Camry 2021" />
+            <label style={{ display: "block", marginTop: 8 }}>Couleur du véhicule</label>
+            <input className="input" value={form.carColor} onChange={(e) => setForm({ ...form, carColor: e.target.value })} placeholder="ex. Gris" />
             <label style={{ display: "block", marginTop: 8 }}>Plaque d'immatriculation</label>
             <input className="input" value={form.plate} onChange={(e) => setForm({ ...form, plate: e.target.value })} />
             {error && <div style={{ color: "#e85d4c", fontSize: 13, marginTop: 8 }}>{error}</div>}
             <button className="btn" style={{ marginTop: 14, width: "100%" }} onClick={createDriver}>Créer le compte chauffeur</button>
+          </div>
+        </div>
+      )}
+
+      {fiche && (
+        <div className="modal-backdrop">
+          <div className="modal">
+            <div className="row"><h3>Modifier la fiche du chauffeur</h3><button onClick={() => setFiche(null)}>✕</button></div>
+            {CHAMPS_FICHE.map(([cle, libelle]) => (
+              <div key={cle}>
+                <label style={{ display: "block", marginTop: 8 }}>{libelle}</label>
+                <input className="input" value={fiche.valeurs[cle]} onChange={(e) => setFiche((f) => ({ ...f, valeurs: { ...f.valeurs, [cle]: e.target.value } }))} />
+              </div>
+            ))}
+            <div style={{ color: "var(--muted)", fontSize: 12, marginTop: 6 }}>
+              Le client voit le véhicule, la couleur et la plaque dans son suivi de course. Les photos se changent avec les boutons « Photo chauffeur » et « Photo véhicule ».
+            </div>
+            {erreurFiche && <div style={{ color: "#e85d4c", fontSize: 13, marginTop: 8 }}>{erreurFiche}</div>}
+            <button className="btn" style={{ marginTop: 14, width: "100%" }} onClick={enregistrerFiche}>Enregistrer les modifications</button>
           </div>
         </div>
       )}

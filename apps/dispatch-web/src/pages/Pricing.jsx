@@ -87,7 +87,8 @@ export default function Pricing() {
 
   const saveAdresse = async (code) => {
     const coords = adresses[`${code}_coords`];
-    await api.updateDestination(code, { address: adresses[code], ...(coords ? { lat: coords.lat, lng: coords.lng } : {}) });
+    // Un point précis choisi dans la liste devient le point de guidage vérifié de la destination.
+    await api.updateDestination(code, { address: adresses[code], ...(coords ? { lat: coords.lat, lng: coords.lng, confidence: coords.confidence } : {}) });
     playSound("action");
     load();
   };
@@ -123,9 +124,14 @@ export default function Pricing() {
                   pouvoir être corrigée ici, et passer par les suggestions pour rester exacte. */}
               <AddressInput
                 value={adresses[d.code] ?? d.address ?? ""}
-                onChange={({ address, lat, lng }) => setAdresses((a) => ({ ...a, [d.code]: address, [`${d.code}_coords`]: lat != null ? { lat, lng } : a[`${d.code}_coords`] }))}
+                onChange={({ address, lat, lng, confidence }) => setAdresses((a) => ({ ...a, [d.code]: address, [`${d.code}_coords`]: lat != null ? { lat, lng, confidence } : null }))}
                 placeholder="Adresse de la destination"
               />
+              <div style={{ fontSize: 12, marginTop: 3, color: d.pointVerified ? "#3fa796" : "var(--amber)" }}>
+                {d.pointVerified
+                  ? "✓ Point de guidage vérifié : Waze et Google Maps vont droit à ce point."
+                  : "⚠ Point non vérifié : le chauffeur est guidé par l'adresse écrite. Choisissez l'adresse exacte dans la liste puis enregistrez pour le vérifier."}
+              </div>
               <button className="btn outline" style={{ marginTop: 6 }} onClick={() => saveAdresse(d.code)}>Enregistrer l'adresse</button>
             </div>
             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>

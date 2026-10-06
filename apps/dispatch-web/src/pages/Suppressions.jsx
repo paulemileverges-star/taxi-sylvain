@@ -2,12 +2,13 @@ import React, { useEffect, useState } from "react";
 import { api } from "../lib/api.js";
 import { getSocket } from "../lib/socket.js";
 import { playSound } from "../lib/sound.js";
+import { jourHeure } from "../lib/heure.js";
 
 // Demandes de suppression de compte (décision du propriétaire du 20 septembre 2026) : un client ou
 // un chauffeur demande, le Dispatch valide ou refuse ici. Réponse promise sous 30 jours dans les
 // pages légales : la date limite est affichée pour chaque demande.
 const ROLE = { CLIENT: "Client", DRIVER: "Chauffeur" };
-const fmtDate = (d) => new Date(d).toLocaleString("fr-CA", { dateStyle: "medium", timeStyle: "short" });
+const fmtDate = (d) => jourHeure(d);
 const fmtJour = (d) => new Date(d).toLocaleDateString("fr-CA", { dateStyle: "long" });
 
 export default function Suppressions({ onChanged }) {

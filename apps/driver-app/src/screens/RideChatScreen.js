@@ -33,7 +33,7 @@ export default function RideChatScreen({ rideId, onBack, onRead }) {
       setDraft("");
       playSound("action");
     } catch (e) {
-      // Notamment : écrire au client est ouvert seulement à partir d'une heure avant la course.
+      // Notamment : écrire au client est ouvert seulement à partir de 2 heures avant la course.
       showAlert("Message non envoyé", e.message);
     }
   };

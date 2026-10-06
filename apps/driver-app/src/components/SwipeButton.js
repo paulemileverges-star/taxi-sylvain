@@ -30,6 +30,9 @@ export default function SwipeButton({ label, onConfirm, color = "#f5a623", textC
     PanResponder.create({
       onStartShouldSetPanResponder: () => !disabledRef.current && !busyRef.current,
       onMoveShouldSetPanResponder: (evt, gesture) => !disabledRef.current && !busyRef.current && Math.abs(gesture.dx) > 2,
+      // Une fois le glissement commencé, la liste ou l'écran qui défile ne peut plus le reprendre
+      // (sinon un léger mouvement vertical annulait le geste et il fallait recommencer).
+      onPanResponderTerminationRequest: () => false,
       onPanResponderMove: (evt, gesture) => {
         const x = Math.min(Math.max(gesture.dx, 0), maxSwipeRef.current);
         pan.setValue(x);
@@ -71,8 +74,9 @@ export default function SwipeButton({ label, onConfirm, color = "#f5a623", textC
       onLayout={onLayout}
       style={[styles.track, { backgroundColor: disabled ? "#28395a" : `${color}26`, borderColor: disabled ? "#28395a" : color }]}
     >
-      <Animated.Text style={[styles.label, { color: disabled ? "#8b99b5" : color, opacity: labelOpacity }]}>
-        {label} — glisser pour confirmer →
+      <Animated.Text style={[styles.label, { color: disabled ? "#8b99b5" : color, opacity: labelOpacity }]} numberOfLines={2}>
+        {/* Bouton verrouillé (ex. « Disponible à 19:38 (3 h avant) ») : on n'invite pas à glisser. */}
+        {disabled ? label : `${label} — glisser pour confirmer →`}
       </Animated.Text>
       <Animated.View
         {...panResponder.panHandlers}
@@ -96,7 +100,8 @@ const styles = StyleSheet.create({
     overflow: "hidden",
     position: "relative",
   },
-  label: { textAlign: "center", fontWeight: "700", fontSize: 13 },
+  // Marge à gauche : le texte ne passe plus sous la poignée ronde.
+  label: { textAlign: "center", fontWeight: "700", fontSize: 13, paddingLeft: 56, paddingRight: 10 },
   thumb: {
     position: "absolute",
     left: 4,

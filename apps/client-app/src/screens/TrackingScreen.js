@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import { heure, jour } from "../lib/dates";
 import { View, Text, TouchableOpacity, Linking, StyleSheet } from "react-native";
 import { api } from "../lib/api";
 import { DriverAvatar, CarPhoto } from "../components/DriverPhotos";
@@ -24,12 +25,9 @@ const LIVE_STATUSES = ["EN_ROUTE", "STARTED"];
 // après, le numéro relais ne doit plus relier les deux parties.
 const CALL_STATUSES = ["ACCEPTED", "EN_ROUTE", "STARTED"];
 
-function fmtDate(d) {
-  return d ? new Date(d).toLocaleDateString("fr-CA") : "—";
-}
-function fmtTime(d) {
-  return d ? new Date(d).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "—";
-}
+// Heure toujours sur 24 heures, à l'heure de Montréal (lib/dates.js, 6 octobre 2026).
+const fmtDate = jour;
+const fmtTime = heure;
 
 function Field({ label, value }) {
   if (!value) return null;
@@ -112,6 +110,7 @@ export default function TrackingScreen({ rideId, onOpenChat, onBack, unreadRide 
           <Field label="Date de la course" value={fmtDate(ride.scheduledFor || ride.createdAt)} />
           <Field label="Heure de la course" value={fmtTime(ride.scheduledFor || ride.createdAt)} />
           <Field label="Adresse de départ" value={ride.pickupAddress} />
+          {(Array.isArray(ride.stops) ? ride.stops : []).map((a, i) => <Field key={i} label={`Arrêt ${i + 1}`} value={a.address} />)}
           <Field label="Destination" value={ride.destAddress} />
           <Field label="Distance" value={ride.distanceKm != null ? `${ride.distanceKm.toFixed(1)} km` : null} />
           <Field label="Numéro de vol" value={ride.flightNumber} />
@@ -124,7 +123,7 @@ export default function TrackingScreen({ rideId, onOpenChat, onBack, unreadRide 
             <DriverAvatar driver={ride.driver} />
             <View style={{ flex: 1 }}>
               <Text style={styles.driverName}>{ride.driver.name}</Text>
-              <Text style={styles.driverInfo}>{[ride.driver.carModel, ride.driver.plate].filter(Boolean).join(" · ")}</Text>
+              <Text style={styles.driverInfo}>{[ride.driver.carModel, ride.driver.carColor, ride.driver.plate].filter(Boolean).join(" · ")}</Text>
               <Text style={styles.driverInfo}>★ {ride.driver.ratingAvg?.toFixed(1) ?? "5.0"}</Text>
             </View>
           </View>

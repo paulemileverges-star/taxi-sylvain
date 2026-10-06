@@ -22,7 +22,9 @@ import { FUSEAU_TAXI } from "./ridesOrder.js";
 
 export const FORMAT = "taxi-sylvain-sauvegarde";
 export const CONSERVATION = 14;
-export const sauvegardesDir = path.join(uploadsDir, ".sauvegardes");
+// SAUVEGARDES_DOSSIER : seulement pour les essais locaux (scénario de bout en bout), qui ne doivent
+// rien laisser dans le dépôt. En production, la variable est absente.
+export const sauvegardesDir = process.env.SAUVEGARDES_DOSSIER || path.join(uploadsDir, ".sauvegardes");
 const MOTIF = /^taxi-sylvain-\d{4}-\d{2}-\d{2}-\d{4}\.json\.gz$/;
 
 const PARTIES = new Intl.DateTimeFormat("en-CA", {

@@ -1,10 +1,10 @@
 import React, { useEffect, useState } from "react";
 import { View, Text, FlatList, TouchableOpacity, StyleSheet, Linking } from "react-native";
 import { api, reportDownloadUrl } from "../lib/api";
+import { jour } from "../lib/dates";
 
-function fmtDate(d) {
-  return new Date(d).toLocaleDateString("fr-CA");
-}
+// Dates à l'heure de Montréal, quel que soit le réglage du téléphone (6 octobre 2026).
+const fmtDate = jour;
 
 export default function ReportsScreen({ onBack }) {
   const [reports, setReports] = useState([]);

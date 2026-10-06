@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import { heure } from "../lib/dates";
 import { View, Text, TouchableOpacity, StyleSheet, FlatList, ActivityIndicator } from "react-native";
 import { api } from "../lib/api";
 import { showAlert } from "../lib/alert";
@@ -12,9 +13,8 @@ const STATUS_LABEL = {
 };
 
 // La date complète n'est plus répétée sur chaque carte : elle est devenue le titre de la journée.
-function fmtTime(d) {
-  return d ? new Date(d).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "—";
-}
+// Heure toujours sur 24 heures, à l'heure de Montréal (lib/dates.js, 6 octobre 2026).
+const fmtTime = heure;
 
 export default function RidesScreen({ onOpenRide, onBack }) {
   const [tab, setTab] = useState("upcoming");
@@ -69,7 +69,7 @@ export default function RidesScreen({ onOpenRide, onBack }) {
                 <Text style={styles.date}>{fmtTime(ride.scheduledFor || ride.createdAt)}</Text>
                 <Text style={styles.status}>{STATUS_LABEL[ride.status] || ride.status}</Text>
               </View>
-              <Text style={styles.addr}>{ride.pickupAddress} → {ride.destAddress}</Text>
+              <Text style={styles.addr}>{ride.pickupAddress} → {ride.destAddress}{Array.isArray(ride.stops) && ride.stops.length ? ` (+${ride.stops.length} arrêt${ride.stops.length > 1 ? "s" : ""})` : ""}</Text>
               {ride.driver?.name && (
                 <View style={styles.driverRow}>
                   <DriverAvatar driver={ride.driver} size={32} />

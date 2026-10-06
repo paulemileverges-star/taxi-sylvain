@@ -60,7 +60,10 @@ export const api = {
   updateNotificationPrefs: (offsets) => request("/auth/notification-prefs", { method: "PATCH", body: { offsets } }),
   myRides: () => request("/rides"),
   myRidesPaged: (when, page) => request(`/rides?when=${when}&page=${page}&pageSize=10`),
-  geocodeSearch: (q) => request(`/geocode/search?q=${encodeURIComponent(q)}`),
+  geocodeSearch: (q, session) => request(`/geocode/search?q=${encodeURIComponent(q)}${session ? `&session=${encodeURIComponent(session)}` : ""}`),
+  // Détail d'une suggestion Google choisie : adresse complète et point exact (6 octobre 2026).
+  geocodePlace: (placeId, session, { q = "", nom = "" } = {}) =>
+    request(`/geocode/place/${encodeURIComponent(placeId)}?session=${encodeURIComponent(session || "")}&q=${encodeURIComponent(q)}&nom=${encodeURIComponent(nom)}`),
   acceptRide: (id) => request(`/rides/${id}/accept`, { method: "POST" }),
   refuseRide: (id) => request(`/rides/${id}/refuse`, { method: "POST" }),
   setRideStatus: (id, status) => request(`/rides/${id}/status`, { method: "POST", body: { status } }),

@@ -23,6 +23,11 @@ router.put("/:code", requirePermission("courses"), async (req, res) => {
   if (lat !== undefined) data.lat = typeof lat === "number" ? lat : null;
   if (lng !== undefined) data.lng = typeof lng === "number" ? lng : null;
   if (price !== undefined) data.price = parsePrice(price);
+  // Point de guidage : vérifié seulement s'il vient d'un lieu précis choisi dans la liste (porte) ;
+  // une adresse retapée sans point redevient « non vérifiée » et guide par le texte (6 octobre 2026).
+  if (address !== undefined || lat !== undefined) {
+    data.pointVerified = typeof lat === "number" && typeof lng === "number" && ["porte", "verifie"].includes(req.body.confidence);
+  }
   try {
     const destination = await prisma.destination.update({ where: { code: req.params.code }, data });
     res.json(destination);

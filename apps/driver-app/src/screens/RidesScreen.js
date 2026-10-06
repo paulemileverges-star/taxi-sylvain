@@ -5,6 +5,7 @@ import { playSound } from "../lib/sound";
 import { showAlert } from "../lib/alert";
 import SwipeButton from "../components/SwipeButton";
 import { withDayHeaders } from "../lib/rideDays";
+import { heure } from "../lib/dates";
 
 const STATUS_LABEL = {
   REQUESTED: "Demandée", BROADCAST: "Diffusée", ACCEPTED: "Acceptée",
@@ -13,9 +14,8 @@ const STATUS_LABEL = {
 };
 
 // La date complète n'est plus répétée sur chaque carte : elle est devenue le titre de la journée.
-function fmtTime(d) {
-  return d ? new Date(d).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "—";
-}
+// Heure toujours sur 24 heures, à l'heure de Montréal (lib/dates.js, 6 octobre 2026).
+const fmtTime = heure;
 
 export default function RidesScreen({ onOpenRide, onBack }) {
   const [tab, setTab] = useState("upcoming");
@@ -95,6 +95,9 @@ export default function RidesScreen({ onOpenRide, onBack }) {
                   <Text style={styles.status}>{STATUS_LABEL[ride.status] || ride.status}</Text>
                 </View>
                 <Text style={styles.addr}>{ride.pickupAddress} → {ride.destAddress}</Text>
+                {Array.isArray(ride.stops) && ride.stops.length > 0 && (
+                  <Text style={styles.status}>Arrêt{ride.stops.length > 1 ? "s" : ""} : {ride.stops.map((a) => a.address).join(" → ")}</Text>
+                )}
                 <Text style={styles.fare}>
                   {ride.fare > 0 ? `${ride.fare} $` : "Montant à confirmer"}{ride.distanceKm != null ? `  ·  ${ride.distanceKm.toFixed(1)} km` : ""}
                 </Text>

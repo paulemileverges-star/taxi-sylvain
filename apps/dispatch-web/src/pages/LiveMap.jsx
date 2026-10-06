@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import { heure } from "../lib/heure.js";
 import { MapContainer, TileLayer, Marker, Popup } from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
@@ -72,7 +73,7 @@ export default function LiveMap() {
                 <br />
                 {p.rideId ? (STATUS_LABEL[p.status] || "Course active") : ""}
                 <br />
-                Mise à jour : {new Date(p.at).toLocaleTimeString()}
+                Mise à jour : {heure(p.at)}
                 {now - p.at > STALE_MS && <><br /><em>Pas de position depuis plus de 3 min</em></>}
               </Popup>
             </Marker>

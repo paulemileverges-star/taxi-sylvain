@@ -6,8 +6,50 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-const { chooseTarget, buildWazeUrl, buildGoogleMapsUrl, navigationHint } =
+const { chooseTarget, buildWazeUrl, buildGoogleMapsUrl, navigationHint, etapesDeNavigation } =
   await import("../../apps/driver-app/src/lib/navigationLinks.js");
+
+// 6 octobre 2026 : « en ouvrant Google Maps, le chauffeur n'a pas l'adresse du client telle
+// qu'indiquée, c'est une autre adresse ». Google Maps reçoit désormais l'adresse écrite.
+test("Google Maps reçoit l'adresse écrite, même quand un point « porte » existe", () => {
+  const t = chooseTarget({ address: "1580 Avenue Bourgogne, Chambly, QC J3L 2Y7", lat: 45.45, lng: -73.28, confidence: "porte" }, "google");
+  assert.equal(t.kind, "text");
+  assert.equal(t.value, "1580 Avenue Bourgogne, Chambly, QC J3L 2Y7");
+  const liens = buildGoogleMapsUrl(t, "android");
+  assert.equal(liens.natif, "google.navigation:q=1580%20Avenue%20Bourgogne%2C%20Chambly%2C%20QC%20J3L%202Y7");
+});
+
+test("Google Maps garde les coordonnées d'un point de catalogue vérifié (YUL Arrivées, P4)", () => {
+  const t = chooseTarget({ address: "975 Boulevard Roméo-Vachon Nord (Arrivées), Dorval, QC H4Y 1H1", lat: 45.457445, lng: -73.750134, confidence: "verifie" }, "google");
+  assert.equal(t.kind, "coords");
+  assert.equal(buildGoogleMapsUrl(t, "android").natif, "google.navigation:q=45.457445,-73.750134");
+});
+
+test("le lieu Google choisi dans la liste est transmis à Google Maps", () => {
+  const t = chooseTarget({ address: "1580 Avenue Bourgogne, Chambly, QC", placeId: "ChIJ_lieu_test" }, "google");
+  assert.match(buildGoogleMapsUrl(t, "web").web, /destination_place_id=ChIJ_lieu_test/);
+});
+
+test("avec des arrêts, Google Maps ouvre tout l'itinéraire dans l'ordre", () => {
+  const dest = chooseTarget({ address: "YUL", lat: 45.457445, lng: -73.750134, confidence: "verifie" }, "google");
+  const arrets = [chooseTarget({ address: "34 Rue Saint-Charles Ouest, Longueuil" }, "google"), chooseTarget({ address: "100 Boulevard de Mortagne, Boucherville" }, "google")];
+  const liens = buildGoogleMapsUrl(dest, "android", arrets);
+  assert.equal(liens.natif, liens.web, "seul le lien https accepte plusieurs arrêts");
+  assert.match(liens.web, /waypoints=34%20Rue%20Saint-Charles%20Ouest%2C%20Longueuil%7C100%20Boulevard%20de%20Mortagne%2C%20Boucherville/);
+  assert.match(liens.web, /dir_action=navigate/);
+});
+
+test("les étapes de navigation suivent la course : le client, puis chaque arrêt, puis la destination", () => {
+  const ride = {
+    status: "EN_ROUTE", pickupAddress: "Chez le client", destAddress: "YUL", destLat: 45.457445, destLng: -73.750134, destConfidence: "verifie",
+    stops: [{ address: "Chez l'ami du client", lat: 45.5, lng: -73.5, confidence: "porte" }],
+  };
+  assert.deepEqual(etapesDeNavigation(ride).map((e) => e.titre), ["Prise en charge du client"]);
+  const partie = etapesDeNavigation({ ...ride, status: "STARTED" });
+  assert.deepEqual(partie.map((e) => e.titre), ["Arrêt 1", "Destination"]);
+  assert.equal(partie[0].point.address, "Chez l'ami du client");
+  assert.equal(partie[1].point.confidence, "verifie");
+});
 
 const ADRESSE = "1580 Avenue Bourgogne, Chambly, QC J3L 2Y7";
 

@@ -15,6 +15,13 @@ import { pageDeCourses, ordreAccueil } from "../lib/ridesOrder.js";
 import { normaliserAdresse, chargerZones } from "../lib/rideAddresses.js";
 import { oublierRappels } from "../jobs/rideReminders.js";
 import { changementDeStatut, montantValide, texteChangementDeStatut } from "../lib/rideEdit.js";
+import { chauffeurPeutContacter, chauffeurPeutPartir, ouvertureContact, ouvertureDepart, quandLisible } from "../lib/fenetres.js";
+import { normaliserArrets, ArretsInvalides, trajetCourt, arretsDe } from "../lib/arrets.js";
+
+// « · Toyota Camry · gris · T45 KLM » : ce que le client doit reconnaître dans la rue.
+function vehiculeTexte(d) {
+  return [d?.carModel, d?.carColor, d?.plate].filter(Boolean).map((x) => ` · ${x}`).join("");
+}
 
 // Réservation par téléphone (besoin #5) : le Dispatch peut créer une course pour un client sans
 // compte — on retrouve son compte existant par téléphone, ou on lui en crée un à la volée. Si le
@@ -42,7 +49,7 @@ router.use(requireAuth);
 
 const TERMINAL_STATUSES = ["COMPLETED", "CANCELLED", "REFUSED"];
 const RIDE_INCLUDE = {
-  driver: { select: { id: true, name: true, carModel: true, plate: true, ratingAvg: true, photoUrl: true, carPhotoUrl: true } },
+  driver: { select: { id: true, name: true, carModel: true, carColor: true, plate: true, ratingAvg: true, photoUrl: true, carPhotoUrl: true } },
   client: { select: { id: true, name: true } },
 };
 
@@ -131,15 +138,17 @@ router.post("/", requirePermission("courses", "CLIENT"), async (req, res) => {
   let precisionArrivee = destConfidenceRecue || null;
   const avertissements = depart.avertissement && depart.avertissement !== "adresse-vide" ? [depart.avertissement] : [];
 
+  let destPlaceId = typeof req.body.destPlaceId === "string" ? req.body.destPlaceId.slice(0, 300) : null;
   if (destinationCode) {
     const q = await quote({ pickupAddress: pickupAddressFinale, destinationCode, clientId: quoteClientId });
     if (q.destination) {
       destAddress = q.destination.address;
       destLat = q.destination.lat;
       destLng = q.destination.lng;
-      // Les points du catalogue sont vérifiés à la main dans la page Tarifs : ce sont les seuls
-      // sur lesquels on lance un guidage automatique.
-      precisionArrivee = "verifie";
+      destPlaceId = null;
+      // Seuls les points du catalogue contrôlés (YUL Arrivées, P4, REM) lancent un guidage direct ;
+      // un point non vérifié (l'ancien point de YHU était le centre des pistes) guide par le texte.
+      precisionArrivee = q.destination.pointVerified ? "verifie" : "rue";
       if (isClientBooking || !fare) fare = q.price ?? 0;
     }
   } else if (destAddress) {
@@ -147,7 +156,26 @@ router.post("/", requirePermission("courses", "CLIENT"), async (req, res) => {
     if (arrivee.address) destAddress = arrivee.address;
     if (arrivee.coords) { destLat = arrivee.coords.lat; destLng = arrivee.coords.lng; }
     precisionArrivee = arrivee.confidence || precisionArrivee;
+    // Identifiant Google : celui du lieu choisi dans la liste, sinon celui trouvé par le géocodage.
+    destPlaceId = destPlaceId || arrivee.placeId || null;
   }
+
+  // Arrêts entre la prise en charge et la destination (6 octobre 2026), dans l'ordre saisi.
+  let arrets = [];
+  try {
+    arrets = await normaliserArrets(req.body.stops, { zones });
+  } catch (e) {
+    if (e instanceof ArretsInvalides) return res.status(400).json({ error: e.message });
+    throw e;
+  }
+  const pickupPlaceId = typeof req.body.pickupPlaceId === "string" ? req.body.pickupPlaceId.slice(0, 300) : depart.placeId || null;
+
+  // Messages en clair pour la console (6 octobre 2026) : une adresse que la carte ne trouve pas doit
+  // être vérifiée avant le départ du chauffeur, sinon il risque d'être guidé au mauvais endroit.
+  const messagesAdresse = [];
+  if (depart.avertissement === "adresse-introuvable") messagesAdresse.push(`Adresse de départ introuvable sur la carte : « ${pickupAddressFinale} ». Vérifiez-la.`);
+  if (!destinationCode && destAddress && typeof destLat !== "number") messagesAdresse.push(`Destination introuvable sur la carte : « ${destAddress} ». Vérifiez-la.`);
+  arrets.forEach((a, i) => { if (typeof a.lat !== "number") messagesAdresse.push(`Arrêt ${i + 1} introuvable sur la carte : « ${a.address} ». Vérifiez-le.`); });
 
   // Un montant envoyé par l'application d'un client n'est JAMAIS retenu : seul Taxi Sylvain fixe
   // les prix. Sans cette ligne, une vieille version installée (celle du 13 septembre envoyait
@@ -184,12 +212,15 @@ router.post("/", requirePermission("courses", "CLIENT"), async (req, res) => {
 
   // Les coordonnées viennent de la mise en forme ci-dessus quand l'adresse a dû être géocodée.
   const dest = { lat: destLat, lng: destLng };
-  const computedDistance = typeof distanceKm === "number" ? distanceKm : await computeDistanceKm(pickup, dest);
+  const computedDistance = typeof distanceKm === "number" ? distanceKm : await computeDistanceKm(pickup, dest, arrets);
 
   const ride = await prisma.ride.create({
     data: {
       pickupAddress: pickupAddressFinale,
       destAddress,
+      stops: arrets,
+      pickupPlaceId,
+      destPlaceId,
       pickupConfidence: precisionDepart,
       destConfidence: precisionArrivee,
       distanceKm: computedDistance,
@@ -221,7 +252,7 @@ router.post("/", requirePermission("courses", "CLIENT"), async (req, res) => {
     broadcast(req, `driver:${driverId}`, "ride:assigned", ride);
     notifyUser(driverId, {
       title: "Nouvelle course assignée",
-      body: `${ride.pickupAddress} → ${ride.destAddress}`,
+      body: trajetCourt(ride),
       data: { type: "ride:assigned", rideId: ride.id },
     });
     // Course confirmée dès sa création : courriel + invitation d'agenda au chauffeur et au client.
@@ -230,13 +261,13 @@ router.post("/", requirePermission("courses", "CLIENT"), async (req, res) => {
     broadcast(req, "drivers", "ride:broadcast", ride);
     notifyAllDrivers({
       title: "Course de dernière minute",
-      body: `${ride.pickupAddress} → ${ride.destAddress} — premier arrivé, premier servi`,
+      body: `${trajetCourt(ride)} — premier arrivé, premier servi`,
       data: { type: "ride:broadcast", rideId: ride.id },
     });
   }
   // « ville-non-reconnue » : la course est bien créée, mais aucun tarif du catalogue ne peut
   // s'appliquer. « zone-differente » : la mise en forme a été refusée pour ne pas changer le prix.
-  res.status(201).json({ ...ride, clientTempPassword, driverTempPassword, avertissementsAdresse: avertissements });
+  res.status(201).json({ ...ride, clientTempPassword, driverTempPassword, avertissementsAdresse: avertissements, messagesAdresse });
 });
 
 // Affecter / réaffecter un chauffeur (Dispatch)
@@ -246,7 +277,7 @@ router.post("/:id/assign", requirePermission("courses"), async (req, res) => {
   const ride = await prisma.ride.update({
     where: { id: req.params.id },
     data: { driverId, status: driverId ? "ACCEPTED" : "REQUESTED" },
-    include: { driver: { select: { name: true, carModel: true, plate: true } } },
+    include: { driver: { select: { name: true, carModel: true, carColor: true, plate: true } } },
   });
 
   // Changement de chauffeur : l'ancien voit la course disparaître de son agenda, le nouveau la
@@ -262,13 +293,13 @@ router.post("/:id/assign", requirePermission("courses"), async (req, res) => {
     broadcast(req, `driver:${driverId}`, "ride:assigned", ride);
     notifyUser(driverId, {
       title: "Nouvelle course assignée",
-      body: `${ride.pickupAddress} → ${ride.destAddress}`,
+      body: trajetCourt(ride),
       data: { type: "ride:assigned", rideId: ride.id },
     });
     if (ride.clientId) {
       const charge = {
         title: "Votre chauffeur est confirmé",
-        body: `${ride.driver.name}${ride.driver.carModel ? ` · ${ride.driver.carModel}` : ""}${ride.driver.plate ? ` · ${ride.driver.plate}` : ""} — ${ride.pickupAddress} → ${ride.destAddress}`,
+        body: `${ride.driver.name}${vehiculeTexte(ride.driver)} — ${trajetCourt(ride)}`,
         data: { type: "ride:status", rideId: ride.id, status: ride.status },
       };
       notifyUser(ride.clientId, charge);
@@ -292,7 +323,7 @@ router.post("/:id/broadcast", requirePermission("courses"), async (req, res) => 
   broadcast(req, "drivers", "ride:broadcast", ride);
   notifyAllDrivers({
     title: "Course de dernière minute",
-    body: `${ride.pickupAddress} → ${ride.destAddress} — premier arrivé, premier servi`,
+    body: `${trajetCourt(ride)} — premier arrivé, premier servi`,
     data: { type: "ride:broadcast", rideId: ride.id },
   });
   res.json(ride);
@@ -378,6 +409,13 @@ router.post("/:id/status", requireRole("DRIVER"), async (req, res) => {
   if (status !== "CANCELLED" && NEXT[current.status] !== status) {
     return res.status(409).json({ error: `Étape invalide : la course est actuellement « ${current.status} ».` });
   }
+  // Pas de départ par erreur ou par anticipation : « en route » et « démarrer » ne s'ouvrent que
+  // 3 heures avant l'heure de prise en charge (demande du propriétaire du 6 octobre 2026).
+  if ((status === "EN_ROUTE" || status === "STARTED") && !chauffeurPeutPartir(current)) {
+    return res.status(409).json({
+      error: `Trop tôt : vous pourrez vous mettre en route à partir de ${quandLisible(ouvertureDepart(current))} (3 heures avant la course).`,
+    });
+  }
 
   // Annulation par le chauffeur : on garde la course complète sous la main pour pouvoir retirer
   // l'évènement de son agenda après la mise à jour (la course ne lui sera plus rattachée).
@@ -442,6 +480,13 @@ router.post("/:id/call", async (req, res) => {
   if (!callAllowedForStatus(ride.status)) {
     return res.status(409).json({ error: "L'appel masqué n'est possible que pour une course confirmée ou en cours." });
   }
+  // Même délai que les messages : le chauffeur n'appelle le client qu'à partir de 2 heures avant
+  // la course (demande du propriétaire du 6 octobre 2026). Le client peut appeler quand il veut.
+  if (req.user.id === ride.driverId && !chauffeurPeutContacter(ride)) {
+    return res.status(403).json({
+      error: `Vous pourrez appeler le client à partir de ${quandLisible(ouvertureContact(ride))} (2 heures avant la course). D'ici là, passez par Taxi Sylvain.`,
+    });
+  }
   if (!isCallMaskingConfigured()) {
     return res.status(503).json({
       error: "Le masquage d'appel n'est pas configuré. Utilisez la messagerie interne en attendant, ou renseignez TWILIO_ACCOUNT_SID / TWILIO_AUTH_TOKEN / TWILIO_PROXY_SERVICE_SID dans backend/.env (voir .env.example).",
@@ -476,12 +521,24 @@ router.patch("/:id", requirePermission("courses"), async (req, res) => {
   const data = {};
 
   // Adresses : mise à la forme unique et géocodage si besoin (voir lib/rideAddresses.js).
-  const zonesEdition = pickupAddress !== undefined || destAddress !== undefined || destinationCode ? await chargerZones() : [];
+  const zonesEdition = pickupAddress !== undefined || destAddress !== undefined || destinationCode || req.body.stops !== undefined ? await chargerZones() : [];
   if (pickupAddress !== undefined) {
     const r = await normaliserAdresse(pickupAddress, { zones: zonesEdition, coords: { lat: pickupLat, lng: pickupLng, confidence: req.body.pickupConfidence } });
     data.pickupAddress = r.address ?? pickupAddress;
     data.pickupConfidence = r.confidence || null;
     if (r.coords && pickupLat === undefined) { data.pickupLat = r.coords.lat; data.pickupLng = r.coords.lng; }
+    // Identifiant Google du lieu choisi dans la liste, sinon celui trouvé par le géocodage.
+    data.pickupPlaceId = typeof req.body.pickupPlaceId === "string" ? req.body.pickupPlaceId.slice(0, 300) : r.placeId || null;
+  }
+
+  // Arrêts (6 octobre 2026) : la liste envoyée remplace la précédente ; une liste vide les retire.
+  if (req.body.stops !== undefined) {
+    try {
+      data.stops = await normaliserArrets(req.body.stops, { zones: zonesEdition });
+    } catch (e) {
+      if (e instanceof ArretsInvalides) return res.status(400).json({ error: e.message });
+      throw e;
+    }
   }
 
   // Client : un compte CLIENT existant, ou aucun.
@@ -501,13 +558,16 @@ router.patch("/:id", requirePermission("courses"), async (req, res) => {
     data.destAddress = q.destination.address;
     data.destLat = q.destination.lat;
     data.destLng = q.destination.lng;
-    data.destConfidence = "verifie";
+    // Guidage direct seulement sur un point contrôlé du catalogue (voir la création ci-dessus).
+    data.destConfidence = q.destination.pointVerified ? "verifie" : "rue";
+    data.destPlaceId = null;
     if (fare === undefined && q.price != null) data.fare = q.price;
   } else if (destAddress !== undefined) {
     const r = await normaliserAdresse(destAddress, { zones: zonesEdition, coords: { lat: destLat, lng: destLng, confidence: req.body.destConfidence } });
     data.destAddress = r.address ?? destAddress;
     data.destConfidence = r.confidence || null;
     if (r.coords && destLat === undefined) { data.destLat = r.coords.lat; data.destLng = r.coords.lng; }
+    data.destPlaceId = typeof req.body.destPlaceId === "string" ? req.body.destPlaceId.slice(0, 300) : r.placeId || null;
   }
   if (fare !== undefined) {
     const n = montantValide(fare);
@@ -554,16 +614,16 @@ router.patch("/:id", requirePermission("courses"), async (req, res) => {
   const chauffeurRetire = Boolean(before.driverId && data.driverId !== undefined && data.driverId !== before.driverId);
 
   // Distance recalculée si un point a changé et qu'aucune distance n'est saisie à la main.
-  const pointChange = ["pickupLat", "pickupLng", "destLat", "destLng"].some((k) => data[k] !== undefined);
+  const pointChange = ["pickupLat", "pickupLng", "destLat", "destLng", "stops"].some((k) => data[k] !== undefined);
   if (pointChange && distanceKm === undefined) {
     const merged = { ...before, ...data };
-    data.distanceKm = await computeDistanceKm({ lat: merged.pickupLat, lng: merged.pickupLng }, { lat: merged.destLat, lng: merged.destLng });
+    data.distanceKm = await computeDistanceKm({ lat: merged.pickupLat, lng: merged.pickupLng }, { lat: merged.destLat, lng: merged.destLng }, arretsDe(merged));
   }
 
   const ride = await prisma.ride.update({
     where: { id: req.params.id },
     data,
-    include: { client: { select: { id: true, name: true } }, driver: { select: { id: true, name: true, carModel: true, plate: true } } },
+    include: { client: { select: { id: true, name: true } }, driver: { select: { id: true, name: true, carModel: true, carColor: true, plate: true } } },
   });
   broadcast(req, "dispatch", "ride:updated", ride);
   broadcast(req, `ride:${ride.id}`, "ride:status", ride);
@@ -577,11 +637,11 @@ router.patch("/:id", requirePermission("courses"), async (req, res) => {
   // Nouveau chauffeur : même accueil qu'une affectation.
   if (ride.driverId && ride.driverId !== before.driverId) {
     broadcast(req, `driver:${ride.driverId}`, "ride:assigned", ride);
-    notifyUser(ride.driverId, { title: "Nouvelle course assignée", body: `${ride.pickupAddress} → ${ride.destAddress}`, data: { type: "ride:assigned", rideId: ride.id } });
+    notifyUser(ride.driverId, { title: "Nouvelle course assignée", body: trajetCourt(ride), data: { type: "ride:assigned", rideId: ride.id } });
     if (ride.clientId && ride.driver) {
       const charge = {
         title: "Votre chauffeur est confirmé",
-        body: `${ride.driver.name}${ride.driver.carModel ? ` · ${ride.driver.carModel}` : ""}${ride.driver.plate ? ` · ${ride.driver.plate}` : ""} — ${ride.pickupAddress} → ${ride.destAddress}`,
+        body: `${ride.driver.name}${vehiculeTexte(ride.driver)} — ${trajetCourt(ride)}`,
         data: { type: "ride:status", rideId: ride.id, status: ride.status },
       };
       notifyUser(ride.clientId, charge);
@@ -603,7 +663,7 @@ router.patch("/:id", requirePermission("courses"), async (req, res) => {
     broadcast(req, "dispatch", "ride:notification", { rideId: ride.id, status: ride.status, text: texteChangementDeStatut({ auteur: req.user.name, ride, status: ride.status }) });
     if (ride.status === "BROADCAST") {
       broadcast(req, "drivers", "ride:broadcast", ride);
-      notifyAllDrivers({ title: "Course de dernière minute", body: `${ride.pickupAddress} → ${ride.destAddress} — premier arrivé, premier servi`, data: { type: "ride:broadcast", rideId: ride.id } });
+      notifyAllDrivers({ title: "Course de dernière minute", body: `${trajetCourt(ride)} — premier arrivé, premier servi`, data: { type: "ride:broadcast", rideId: ride.id } });
     }
     if (ride.status === "CANCELLED") {
       sendRideCancellation(before, [
@@ -635,7 +695,8 @@ router.patch("/:id", requirePermission("courses"), async (req, res) => {
     const a = before[field] instanceof Date ? before[field].getTime() : before[field];
     const b = ride[field] instanceof Date ? ride[field].getTime() : ride[field];
     return a !== b;
-  }) || data.clientId !== undefined || Boolean(ride.driverId && ride.driverId !== before.driverId);
+  }) || data.clientId !== undefined || Boolean(ride.driverId && ride.driverId !== before.driverId)
+    || (data.stops !== undefined && JSON.stringify(arretsDe(before)) !== JSON.stringify(arretsDe(ride)));
   if (agendaChanged && ride.status !== "CANCELLED" && (ride.driverId || ride.clientId)) sendRideConfirmation(ride.id);
 
   // L'heure a changé : les rappels déjà notés n'ont plus de sens. Sans cet effacement, une
@@ -687,7 +748,7 @@ function sanitizeRide(ride, requester) {
   // Ne jamais exposer le téléphone direct de l'autre partie — seulement nom, véhicule, note.
   const out = { ...ride };
   if (out.client) out.client = { id: out.client.id, name: out.client.name };
-  if (out.driver) out.driver = { id: out.driver.id, name: out.driver.name, carModel: out.driver.carModel, plate: out.driver.plate, ratingAvg: out.driver.ratingAvg, photoUrl: out.driver.photoUrl, carPhotoUrl: out.driver.carPhotoUrl };
+  if (out.driver) out.driver = { id: out.driver.id, name: out.driver.name, carModel: out.driver.carModel, carColor: out.driver.carColor, plate: out.driver.plate, ratingAvg: out.driver.ratingAvg, photoUrl: out.driver.photoUrl, carPhotoUrl: out.driver.carPhotoUrl };
   return out;
 }
 

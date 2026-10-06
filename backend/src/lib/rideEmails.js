@@ -9,6 +9,7 @@ import { prisma } from "./prisma.js";
 import { isMailConfigured, parseFrom, sendMail } from "./mailer.js";
 import { buildRideIcs } from "./calendar.js";
 import { realEmailOrNull } from "./placeholderEmail.js";
+import { arretsDe } from "./arrets.js";
 
 const TZ = "America/Toronto";
 const DRIVER_APP_URL = process.env.DRIVER_APP_URL || "https://taxi-sylvain-driver.vercel.app";
@@ -16,7 +17,7 @@ const CLIENT_APP_URL = process.env.CLIENT_APP_URL || "https://taxi-sylvain-clien
 
 export const RIDE_INCLUDE = {
   client: { select: { id: true, name: true, email: true, phone: true } },
-  driver: { select: { id: true, name: true, email: true, carModel: true, plate: true } },
+  driver: { select: { id: true, name: true, email: true, carModel: true, carColor: true, plate: true } },
 };
 
 export function formatWhen(date) {
@@ -38,6 +39,9 @@ export function rideFields(ride, audience) {
   const fields = [
     ["Date et heure", formatWhen(ride.scheduledFor)],
     ["Adresse de départ", ride.pickupAddress],
+    // Arrêts dans l'ordre (6 octobre 2026) : aussi la seule façon pour un chauffeur resté sur une
+    // ancienne version de l'application de les connaître.
+    ...arretsDe(ride).map((a, i) => [`Arrêt ${i + 1}`, a.address]),
     ["Destination", ride.destAddress],
   ];
   if (typeof ride.distanceKm === "number") fields.push(["Distance", `${ride.distanceKm.toFixed(1)} km`]);
@@ -48,7 +52,7 @@ export function rideFields(ride, audience) {
     fields.push(["Client", ride.client.name]);
   }
   if (audience === "client" && ride.driver?.name) {
-    const vehicle = [ride.driver.carModel, ride.driver.plate].filter(Boolean).join(" · ");
+    const vehicle = [ride.driver.carModel, ride.driver.carColor, ride.driver.plate].filter(Boolean).join(" · ");
     fields.push(["Chauffeur", vehicle ? `${ride.driver.name} · ${vehicle}` : ride.driver.name]);
   }
   return fields;

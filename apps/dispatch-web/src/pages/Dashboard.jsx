@@ -1,4 +1,5 @@
 import React from "react";
+import { heure } from "../lib/heure.js";
 import { STATUS_LABEL, statusClass } from "../lib/status.js";
 
 const LEGEND = ["REQUESTED", "EN_ROUTE", "STARTED", "COMPLETED", "CANCELLED"];
@@ -23,7 +24,7 @@ export default function Dashboard({ notifs }) {
             <span className="toast-dot" />
             <span style={{ flex: 1 }}>{n.text}</span>
             <span style={{ color: "var(--muted)", fontSize: 12, whiteSpace: "nowrap" }}>
-              {n.at ? new Date(n.at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : ""}
+              {n.at ? heure(n.at) : ""}
             </span>
           </div>
         ))}

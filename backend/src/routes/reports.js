@@ -1,9 +1,14 @@
 import { Router } from "express";
 import { prisma } from "../lib/prisma.js";
 import { requireAuth, requireRole, requirePermission } from "../middleware/auth.js";
-import { generateWeeklyReports, previousWeekRange, mondayOf } from "../jobs/weeklyReport.js";
+import { generateWeeklyReports } from "../jobs/weeklyReport.js";
+import { previousWeekRange, mondayOf, semaineDe } from "../lib/semaines.js";
+import { filtrePeriode, rapportPeriode, recapsHebdomadaires, totaux, ligneCourse, STATUT_EFFECTUEE, STATUTS_ANNULES } from "../lib/rapports.js";
 import { streamReportPdf, streamReportXlsx } from "../lib/exportReport.js";
 
+// Rapports : une seule règle de calcul pour tous les écrans et exports (lib/rapports.js, 6 octobre
+// 2026) : une course compte à la date de la course (heure du Québec), dans les montants quand elle
+// est effectuée ; les chiffres sont recalculés à chaque lecture.
 const router = Router();
 
 // Accepte le token soit dans l'en-tête Authorization, soit en query (?token=...) — nécessaire
@@ -19,104 +24,116 @@ function authFromHeaderOrQuery(req, res, next) {
 
 router.use((req, res, next) => (req.path === "/export" ? authFromHeaderOrQuery(req, res, next) : requireAuth(req, res, next)));
 
-// Récapitulatif en direct pour une période donnée (besoin #14) — vue Dispatch
-router.get("/weekly", requirePermission("reports"), async (req, res) => {
-  const { from, to } = req.query;
-  const range = {
-    gte: from ? new Date(from) : previousWeekRange().weekStart,
-    lte: to ? new Date(to) : new Date(),
-  };
-
-  const rides = await prisma.ride.findMany({
-    where: { status: "COMPLETED", completedAt: range },
-    include: { driver: { select: { id: true, name: true } }, client: { select: { id: true, name: true } } },
-  });
-
-  const byDriver = {};
-  const byClient = {};
-  for (const ride of rides) {
-    if (ride.driverId) {
-      byDriver[ride.driverId] ??= { driver: ride.driver, rideCount: 0, totalFare: 0, royaltyDue: 0 };
-      byDriver[ride.driverId].rideCount += 1;
-      byDriver[ride.driverId].totalFare += ride.fare;
-      byDriver[ride.driverId].royaltyDue += ride.fare * ride.royaltyRate;
-    }
-    // Récap par client (cahier des charges : « par chauffeur ou encore par client »)
-    const clientKey = ride.clientId || "__none__";
-    byClient[clientKey] ??= { client: ride.client || { id: null, name: "Client non spécifié" }, rideCount: 0, totalFare: 0 };
-    byClient[clientKey].rideCount += 1;
-    byClient[clientKey].totalFare += ride.fare;
+/** Période demandée (from, to en ISO), sinon la semaine en cours. Null si une date est illisible. */
+function periode(query, parDefaut = () => semaineDe(new Date())) {
+  const { from, to } = query;
+  if (!from || !to) {
+    const s = parDefaut();
+    return { from: s.weekStart, to: s.weekEnd };
   }
+  const debut = new Date(from);
+  const fin = new Date(to);
+  if (Number.isNaN(debut.getTime()) || Number.isNaN(fin.getTime()) || fin < debut) return null;
+  return { from: debut, to: fin };
+}
 
-  res.json({ range, byDriver: Object.values(byDriver), byClient: Object.values(byClient) });
+const INCLUDE_RAPPORT = {
+  driver: { select: { id: true, name: true } },
+  client: { select: { id: true, name: true } },
+};
+
+// Rapport d'une période pour le Dispatch (page Rapports) : toutes les courses de la période,
+// classées par chauffeur, effectuées et à effectuer, avec les totaux ; plus le récap par client.
+router.get("/periode", requirePermission("reports"), async (req, res) => {
+  const p = periode(req.query);
+  if (!p) return res.status(400).json({ error: "Période invalide." });
+  const rides = await prisma.ride.findMany({ where: filtrePeriode(p.from, p.to), include: INCLUDE_RAPPORT });
+  const rapport = rapportPeriode(rides);
+
+  // Récap par client (cahier des charges : « par chauffeur ou encore par client »), courses effectuées.
+  const parClient = new Map();
+  for (const ride of rides) {
+    if (ride.status !== STATUT_EFFECTUEE) continue;
+    const cle = ride.clientId || "__aucun__";
+    if (!parClient.has(cle)) parClient.set(cle, { client: ride.client || { id: null, name: "Client non spécifié" }, lignes: [] });
+    parClient.get(cle).lignes.push(ligneCourse(ride));
+  }
+  const clients = [...parClient.values()]
+    .map((c) => ({ client: c.client, ...totaux(c.lignes).effectuees }))
+    .sort((a, b) => b.montant - a.montant);
+
+  res.json({ from: p.from, to: p.to, ...rapport, clients });
 });
 
-// Revenus de la semaine en cours pour le chauffeur connecté — "Mes revenus". Calculé en direct
-// (contrairement à /mine, qui liste les récaps hebdomadaires figés des semaines précédentes),
-// pour qu'un chauffeur qui vient de se créer un compte voie bien 0 $ tant qu'il n'a rien fait.
+// Ancienne vue (console d'avant le 6 octobre 2026) : même règle de calcul, ancien format.
+router.get("/weekly", requirePermission("reports"), async (req, res) => {
+  const p = periode(req.query, () => previousWeekRange());
+  if (!p) return res.status(400).json({ error: "Période invalide." });
+  const rides = await prisma.ride.findMany({ where: { status: STATUT_EFFECTUEE, ...filtrePeriode(p.from, p.to) }, include: INCLUDE_RAPPORT });
+  const r = rapportPeriode(rides);
+  res.json({
+    range: { gte: p.from, lte: p.to },
+    byDriver: r.chauffeurs.map((b) => ({ driver: b.chauffeur, rideCount: b.effectuees.nombre, totalFare: b.effectuees.montant, royaltyDue: b.effectuees.redevance })),
+    byClient: [],
+  });
+});
+
+// Revenus de la semaine en cours pour le chauffeur connecté — « Mes revenus ». Courses effectuées
+// dont la date tombe dans la semaine en cours (heure du Québec).
 router.get("/my-earnings", requireRole("DRIVER"), async (req, res) => {
-  const weekStart = mondayOf(new Date());
-  const rides = await prisma.ride.findMany({
-    where: { driverId: req.user.id, status: "COMPLETED", completedAt: { gte: weekStart } },
-  });
-  const totalFare = rides.reduce((sum, r) => sum + r.fare, 0);
-  const royaltyDue = rides.reduce((sum, r) => sum + r.fare * r.royaltyRate, 0);
-  res.json({ weekStart, rideCount: rides.length, totalFare, royaltyDue });
+  const { weekStart, weekEnd } = semaineDe(new Date());
+  const rides = await prisma.ride.findMany({ where: { driverId: req.user.id, status: STATUT_EFFECTUEE, ...filtrePeriode(weekStart, weekEnd) } });
+  const t = totaux(rides.map(ligneCourse)).effectuees;
+  res.json({ weekStart, rideCount: t.nombre, totalFare: t.montant, royaltyDue: t.redevance });
 });
 
-// Historique des récaps hebdomadaires figés du chauffeur connecté — "Mes rapports" (besoin #14)
+// « Mes rapports » du chauffeur connecté : une ligne par semaine terminée où il a des courses
+// effectuées, recalculée à chaque ouverture (même forme qu'avant : les applications installées la
+// lisent telle quelle).
 router.get("/mine", requireRole("DRIVER"), async (req, res) => {
-  const reports = await prisma.weeklyReport.findMany({
-    where: { driverId: req.user.id },
-    orderBy: { weekStart: "desc" },
+  const [rides, figes] = await Promise.all([
+    prisma.ride.findMany({ where: { driverId: req.user.id, status: STATUT_EFFECTUEE }, select: { id: true, status: true, fare: true, royaltyRate: true, scheduledFor: true, createdAt: true } }),
+    prisma.weeklyReport.findMany({ where: { driverId: req.user.id }, select: { id: true, weekStart: true, createdAt: true } }),
+  ]);
+  const ids = new Map(figes.map((f) => [new Date(f.weekStart).toISOString(), f]));
+  const recaps = recapsHebdomadaires(rides, { avant: mondayOf(new Date()) }).map((r) => {
+    const fige = ids.get(r.weekStart.toISOString());
+    return { id: fige?.id || `semaine-${r.weekStart.toISOString()}`, driverId: req.user.id, ...r, createdAt: fige?.createdAt || r.weekEnd };
   });
-  res.json(reports);
+  res.json(recaps);
 });
 
-// Déclenche manuellement la génération du récap (normalement automatique, voir cron dans index.js)
+// Recalcule le récap de la semaine dernière (normalement automatique le lundi à 04 h 00, voir
+// index.js). Silencieux : aucune notification ni courriel, pour ne plus inonder les chauffeurs.
 router.post("/generate", requirePermission("reports"), async (req, res) => {
   const { from, to } = req.body;
   const range = from && to ? { weekStart: new Date(from), weekEnd: new Date(to) } : previousWeekRange();
-  const io = req.app.get("io");
-  const results = await generateWeeklyReports(io, range);
+  const results = await generateWeeklyReports(req.app.get("io"), range);
   res.status(201).json({ range, count: results.length });
 });
 
-// Export PDF/Excel du récap — Dispatch (tous les chauffeurs) ou Chauffeur (le sien uniquement)
+// Export PDF/Excel — Dispatch (tous les chauffeurs) ou Chauffeur (le sien uniquement), avec le
+// détail course par course. Sans période : la semaine dernière.
 router.get("/export", async (req, res) => {
-  const format = req.query.format === "xlsx" ? "xlsx" : "pdf";
-  const { from, to } = req.query;
-  const range = from && to
-    ? { weekStart: new Date(from), weekEnd: new Date(to) }
-    : previousWeekRange();
-
-  const where = {
-    status: "COMPLETED",
-    completedAt: { gte: range.weekStart, lte: range.weekEnd },
-    driverId: { not: null },
-    ...(req.user.role === "DRIVER" ? { driverId: req.user.id } : {}),
-  };
   if (req.user.role === "CLIENT") return res.status(403).json({ error: "Accès refusé." });
   if (req.user.role === "ADMIN" && !req.user.permissions?.includes("reports")) {
     return res.status(403).json({ error: "Accès refusé : cette fonctionnalité n'est pas autorisée pour votre compte." });
   }
+  const format = req.query.format === "xlsx" ? "xlsx" : "pdf";
+  const p = periode(req.query, () => previousWeekRange());
+  if (!p) return res.status(400).json({ error: "Période invalide." });
 
-  const rides = await prisma.ride.findMany({ where, include: { driver: { select: { id: true, name: true } } } });
-
-  const byDriver = {};
-  for (const ride of rides) {
-    byDriver[ride.driverId] ??= { driverName: ride.driver.name, rideCount: 0, totalFare: 0, royaltyDue: 0 };
-    byDriver[ride.driverId].rideCount += 1;
-    byDriver[ride.driverId].totalFare += ride.fare;
-    byDriver[ride.driverId].royaltyDue += ride.fare * ride.royaltyRate;
-  }
-  const rows = Object.values(byDriver);
-
-  if (format === "xlsx") {
-    await streamReportXlsx(res, { weekStart: range.weekStart, weekEnd: range.weekEnd, rows });
-  } else {
-    streamReportPdf(res, { weekStart: range.weekStart, weekEnd: range.weekEnd, rows });
-  }
+  const where = {
+    ...filtrePeriode(p.from, p.to),
+    status: { notIn: STATUTS_ANNULES },
+    ...(req.user.role === "DRIVER" ? { driverId: req.user.id } : {}),
+  };
+  const rides = await prisma.ride.findMany({ where, include: INCLUDE_RAPPORT });
+  const rapport = rapportPeriode(rides);
+  // Le chauffeur ne voit que son propre bloc ; le Dispatch voit aussi les courses sans chauffeur.
+  const options = { weekStart: p.from, weekEnd: p.to, rapport, avecNonAssignees: req.user.role !== "DRIVER" };
+  if (format === "xlsx") await streamReportXlsx(res, options);
+  else streamReportPdf(res, options);
 });
 
 export default router;

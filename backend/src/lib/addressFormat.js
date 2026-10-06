@@ -188,11 +188,12 @@ export function buildGeocodeParams({ q, limit = "5", countrycodes = "ca,us" }) {
  * municipalité que le texte d'origine, on garde le texte d'origine (nettoyé) et on signale.
  * Aucun prix ne peut donc changer à cause d'une mise en forme.
  */
-export function canonicalAddress({ texte, geocode = null, zones = [] }) {
+export function canonicalAddress({ texte, geocode = null, forme: formeDonnee = null, zones = [] }) {
   const propre = cleanAddressText(texte);
-  if (!geocode) return { address: propre, avertissement: propre ? null : "adresse-vide" };
+  if (!geocode && !formeDonnee) return { address: propre, avertissement: propre ? null : "adresse-vide" };
 
-  const forme = formatFromNominatim(geocode, texte || "");
+  // « forme » : adresse déjà composée par Google Maps (googleMaps.js) ; sinon résultat OpenStreetMap.
+  const forme = formeDonnee || formatFromNominatim(geocode, texte || "");
   if (!forme) return { address: propre, avertissement: null };
 
   const zoneTexte = matchZone(texte, zones)?.name || null;

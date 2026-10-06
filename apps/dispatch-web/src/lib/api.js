@@ -72,7 +72,10 @@ export const api = {
   webPushUnsubscribe: (endpoint) => request("/push/web/subscribe", { method: "DELETE", body: { endpoint } }),
   changePassword: (currentPassword, newPassword) => request("/auth/change-password", { method: "POST", body: { currentPassword, newPassword } }),
   listRides: () => request("/rides"),
-  geocodeSearch: (q) => request(`/geocode/search?q=${encodeURIComponent(q)}`),
+  geocodeSearch: (q, session) => request(`/geocode/search?q=${encodeURIComponent(q)}${session ? `&session=${encodeURIComponent(session)}` : ""}`),
+  // Détail d'une suggestion Google choisie : adresse complète et point exact (6 octobre 2026).
+  geocodePlace: (placeId, session, { q = "", nom = "" } = {}) =>
+    request(`/geocode/place/${encodeURIComponent(placeId)}?${new URLSearchParams({ ...(session ? { session } : {}), q, nom })}`),
   createRide: (payload) => request("/rides", { method: "POST", body: payload }),
   getRide: (id) => request(`/rides/${id}`),
   updateRide: (id, payload) => request(`/rides/${id}`, { method: "PATCH", body: payload }),
@@ -82,6 +85,8 @@ export const api = {
   driverLocations: () => request("/drivers/locations"),
   search: (q) => request(`/drivers/search?q=${encodeURIComponent(q)}`),
   createDriver: (payload) => request("/drivers", { method: "POST", body: payload }),
+  // Fiche chauffeur modifiable : nom, courriel, téléphone, véhicule, couleur, plaque (6 octobre 2026).
+  updateDriver: (id, payload) => request(`/drivers/${id}`, { method: "PATCH", body: payload }),
   deleteDriver: (id) => request(`/drivers/${id}`, { method: "DELETE" }),
   listClients: () => request("/clients"),
   createClient: (payload) => request("/clients", { method: "POST", body: payload }),
@@ -102,6 +107,8 @@ export const api = {
   importDrivers: (file) => uploadFile("/drivers/import", file),
   deleteRide: (id) => request(`/rides/${id}`, { method: "DELETE" }),
   weeklyReport: (range) => request(`/reports/weekly${range?.from ? `?${new URLSearchParams(range)}` : ""}`),
+  // Rapport d'une période classé par chauffeur, effectuées et à effectuer (6 octobre 2026).
+  reportPeriod: (range) => request(`/reports/periode${range?.from ? `?${new URLSearchParams(range)}` : ""}`),
   generateWeeklyReport: (range) => request("/reports/generate", { method: "POST", body: range || {} }),
   downloadReport: async (format, range) => {
     const params = new URLSearchParams({ format, ...(range || {}) });

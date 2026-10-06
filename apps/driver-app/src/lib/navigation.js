@@ -7,13 +7,14 @@ import { chooseTarget, buildWazeUrl, buildGoogleMapsUrl } from "./navigationLink
 // sur iPhone, LSApplicationQueriesSchemes (app.json également).
 
 export async function openWaze(dest) {
-  const liens = buildWazeUrl(chooseTarget(dest));
+  const liens = buildWazeUrl(chooseTarget(dest, "waze"));
   if (!liens) return false;
   return openWithFallback(liens.natif, liens.web);
 }
 
-export async function openGoogleMaps(dest) {
-  const liens = buildGoogleMapsUrl(chooseTarget(dest), Platform.OS);
+// `etapes` : arrêts à faire avant `dest`, dans l'ordre (itinéraire complet, 6 octobre 2026).
+export async function openGoogleMaps(dest, etapes = []) {
+  const liens = buildGoogleMapsUrl(chooseTarget(dest, "google"), Platform.OS, etapes.map((e) => chooseTarget(e, "google")));
   if (!liens) return false;
   return openWithFallback(liens.natif, liens.web);
 }

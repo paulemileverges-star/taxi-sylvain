@@ -121,10 +121,11 @@ registerSocketHandlers(io);
 // heure de Montréal, et la semaine comptée ne correspondait pas à la semaine vécue.
 const HORLOGE_QUEBEC = { timezone: FUSEAU_TAXI };
 
-// Génère automatiquement le récap de la semaine qui vient de se terminer, chaque lundi à 00h05
-// (besoin #14), et l'envoie par courriel à chaque chauffeur. POST /api/reports/generate permet un
-// déclenchement manuel (tests, rattrapage) qui, lui, n'envoie pas de courriel.
-cron.schedule("5 0 * * 1", () => generateWeeklyReports(io, undefined, { courriel: true }).catch((e) => signalerErreur("Récap hebdomadaire du lundi", e)), HORLOGE_QUEBEC);
+// Génère automatiquement le récap de la semaine qui vient de se terminer, chaque lundi à 04 h 00,
+// heure de Montréal (demande du propriétaire du 6 octobre 2026 ; 00 h 05 auparavant), puis l'envoie
+// par courriel et notification à chaque chauffeur, une seule fois par semaine (jobs/weeklyReport.js).
+// POST /api/reports/generate recalcule à la main, sans courriel ni notification.
+cron.schedule("0 4 * * 1", () => generateWeeklyReports(io, undefined, { courriel: true }).catch((e) => signalerErreur("Récap hebdomadaire du lundi", e)), HORLOGE_QUEBEC);
 
 // Rappels de course programmés (besoin #1) — voir src/jobs/rideReminders.js.
 cron.schedule("* * * * *", () => sendRideReminders(io).catch((e) => signalerErreur("Rappels de course", e)), HORLOGE_QUEBEC);

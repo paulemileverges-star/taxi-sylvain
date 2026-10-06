@@ -5,6 +5,7 @@ import { playSound } from "../lib/sound";
 import { showAlert } from "../lib/alert";
 import { getSocket } from "../lib/socket";
 import SwipeButton from "../components/SwipeButton";
+import { heure, jour } from "../lib/dates";
 
 const STATUS_LABEL = {
   REQUESTED: "Course proposée", BROADCAST: "Course diffusée — premier arrivé, premier servi", ACCEPTED: "Acceptée",
@@ -12,12 +13,9 @@ const STATUS_LABEL = {
   COMPLETED: "Terminée", CANCELLED: "Annulée", REFUSED: "Refusée",
 };
 
-function fmtDate(d) {
-  return d ? new Date(d).toLocaleDateString("fr-CA") : "—";
-}
-function fmtTime(d) {
-  return d ? new Date(d).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "—";
-}
+// Heure toujours sur 24 heures, à l'heure de Montréal (lib/dates.js, 6 octobre 2026).
+const fmtDate = jour;
+const fmtTime = heure;
 
 function Field({ label, value }) {
   if (!value) return null;
@@ -133,7 +131,7 @@ export default function HomeScreen({ user, onOpenRide, onOpenEarnings, onOpenMes
               <View key={entry.id} style={styles.scheduleCard}>
                 <Text style={styles.scheduleTime}>
                   {new Date(entry.startsAt).toLocaleDateString("fr-CA", { weekday: "short" })}{" "}
-                  {new Date(entry.startsAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                  {heure(entry.startsAt)}
                 </Text>
                 <Text style={styles.addr}>{entry.label}</Text>
               </View>
@@ -157,6 +155,7 @@ export default function HomeScreen({ user, onOpenRide, onOpenEarnings, onOpenMes
               <Field label="Heure de la course" value={fmtTime(item.scheduledFor || item.createdAt)} />
               <Field label="Nom du client" value={item.client?.name} />
               <Field label="Adresse de départ" value={item.pickupAddress} />
+              {(Array.isArray(item.stops) ? item.stops : []).map((a, i) => <Field key={i} label={`Arrêt ${i + 1}`} value={a.address} />)}
               <Field label="Destination" value={item.destAddress} />
               <Field label="Distance" value={item.distanceKm != null ? `${item.distanceKm.toFixed(1)} km` : null} />
               <Field label="Numéro de vol" value={item.flightNumber} />

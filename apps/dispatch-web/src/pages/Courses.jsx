@@ -8,13 +8,9 @@ import RideEditModal from "../components/RideEditModal.jsx";
 import { STATUS_LABEL, statusClass, localInputToIso } from "../lib/status.js";
 import { filtrerCourses, paginer, PERIODES } from "../lib/coursesFilter.js";
 import { filterClients } from "../lib/clientSearch.js";
-
-function fmtDate(d) {
-  return new Date(d).toLocaleDateString("fr-CA");
-}
-function fmtTime(d) {
-  return new Date(d).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-}
+import { heure, jour } from "../lib/heure.js";
+import { libelleCourt } from "../lib/destinations.js";
+import ArretsEditor, { arretsAEnvoyer } from "../components/ArretsEditor.jsx";
 
 function Field({ label, value }) {
   return (
@@ -33,9 +29,10 @@ export default function Courses() {
   const [clients, setClients] = useState([]);
   const [showCreate, setShowCreate] = useState(false);
   const EMPTY_FORM = {
-    pickupAddress: "", pickupLat: null, pickupLng: null, pickupConfidence: null,
-    destinationCode: "", // "" = autre adresse, sinon YUL / YHU / REM
-    destAddress: "", destLat: null, destLng: null, destConfidence: null,
+    pickupAddress: "", pickupLat: null, pickupLng: null, pickupConfidence: null, pickupPlaceId: null,
+    stops: [], // arrêts entre la prise en charge et la destination (6 octobre 2026)
+    destinationCode: "", // "" = autre adresse, sinon YUL (Arrivées) / YULP4 / YHU / REM
+    destAddress: "", destLat: null, destLng: null, destConfidence: null, destPlaceId: null,
     fare: "", driverId: "", clientId: "", flightNumber: "", scheduledFor: "",
     clientName: "", clientPhone: "", clientEmail: "", clientAddress: "", clientNotes: "",
     newDriverName: "", newDriverEmail: "", newDriverPhone: "", newDriverCarModel: "", newDriverPlate: "",
@@ -124,6 +121,7 @@ export default function Courses() {
       destAddress: preset ? preset.address : "",
       destLat: preset?.lat ?? null,
       destLng: preset?.lng ?? null,
+      destPlaceId: null,
       fare: preset ? "" : f.fare,
     }));
     setQuoteInfo(null);
@@ -161,7 +159,10 @@ export default function Courses() {
         pickupLat: form.pickupLat ?? undefined,
         pickupLng: form.pickupLng ?? undefined,
         pickupConfidence: form.pickupConfidence ?? undefined,
+        pickupPlaceId: form.pickupPlaceId ?? undefined,
         destConfidence: form.destConfidence ?? undefined,
+        destPlaceId: form.destPlaceId ?? undefined,
+        stops: arretsAEnvoyer(form.stops),
         destinationCode: form.destinationCode || undefined,
         destAddress: form.destAddress,
         destLat: form.destLat ?? undefined,
@@ -190,6 +191,8 @@ export default function Courses() {
       if (ride.clientTempPassword || ride.driverTempPassword) {
         setCredentials({ client: ride.clientTempPassword, driver: ride.driverTempPassword });
       }
+      // Adresse que la carte ne trouve pas : à vérifier avant le départ du chauffeur.
+      if (ride.messagesAdresse?.length) window.alert(`Course créée, mais :\n\n${ride.messagesAdresse.join("\n")}`);
     } catch (e) {
       setError(e.message);
     }
@@ -259,10 +262,13 @@ export default function Courses() {
               <span className={`chip status-chip ${statusClass(ride.status)}`}>{STATUS_LABEL[ride.status] || ride.status}</span>
               <span style={{ color: "#f5a623", fontWeight: 700 }}>{ride.fare > 0 ? `${ride.fare.toFixed(2)} $` : "Montant à confirmer"}</span>
             </div>
-            <Field label="Date de la course :" value={fmtDate(when)} />
-            <Field label="Heure de la course :" value={fmtTime(when)} />
+            <Field label="Date de la course :" value={jour(when)} />
+            <Field label="Heure de la course :" value={heure(when)} />
             <Field label="Nom du client :" value={ride.client?.name} />
             <Field label="Adresse de départ :" value={ride.pickupAddress} />
+            {(Array.isArray(ride.stops) ? ride.stops : []).map((a, i) => (
+              <Field key={i} label={`Arrêt ${i + 1} :`} value={a.address} />
+            ))}
             <Field label="Destination :" value={ride.destAddress} />
             <Field label="Distance :" value={ride.distanceKm != null ? `${ride.distanceKm.toFixed(1)} km` : null} />
             <Field label="Numéro de vol :" value={ride.flightNumber} />
@@ -331,12 +337,14 @@ export default function Courses() {
               <AddressInput
                 label="Adresse de prise en charge (domicile du client par défaut)"
                 value={form.pickupAddress}
-                onChange={({ address, lat, lng, confidence }) => setForm({ ...form, pickupAddress: address, pickupLat: lat, pickupLng: lng, pickupConfidence: confidence || null })}
+                point={{ lat: form.pickupLat, confidence: form.pickupConfidence }}
+                onChange={({ address, lat, lng, confidence, placeId }) => setForm({ ...form, pickupAddress: address, pickupLat: lat, pickupLng: lng, pickupConfidence: confidence || null, pickupPlaceId: placeId || null })}
               />
             </div>
+            <ArretsEditor arrets={form.stops} onChange={(stops) => setForm((f) => ({ ...f, stops }))} />
             <label style={{ display: "block", marginTop: 8 }}>Destination</label>
             <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 4 }}>
-              {[...destinations.map((d) => ({ code: d.code, label: d.code })), { code: "", label: "Autre adresse" }].map((opt) => (
+              {[...destinations.map((d) => ({ code: d.code, label: libelleCourt(d) })), { code: "", label: "Autre adresse" }].map((opt) => (
                 <button
                   key={opt.code || "other"}
                   type="button"
@@ -355,7 +363,8 @@ export default function Courses() {
               <AddressInput
                 label="Adresse de destination"
                 value={form.destAddress}
-                onChange={({ address, lat, lng, confidence }) => setForm({ ...form, destAddress: address, destLat: lat, destLng: lng, destConfidence: confidence || null })}
+                point={{ lat: form.destLat, confidence: form.destConfidence }}
+                onChange={({ address, lat, lng, confidence, placeId }) => setForm({ ...form, destAddress: address, destLat: lat, destLng: lng, destConfidence: confidence || null, destPlaceId: placeId || null })}
               />
             )}
             <Suggest

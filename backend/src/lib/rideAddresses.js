@@ -29,12 +29,16 @@ export async function normaliserAdresse(texte, { zones = [], coords = null, geoc
   } catch {
     trouve = null;
   }
-  const r = canonicalAddress({ texte, geocode: trouve?.raw || null, zones });
+  // Google fournit l'adresse déjà composée (forme) et sa précision ; Nominatim, son résultat brut.
+  const r = canonicalAddress({ texte, geocode: trouve?.raw || null, forme: trouve?.forme || null, zones });
   return {
     address: r.address,
     coords: trouve ? { lat: trouve.lat, lng: trouve.lng } : null,
-    confidence: trouve ? confidenceFromOsm(trouve.raw) : null,
-    avertissement: r.avertissement,
+    confidence: trouve ? trouve.confidence || confidenceFromOsm(trouve.raw) : null,
+    placeId: trouve?.placeId || null,
+    // Introuvable sur la carte (6 octobre 2026) : la course est enregistrée quand même, mais la
+    // console prévient, pour que l'adresse soit vérifiée avant le départ du chauffeur.
+    avertissement: trouve ? r.avertissement : r.avertissement || "adresse-introuvable",
     zoneTexte: r.zoneTexte,
     zoneForme: r.zoneForme,
   };

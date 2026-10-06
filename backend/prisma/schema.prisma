@@ -36,6 +36,7 @@ model User {
 
   // Champs spécifiques chauffeur
   carModel    String?
+  carColor    String? // couleur du véhicule, modifiable par le Dispatch (6 octobre 2026)
   plate       String?
   ratingAvg   Float?  @default(5.0)
   photoUrl    String? // photo du chauffeur (besoin #13)
@@ -106,6 +107,13 @@ model Ride {
   pickupLng     Float?
   destLat       Float?
   destLng       Float?
+  // Identifiants Google Maps des adresses choisies dans la liste (vide sans clé Google) : ils
+  // ouvrent dans Google Maps exactement le lieu choisi, pas une devinette.
+  pickupPlaceId String?
+  destPlaceId   String?
+  // Arrêts entre la prise en charge et la destination, dans l'ordre (6 octobre 2026) :
+  // [{ address, lat, lng, confidence, placeId }], 5 au plus (lib/arrets.js).
+  stops         Json       @default("[]")
   distanceKm    Float?
   fare          Float
   royaltyRate   Float      @default(0.10) // 10% versé à Taxi Sylvain
@@ -186,6 +194,9 @@ model Destination {
   lng       Float?
   price     Float? // null = montant à confirmer par le Dispatch
   sortOrder Int     @default(0)
+  // Point de guidage contrôlé (arrivées de YUL, P4, REM) : seul un point vérifié lance un guidage
+  // direct ; sinon Waze et Google Maps reçoivent l'adresse écrite (6 octobre 2026).
+  pointVerified Boolean @default(false)
 }
 
 // Grille tarifaire par municipalité de prise en charge vers les aéroports (catalogue Taxi Sylvain).
@@ -294,6 +305,8 @@ model WeeklyReport {
   totalFare  Float
   royaltyDue Float
   createdAt  DateTime @default(now())
+  // Notification « récap prêt » déjà envoyée : un seul envoi par chauffeur et par semaine.
+  notifiedAt DateTime?
 
   @@unique([driverId, weekStart])
 }

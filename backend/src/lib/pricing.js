@@ -51,13 +51,23 @@ const CHAMP_PRIX = { YUL: "priceYUL", YHU: "priceYHU", REM: "priceREM" };
 const valide = (n) => typeof n === "number" && Number.isFinite(n) && n > 0;
 
 /**
+ * Colonne de la grille pour une destination. Les deux adresses de l'aéroport Montréal-Trudeau
+ * (YUL Arrivées et YULP4, stationnement P4, depuis le 6 octobre 2026) prennent le même tarif YUL.
+ */
+export function champPrix(code) {
+  const c = String(code || "").toUpperCase();
+  if (CHAMP_PRIX[c]) return CHAMP_PRIX[c];
+  return c.startsWith("YUL") ? "priceYUL" : null;
+}
+
+/**
  * Tarif applicable, dans cet ordre : prix négocié avec le client, puis grille de sa municipalité,
  * puis prix de repli de la destination. Un zéro trouvé en base est ignoré à chaque étape.
  * L'appel à deux arguments reste valable (aucun prix client).
  */
 export function priceFor(destination, zone, clientPrices) {
   if (!destination) return null;
-  const champ = CHAMP_PRIX[destination.code];
+  const champ = champPrix(destination.code);
   for (const candidat of [clientPrices?.[champ], zone?.[champ], destination.price]) {
     if (valide(candidat)) return candidat;
   }
@@ -67,7 +77,7 @@ export function priceFor(destination, zone, clientPrices) {
 /** D'où vient le prix affiché : « client », « zone », « destination », ou null si aucun. */
 export function priceSource(destination, zone, clientPrices) {
   if (!destination) return null;
-  const champ = CHAMP_PRIX[destination.code];
+  const champ = champPrix(destination.code);
   if (valide(clientPrices?.[champ])) return "client";
   if (valide(zone?.[champ])) return "zone";
   if (valide(destination.price)) return "destination";

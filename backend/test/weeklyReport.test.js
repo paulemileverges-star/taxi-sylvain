@@ -66,6 +66,6 @@ test("la synthèse au Dispatch liste chaque chauffeur et les totaux, et dit quan
   assert.match(m.html, /Paul Côté/);
   assert.match(m.text, /- Paul Côté : 3 course\(s\), 200\.00 \$, redevance 20\.00 \$/);
   const vide = messageRecapDispatch({ ...semaine, lignes: [] });
-  assert.match(vide.text, /Aucune course terminée cette semaine/);
-  assert.match(vide.html, /Aucune course terminée cette semaine/);
+  assert.match(vide.text, /Aucune course effectuée cette semaine/);
+  assert.match(vide.html, /Aucune course effectuée cette semaine/);
 });

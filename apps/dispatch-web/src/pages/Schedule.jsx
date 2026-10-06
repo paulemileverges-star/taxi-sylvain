@@ -3,6 +3,7 @@ import { api } from "../lib/api.js";
 import { playSound } from "../lib/sound.js";
 import RideEditModal from "../components/RideEditModal.jsx";
 import { startOfWeek, addDays, scheduleItemsForDay } from "../lib/scheduleOrder.js";
+import { heure } from "../lib/heure.js";
 
 const DAYS = ["Lun", "Mar", "Mer", "Jeu", "Ven", "Sam", "Dim"];
 const STATUS_LABEL = {
@@ -89,10 +90,10 @@ export default function Schedule() {
                   style={{ background: "rgba(245,166,35,0.12)", border: "1px solid var(--amber)", borderRadius: 8, padding: "6px 8px", marginBottom: 6, fontSize: 12, cursor: "pointer" }}
                 >
                   <div className="row">
-                    <strong>{new Date(item.ride.scheduledFor).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</strong>
+                    <strong>{heure(item.ride.scheduledFor)}</strong>
                     <span style={{ color: "var(--amber)", fontSize: 11 }}>{STATUS_LABEL[item.ride.status] || item.ride.status} · ✎ modifier</span>
                   </div>
-                  <div>{item.ride.pickupAddress} → {item.ride.destAddress}</div>
+                  <div>{item.ride.pickupAddress} → {item.ride.destAddress}{item.ride.stops?.length ? ` (+${item.ride.stops.length} arrêt${item.ride.stops.length > 1 ? "s" : ""})` : ""}</div>
                   <div style={{ color: "#8b99b5" }}>
                     {item.ride.client?.name || "Client non spécifié"}{item.ride.driver?.name ? ` · ${item.ride.driver.name}` : ""}
                   </div>
@@ -100,7 +101,7 @@ export default function Schedule() {
               ) : (
                 <div key={item.id} style={{ background: "#1d2c46", borderRadius: 8, padding: "6px 8px", marginBottom: 6, fontSize: 12 }}>
                   <div className="row">
-                    <strong>{new Date(item.entry.startsAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</strong>
+                    <strong>{heure(item.entry.startsAt)}</strong>
                     <button
                       onClick={() => remove(item.entry.id)}
                       title="Supprimer ce créneau"
