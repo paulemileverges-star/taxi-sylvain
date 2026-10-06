@@ -9,6 +9,7 @@
 // chaque route au moment où elle est créée ; une route déclarée avant l'import resterait fragile.
 // C'est pourquoi index.js importe ce fichier en tout premier.
 import "express-async-errors";
+import { signalerErreur } from "./alertes.js";
 
 // Dernier middleware : toute erreur non traitée devient une réponse propre au lieu d'un plantage.
 export function installErrorHandler(app) {
@@ -26,15 +27,23 @@ export function installErrorHandler(app) {
 
     // Chemin sans les paramètres : l'adresse de téléchargement des récapitulatifs contient le jeton
     // de connexion (?token=...), qui ne doit jamais se retrouver dans les journaux.
-    console.error(`Erreur non traitée sur ${req.method} ${req.baseUrl || ""}${req.path} :`, err);
+    // Journalisée et envoyée par courriel à la personne technique (lib/alertes.js).
+    signalerErreur(`Erreur non traitée sur ${req.method} ${req.baseUrl || ""}${req.path}`, err);
     res.status(500).json({ error: "Erreur interne du serveur. Réessayez dans un instant." });
   });
 }
 
 // Promesses lancées sans attendre leur résultat (notifications push, courriels...) : une erreur
-// y est journalisée au lieu d'arrêter le serveur.
+// y est journalisée et signalée au lieu d'arrêter le serveur.
 export function installProcessGuards() {
   process.on("unhandledRejection", (reason) => {
-    console.error("Promesse rejetée non traitée :", reason);
+    signalerErreur("Promesse rejetée non traitée", reason);
+  });
+  // Erreur hors de toute requête : l'état du processus n'est plus sûr. On prévient (5 secondes au
+  // plus pour le courriel), puis on s'arrête : Railway redémarre le service tout seul.
+  process.on("uncaughtException", (err) => {
+    const delai = new Promise((resolve) => setTimeout(resolve, 5000));
+    Promise.race([signalerErreur("Arrêt du serveur sur une erreur imprévue (redémarrage automatique par Railway)", err), delai])
+      .finally(() => process.exit(1));
   });
 }

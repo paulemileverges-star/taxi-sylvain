@@ -1,0 +1,31 @@
+# Surveillance de la production, toutes les heures, sans compte supplémentaire.
+#
+# Rejoue scripts/verifier-mise-en-ligne.mjs (API, pages légales, site, trois applications web à
+# jour et autorisées par le serveur). En cas d'échec, une seconde tentative 3 minutes plus tard
+# évite les fausses alertes ; si elle échoue aussi, l'exécution est marquée en échec et GitHub
+# envoie un courriel au titulaire du dépôt (réglage par défaut : Settings > Notifications >
+# Actions, « Failed workflows only »).
+#
+# Coût : environ 1 minute par heure, soit 720 minutes par mois sur les 2 000 gratuites d'un dépôt
+# privé GitHub Free. Ajouté le 6 octobre 2026.
+name: Surveillance de la production
+
+on:
+  schedule:
+    - cron: "17 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verifier:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Vérifier la production (seconde tentative après 3 minutes)
+        run: node scripts/verifier-mise-en-ligne.mjs || (sleep 180 && node scripts/verifier-mise-en-ligne.mjs)

@@ -37,6 +37,8 @@ import { generateWeeklyReports } from "./jobs/weeklyReport.js";
 import { sendRideReminders } from "./jobs/rideReminders.js";
 import { voiceStatusLine } from "./lib/twilioVoice.js";
 import { FUSEAU_TAXI } from "./lib/ridesOrder.js";
+import { fichiersPublics, faireSauvegarde, sauvegardeSiAncienne, sauvegardesStatusLine } from "./lib/sauvegarde.js";
+import { alertesStatusLine, signalerErreur } from "./lib/alertes.js";
 
 const app = express();
 app.set("trust proxy", 1); // derrière le proxy Railway — nécessaire pour que req.ip soit la vraie IP (limiteur de tentatives)
@@ -56,26 +58,12 @@ ensureUploadsDir();
 console.log(mailStatusLine());
 console.log(voiceStatusLine());
 console.log(webPushStatusLine());
+console.log(alertesStatusLine());
+console.log(sauvegardesStatusLine());
 // Photos servies en lecture seule : jamais interprétées comme une page (nosniff) ni exécutées
-// (sandbox), même si un fichier piégé avait été déposé avant le verrouillage de l'envoi.
-app.use(
-  "/uploads",
-  express.static(uploadsDir, {
-    fallthrough: true,
-    setHeaders: (res, filePath) => {
-      res.setHeader("X-Content-Type-Options", "nosniff");
-      if (filePath.endsWith(".apk")) {
-        // Fichiers d'installation Android (dossier apk/ du disque persistant, déposés à la main) :
-        // servis comme pièce jointe nommée, sans bac à sable, pour que Chrome Android termine le
-        // téléchargement et propose l'installation.
-        const nom = filePath.split(/[\\/]/).pop();
-        res.setHeader("Content-Disposition", `attachment; filename="${nom}"`);
-        return;
-      }
-      res.setHeader("Content-Security-Policy", "default-src 'none'; img-src 'self'; sandbox");
-    },
-  })
-);
+// (sandbox), même si un fichier piégé avait été déposé avant le verrouillage de l'envoi. Le
+// dossier caché des sauvegardes (.sauvegardes/) n'est jamais servi (voir lib/sauvegarde.js).
+app.use("/uploads", fichiersPublics(uploadsDir));
 
 app.get("/health", (req, res) => res.json({ ok: true }));
 
@@ -136,10 +124,16 @@ const HORLOGE_QUEBEC = { timezone: FUSEAU_TAXI };
 // Génère automatiquement le récap de la semaine qui vient de se terminer, chaque lundi à 00h05
 // (besoin #14), et l'envoie par courriel à chaque chauffeur. POST /api/reports/generate permet un
 // déclenchement manuel (tests, rattrapage) qui, lui, n'envoie pas de courriel.
-cron.schedule("5 0 * * 1", () => generateWeeklyReports(io, undefined, { courriel: true }).catch((e) => console.error("Erreur récap hebdomadaire:", e.message)), HORLOGE_QUEBEC);
+cron.schedule("5 0 * * 1", () => generateWeeklyReports(io, undefined, { courriel: true }).catch((e) => signalerErreur("Récap hebdomadaire du lundi", e)), HORLOGE_QUEBEC);
 
 // Rappels de course programmés (besoin #1) — voir src/jobs/rideReminders.js.
-cron.schedule("* * * * *", () => sendRideReminders(io).catch((e) => console.error("Erreur rappels de course:", e.message)), HORLOGE_QUEBEC);
+cron.schedule("* * * * *", () => sendRideReminders(io).catch((e) => signalerErreur("Rappels de course", e)), HORLOGE_QUEBEC);
+
+// Sauvegarde de la base chaque nuit à 3 h 30, heure du Québec (14 gardées, lib/sauvegarde.js), et
+// une sauvegarde de rattrapage une minute après le démarrage si la dernière date de plus de 20 h.
+const journaliserSauvegarde = (r) => r && console.log(`Sauvegarde de la base faite : ${r.fichier} (${Math.round(r.octets / 1024)} Ko).`);
+cron.schedule("30 3 * * *", () => faireSauvegarde().then(journaliserSauvegarde).catch((e) => signalerErreur("Sauvegarde de la base", e)), HORLOGE_QUEBEC);
+setTimeout(() => sauvegardeSiAncienne().then(journaliserSauvegarde).catch((e) => signalerErreur("Sauvegarde de la base (rattrapage au démarrage)", e)), 60_000).unref();
 
 const port = process.env.PORT || 4000;
 server.listen(port, () => console.log(`Taxi Sylvain API en écoute sur le port ${port}`));
