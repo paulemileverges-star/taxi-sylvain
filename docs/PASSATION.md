@@ -14,8 +14,12 @@ Lire aussi : `AGENTS.md` (règles courtes), `docs/ARCHITECTURE.md` (choix techni
 1. **Clé Google Maps à poser** (point 4 de la vague du 6 octobre) : tant que `GOOGLE_MAPS_API_KEY` n'est pas dans
    les variables du service backend sur Railway, les adresses viennent encore d'OpenStreetMap. Marche à suivre au
    § 6, « Adresses par Google Maps ».
-2. **Version 1.5.0 des deux applications compilée le 7 octobre 2026** (Android et iPhone, § 10) : à essayer sur de
-   vrais téléphones avant de la distribuer ; iPhone : envoi TestFlight puis informations d'examen bêta.
+2. **Version 1.5.0 des deux applications compilée le 7 octobre 2026** (EAS : chauffeur Android `b38b444a`, iPhone
+   `ce7fdd27` ; client Android `1d686fbe`, iPhone `37a18c4d`). Android : APK dans OneDrive `01-Applications/Android`,
+   **pas encore servis par les liens définitifs** (qui donnent la 1.4.0) : à déposer sur le volume après l'essai du
+   propriétaire (« publie »). iPhone : envoyées à App Store Connect, traitées (`VALID`, valables jusqu'au
+   4 janvier 2027), disponibles pour le groupe interne « Team (Expo) », rattachées au groupe externe ; l'examen bêta
+   attend les informations de contact et le compte de démonstration (titulaire du compte).
 3. **Rapports** : la règle de calcul a changé le 6 octobre (date de la course). `node scripts/comparer-rapports.mjs`
    sur une copie de la base montre, semaine par semaine, l'ancien et le nouveau calcul et les courses jamais
    terminées, à corriger dans la console avant de comparer avec le tableau de Taxi Sylvain.
