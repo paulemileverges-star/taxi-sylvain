@@ -1,5 +1,10 @@
-import { Audio } from "expo-av";
+import { createAudioPlayer, setAudioModeAsync } from "expo-audio";
 import { Platform } from "react-native";
+
+// Sons joués par l'application. Depuis le 6 octobre 2026 (branche expo-audio) : expo-audio remplace
+// expo-av, déprécié dans Expo SDK 54 et retiré à partir de SDK 55. expo-audio déclare d'office le
+// micro et des services au premier plan sur Android : ils sont bloqués dans app.json
+// (android.blockedPermissions), l'application n'enregistre jamais rien.
 
 // "notify" = un évènement arrive (message reçu, chauffeur affecté, statut changé, récap prêt...)
 // "action"  = confirmation d'une action que l'utilisateur vient de faire (message envoyé, statut avancé...)
@@ -19,25 +24,28 @@ async function reglerMode() {
   if (modeRegle || Platform.OS === "web") return;
   modeRegle = true;
   try {
-    await Audio.setAudioModeAsync({ playsInSilentModeIOS: true, staysActiveInBackground: true, shouldDuckAndroid: true });
+    await setAudioModeAsync({
+      playsInSilentMode: true,
+      shouldPlayInBackground: true,
+      interruptionMode: "duckOthers",
+      interruptionModeAndroid: "duckOthers",
+    });
   } catch {
     // Réglage indisponible sur cette plateforme : on joue le son quand même.
   }
 }
 
-async function getSound(type) {
-  if (cache[type]) return cache[type];
-  const { sound } = await Audio.Sound.createAsync(SOURCES[type] || SOURCES.notify);
-  cache[type] = sound;
-  return sound;
+function getPlayer(type) {
+  if (!cache[type]) cache[type] = createAudioPlayer(SOURCES[type] || SOURCES.notify);
+  return cache[type];
 }
 
 export async function playSound(type = "notify") {
   try {
     await reglerMode();
-    const sound = await getSound(type);
-    await sound.setPositionAsync(0);
-    await sound.playAsync();
+    const player = getPlayer(type);
+    await player.seekTo(0);
+    player.play();
   } catch {
     // Son indisponible (plateforme, permissions...) — on ignore silencieusement.
   }
