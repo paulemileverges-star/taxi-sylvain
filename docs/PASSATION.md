@@ -1,11 +1,22 @@
 # Passation du projet Taxi Sylvain
 
 Document de reprise pour tout assistant ou développeur qui continue le projet. Il décrit l'état réel au
-**18 septembre 2026** (commit `9886d2b` et suivants), la façon de travailler avec le propriétaire, les
+**6 octobre 2026** (dernière mise à jour ; historique complet au § 11), la façon de travailler avec le propriétaire, les
 procédures de déploiement, les règles métier à ne pas casser et tout ce qui reste à faire.
 
 Lire aussi : `AGENTS.md` (règles courtes), `docs/ARCHITECTURE.md` (choix techniques d'origine),
 `backend/.env.example` (variables d'environnement commentées).
+
+---
+
+## 0. Points urgents au 6 octobre 2026
+
+1. **Railway : la période d'essai se termine le 8 octobre 2026.** Passer à la formule Hobby (5 USD par mois)
+   avant cette date, sinon l'API s'arrête et les disques (base, photos, APK) sont effacés 30 jours plus tard (§ 8).
+2. **iPhone : les compilations TestFlight 1.4.0 ont expiré le 2 octobre 2026.** Nouvelle compilation iOS à faire
+   (accord du propriétaire) avant tout essai sur iPhone (§ 8, § 10).
+3. **Sauvegardes** : en place depuis le 6 octobre (§ 6). Copie sur le PC à lancer par le propriétaire :
+   `node scripts/recuperer-sauvegarde.mjs` (racine du dépôt), au moins chaque semaine.
 
 ---
 
@@ -130,7 +141,7 @@ Les fichiers `.env`, `.env.local` et `.vercel/` sont ignorés par Git. Aucun sec
 ## 5. Tests et vérification, à faire avant chaque annonce
 
 ```bash
-cd backend && npm test                       # 40 tests, quelques secondes
+cd backend && npm test                       # 256 tests au 6 octobre 2026, une vingtaine de secondes
 node scripts/verifier-mise-en-ligne.mjs      # à la racine, après chaque déploiement
 ```
 
@@ -139,11 +150,18 @@ node scripts/verifier-mise-en-ligne.mjs      # à la racine, après chaque dépl
 - `backend/test/rideEmails.test.js` : contenu des courriels, fuseau horaire, jamais de courriel fictif.
 - `backend/test/rules.test.js` : règle d'une heure des messages chauffeur, reconnaissance des municipalités,
   tarifs YUL/YHU/REM.
+- `backend/test/sauvegarde.test.js` : nom et rotation des sauvegardes, ordre de restauration, fichier refusé, et
+  **dossier `.sauvegardes/` jamais servi sous `/uploads`** (adresses encodées comprises).
+- `backend/test/alertes.test.js` : destinataires, anti-avalanche de 30 minutes, contenu du courriel d'alerte.
 
 Le script de vérification contrôle que l'API répond et que **chaque lien public sert la même version que la
 production**. Il a été écrit après l'incident du lien figé (§ 8). Code de sortie 0 = tout est à jour.
 
 Il n'y a pas encore de tests de bout en bout sur les interfaces (voir § 10).
+
+**Surveillance automatique** (depuis le 6 octobre 2026) : `.github/workflows/surveillance.yml` rejoue ce script
+toutes les heures sur GitHub, avec une seconde tentative après 3 minutes. Un échec envoie un courriel de GitHub
+au titulaire du dépôt (environ 720 minutes par mois sur les 2 000 gratuites d'un dépôt privé).
 
 ---
 
@@ -175,6 +193,41 @@ railway logs --service backend               # attendre « Taxi Sylvain API en �
 - Diagnostics affichés au démarrage : nombre de photos dans `/app/uploads` et état des courriels.
 - Projet Railway `taxi-sylvain` (id `24c08cdf-1275-41a8-8f46-a1ad1052f8bb`), service `backend`, base
   `Postgres-9vEj`. Volume `backend-volume` monté sur `/app/uploads` pour les photos.
+
+### Sauvegardes de la base (depuis le 6 octobre 2026)
+
+Railway ne sauvegarde Postgres qu'à la formule Pro (20 USD par mois). Le serveur fait donc lui-même une sauvegarde
+complète chaque nuit à 3 h 30 (heure du Québec), plus une au démarrage si la dernière date de plus de 20 h :
+`taxi-sylvain-AAAA-MM-JJ-HHMM.json.gz` (toutes les tables en JSON, compressé, 79 Ko le 6 octobre) dans
+`/app/uploads/.sauvegardes/` sur le disque persistant, 14 gardées (`src/lib/sauvegarde.js`). Ce dossier n'est jamais
+servi par `/uploads` (règle `dotfiles: deny` de `fichiersPublics()`, testée, vérifiée en production : 404).
+
+```bash
+# Dans le conteneur : lister, ou faire une sauvegarde tout de suite
+railway ssh --service backend -- sh -c "cd /app && node scripts/sauvegardes.mjs liste"
+railway ssh --service backend -- sh -c "cd /app && node scripts/sauvegardes.mjs maintenant"
+# Copie hors de Railway, sur le PC (racine du dépôt) ; par défaut :
+# OneDrive\Documents\Livrables Taxi-Sylvain Claude\10-Sauvegardes
+node scripts/recuperer-sauvegarde.mjs [--maintenant] [--dossier <chemin>]
+# Restauration, depuis backend/, sur une base aux mêmes migrations (à blanc par défaut)
+node scripts/restaurer-sauvegarde.mjs <fichier.json.gz> [--appliquer] [--production]
+```
+
+La sauvegarde est sur le même disque que les photos : elle protège d'une fausse manœuvre ou d'un script raté, pas
+de la perte du disque ou du compte. D'où la copie sur le PC, au moins chaque semaine. Le mode automatique de
+Claude Code refuse de la faire (lecture de données de production) : elle est lancée par le propriétaire.
+Restauration éprouvée le 6 octobre sur une base PostgreSQL 17 jetable : 131 lignes, 15 tables, aucune différence
+ligne par ligne ; une base distante est refusée sans `--production`. Le fichier contient des renseignements
+personnels et les empreintes des mots de passe : le garder dans un endroit protégé.
+
+### Alertes d'erreurs (depuis le 6 octobre 2026)
+
+`src/lib/alertes.js` envoie un courriel (Brevo) à `ALERTES_COURRIEL` (`contact@taxisylvain.ca`, redirigée vers la
+personne technique ; à défaut, aux comptes Dispatch) pour : une route en erreur 500, une promesse rejetée, un arrêt
+imprévu du serveur (Railway le redémarre), les rappels de course, le récap du lundi, la sauvegarde. Une erreur part
+tout de suite ; les suivantes sont résumées en un seul courriel au bout de 30 minutes. Les journaux de démarrage
+affichent « Alertes d'erreurs : … » et « Sauvegardes de la base : … ». Sentry reste possible plus tard pour les
+erreurs des écrans (compte à créer par le propriétaire).
 
 ### Console Dispatch (Vercel)
 
@@ -249,7 +302,7 @@ eas build --platform android --profile preview
 
 | Où | Variables |
 |---|---|
-| Railway, service backend | `DATABASE_URL`, `JWT_SECRET`, `CORS_ORIGIN`, `PORT` ; optionnelles : `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_PROXY_SERVICE_SID`, `TWILIO_CALLER_NUMBER`, `BREVO_API_KEY` ou `RESEND_API_KEY`, `MAIL_FROM`, `DRIVER_APP_URL`, `CLIENT_APP_URL`, `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT` (notifications Web Push des versions web, déposées le 20 septembre ; la paire de clés est dans `C:\Users\PC\cles-taxi-sylvain\vapid-web-push.json`) |
+| Railway, service backend | `DATABASE_URL`, `JWT_SECRET`, `CORS_ORIGIN`, `PORT` ; optionnelles : `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_PROXY_SERVICE_SID`, `TWILIO_CALLER_NUMBER`, `BREVO_API_KEY` ou `RESEND_API_KEY`, `MAIL_FROM`, `DRIVER_APP_URL`, `CLIENT_APP_URL`, `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT` (notifications Web Push des versions web, déposées le 20 septembre ; la paire de clés est dans `C:\Users\PC\cles-taxi-sylvain\vapid-web-push.json`) ; `ALERTES_COURRIEL` (alertes d'erreurs par courriel, depuis le 6 octobre 2026 : `contact@taxisylvain.ca`) |
 | Vercel, dispatch | `VITE_API_URL`, `VITE_SOCKET_URL` |
 | Vercel, driver et client | `EXPO_PUBLIC_API_URL`, `EXPO_PUBLIC_SOCKET_URL` |
 | EAS | définies dans `eas.json`, profil `preview` |
@@ -283,6 +336,24 @@ sinon l'application s'affiche mais ne peut plus se connecter. Les APK ne sont pa
 - **Nettoyage en attente, à faire par le propriétaire** : service Railway parasite `taxi-sylvain` en échec
   dans le projet, volume Railway détaché `postgres-volume` de 85 Mo, ancien projet Railway créé par erreur
   (id `7892fb08-d489-4abb-92ed-06418c706281`).
+- **Compte Railway encore en période d'essai** (constaté le 6 octobre 2026) : formule Hobby affichée mais aucun
+  abonnement actif (`isTrialing: true`, état `INACTIVE`), crédit restant 4,49 USD, **fin de l'essai le 8 octobre
+  2026**. Sans formule payante, le compte devient inactif et Railway supprime les disques (base, photos, APK)
+  30 jours après la fin du crédit. Consommation réelle : 2,01 USD du 5 septembre au 5 octobre ; la formule Hobby
+  (5 USD par mois, 5 USD d'usage inclus, disque de 5 Go au lieu de 0,5 Go) couvre ce besoin. Vérifier avec
+  `railway api '{ me { workspaces { plan customer { isTrialing trialDaysRemaining state creditBalance } } } }'`.
+- **Disque des photos et des APK : 175 Mo sur 500 Mo** (6 octobre 2026). Les deux APK en prennent environ 135 :
+  déposer une nouvelle version avant d'effacer l'ancienne dépasserait la limite de l'essai (5 Go avec Hobby).
+- **TestFlight : les deux compilations 1.4.0 ont expiré le 2 octobre 2026** (à la même seconde, 06 h 11 heure du
+  Pacifique), bien avant les 90 jours habituels ; cause non trouvée (certificats et profils valides jusqu'en
+  septembre 2027, lus par l'API App Store Connect). Les informations d'examen bêta (contact, compte de
+  démonstration) n'ont jamais été saisies. Pour remettre l'iPhone en essai : nouvelle compilation iOS (accord du
+  propriétaire), saisie de ces informations, puis `07-Outils/apple-testflight.mjs --soumettre` après avoir mis à
+  jour son texte « nouveautés » (resté à la version 1.3.1).
+- **Le compte Apple Developer contient aussi les applications Neomoov** (`com.neomoov.driver`,
+  `com.neomoov.client`, depuis le 1er octobre 2026) : un seul compte pour deux entreprises.
+- **Après un changement de branche, les dépendances des apps ne suivent pas** : `npm ci` dans `apps/driver-app`
+  et `apps/client-app` (la branche `expo-audio` a `expo-audio` au lieu d'`expo-av`).
 
 ---
 
@@ -345,9 +416,10 @@ sinon l'application s'affiche mais ne peut plus se connecter. Les APK ne sont pa
 | Brevo | **fait le 20 septembre** : compte créé, domaine `taxisylvain.ca` authentifié, `BREVO_API_KEY` et `MAIL_FROM` dans Railway, envoi reçu | rien : courriels de course, de rappel, de code de confirmation et de récap hebdomadaire partent. Le bouton de la page Administrateurs sert de contrôle |
 | Firebase | **complet le 20 septembre : clé FCM V1 déposée sur Expo et rattachée aux deux applications, vérifiée auprès de Google.** Projet `taxi-sylvain` créé le 19 septembre, fichiers rangés : `google-services.json` et `GoogleService-Info.plist` dans chaque app (exclus de Git), clé de compte de service dans `C:\Users\PC\cles-taxi-sylvain` | reste : déposer les fichiers dans les variables EAS (`GOOGLE_SERVICES_JSON`, `GOOGLE_SERVICE_INFO_PLIST`, relayées par `app.config.js`) une fois `eas login` fait, et la clé FCM V1 sur expo.dev pour chaque projet, puis recompiler avec accord |
 | Expo | **APK 1.3.0 compilés le 20 septembre à 17 h** avec l'accord écrit du propriétaire (16 h 50), via le jeton `EXPO_TOKEN` du dossier des clés (`eas-cli` n'était plus connecté ; le jeton suffit en le passant dans l'environnement). Les fichiers Firebase arrivent par les variables EAS secrètes `GOOGLE_SERVICES_JSON` et `GOOGLE_SERVICE_INFO_PLIST` (présentes pour les deux projets, environnement `preview`) | à chaque nouvelle recompilation : accord du propriétaire, monter `version` et `versionCode` dans les deux `app.json`, `npx eas-cli build --platform android --profile preview --non-interactive --no-wait`, puis ranger les APK et les liens dans le dossier OneDrive |
-| Apple Developer | **inscription faite le 19 septembre**. Identifiants (non secrets) : Team ID `DNB64CQYH6`, clé App Store Connect Key ID `2D3MR539UF`, Issuer ID `cf6fb73d-076c-4bb1-819e-b8179ebb5461`. Le fichier de la clé (`AuthKey_2D3MR539UF.p8`, secret) est dans `C:\Users\PC\cles-taxi-sylvain`, jamais dans le dépôt | **Compilations iPhone 1.3.1 (build 5) faites le 23 septembre** sur EAS : chauffeur `2255af9f`, client `952f7e2a`, profils App Store avec `aps-environment` (vérifié dans le fichier). Clé APNs `7853YS72UB` créée par Christopher le 23 septembre (fichier `AuthKey_7853YS72UB.p8` dans `C:UsersPCcles-taxi-sylvain`, jamais dans le dépôt), déposée chez Expo et associée aux deux applications par `07-Outils/expo-cle-push.mjs`. Fiches App Store Connect créées par Christopher le 23 septembre (« Taxi Sylvain Chauffeur » `6815332363`, « Taxi Sylvain » `6815332894`, `ascAppId` dans les deux `eas.json`). Les envois des compilations Expo SDK 51 ont été refusés par Apple (ITMS-90725 : SDK iOS 17.5, alors que Xcode 26 / SDK iOS 26 sont exigés depuis le 28 avril 2026). **Mise à niveau Expo SDK 54 faite le 23 septembre** (branche `sdk-54` fusionnée), compilations 1.4.0 (build 6) sur Xcode 26 : chauffeur `c6742ddd-d9e6-4868-839a-19a00cebcaec`, client `cf31d70e-6eeb-4203-a725-1f30ad0221df`, **toutes deux acceptées par App Store Connect**. TestFlight : groupe interne « Team (Expo) » (Christopher testeur, installation immédiate), groupe externe « Chauffeurs et clients » avec lien public chauffeur `https://testflight.apple.com/join/Fd6W5dCv` et client `https://testflight.apple.com/join/YecvTgPW`. Reste : saisir dans App Store Connect les informations de contact et le compte de démonstration pour l'examen bêta, puis `apple-testflight.mjs --soumettre` (1 à 3 jours d'examen avant que le lien public fonctionne) |
+| Apple Developer | **inscription faite le 19 septembre**. Identifiants (non secrets) : Team ID `DNB64CQYH6`, clé App Store Connect Key ID `2D3MR539UF`, Issuer ID `cf6fb73d-076c-4bb1-819e-b8179ebb5461`. Le fichier de la clé (`AuthKey_2D3MR539UF.p8`, secret) est dans `C:\Users\PC\cles-taxi-sylvain`, jamais dans le dépôt | **Compilations iPhone 1.3.1 (build 5) faites le 23 septembre** sur EAS : chauffeur `2255af9f`, client `952f7e2a`, profils App Store avec `aps-environment` (vérifié dans le fichier). Clé APNs `7853YS72UB` créée par Christopher le 23 septembre (fichier `AuthKey_7853YS72UB.p8` dans `C:UsersPCcles-taxi-sylvain`, jamais dans le dépôt), déposée chez Expo et associée aux deux applications par `07-Outils/expo-cle-push.mjs`. Fiches App Store Connect créées par Christopher le 23 septembre (« Taxi Sylvain Chauffeur » `6815332363`, « Taxi Sylvain » `6815332894`, `ascAppId` dans les deux `eas.json`). Les envois des compilations Expo SDK 51 ont été refusés par Apple (ITMS-90725 : SDK iOS 17.5, alors que Xcode 26 / SDK iOS 26 sont exigés depuis le 28 avril 2026). **Mise à niveau Expo SDK 54 faite le 23 septembre** (branche `sdk-54` fusionnée), compilations 1.4.0 (build 6) sur Xcode 26 : chauffeur `c6742ddd-d9e6-4868-839a-19a00cebcaec`, client `cf31d70e-6eeb-4203-a725-1f30ad0221df`, **toutes deux acceptées par App Store Connect**. TestFlight : groupe interne « Team (Expo) » (Christopher testeur, installation immédiate), groupe externe « Chauffeurs et clients » avec lien public chauffeur `https://testflight.apple.com/join/Fd6W5dCv` et client `https://testflight.apple.com/join/YecvTgPW`. Reste : saisir dans App Store Connect les informations de contact et le compte de démonstration pour l'examen bêta, puis `apple-testflight.mjs --soumettre` (1 à 3 jours d'examen avant que le lien public fonctionne). **6 octobre 2026 : les deux compilations ont expiré le 2 octobre** (§ 8) : nouvelle compilation iOS nécessaire avant tout essai sur iPhone |
 | Google Play | compte d'entreprise, 25 USD | fiches des applications |
 | Twilio | **fait le 23 septembre** : compte payant (solde 38,85 USD), numéro canadien `+1 450 912-4572` (voix et SMS), service Proxy `taxi-sylvain` avec ce numéro, les quatre variables `TWILIO_*` déposées sur Railway (journal du serveur : « Appel vocal de rappel : actif ») ; session Proxy d'essai créée puis supprimée avec le code du serveur | essai d'un vrai appel masqué depuis un téléphone (voir § 9, « Téléphones ») ; surveiller le solde Twilio |
+| Railway (formule) | **avant le 8 octobre 2026** : passer de l'essai à la formule Hobby (5 USD par mois, carte bancaire) dans le tableau de bord Railway | sans cela : service arrêté, puis disques effacés 30 jours après (§ 8) ; ensuite : environnement de test (point 5 ci-dessous) |
 | Prix REM | saisir les montants dans la page Tarifs | aucun code à écrire |
 | Plattsburgh | dire comment tarifer ce cas qui dépend du départ | modéliser |
 
@@ -357,19 +429,29 @@ sinon l'application s'affiche mais ne peut plus se connecter. Les APK ne sont pa
 2. **Politique de confidentialité et conditions d'utilisation** : **publiées le 19 septembre**, **mises à jour le 20 septembre** (demande de suppression sous 30 jours, adresse postale `2060, rue Saint-Georges, Longueuil (Québec) J4K 2C8`, raison sociale « Taxi Sylvain »). Reste : courriel sur taxisylvain.ca quand il existera ; relecture par un juriste.
 3. **Préparation des magasins** : voir `docs/CONFORMITE-MAGASINS.md`, qui contient les réponses prêtes au formulaire « Sécurité des données », la justification de localisation en arrière-plan, le scénario de la vidéo Google, la marche à suivre pour le compte de démonstration Apple et les textes de fiche. Profil de compilation `production` (`.aab` pour Google Play, build iOS) **ajouté le 19 septembre** dans les deux `eas.json`, avec les identifiants Apple de `submit.production.ios` ; la localisation en arrière-plan sur iPhone est activée dans `apps/driver-app/app.json` (`isIosBackgroundLocationEnabled`). Aucun build lancé : il faut l'accord du propriétaire.
 4. **Tests de bout en bout** : les parcours serveur sont joués par les scénarios du dossier de passation (`05-Verifications`, dont `scenario-vague-20-sept.cjs` : code de confirmation, Web Push, ordre de l'accueil, notation à rattraper, 32 vérifications). Reste : les écrans eux-mêmes, à la main, et sur un vrai téléphone.
-5. **Environnement de test séparé** : deuxième service et deuxième base sur Railway, données fictives.
-6. **Alerte d'erreurs** : Sentry en version gratuite sur l'API et les trois interfaces.
-7. **Sauvegardes de la base** : vérifier et activer les sauvegardes Postgres sur Railway.
+5. **Environnement de test séparé** : deuxième service et deuxième base sur Railway, données fictives. **À faire
+   juste après le passage à Hobby** (6 octobre 2026) : environnement Railway `essai` (copie des services, base
+   vierge), estimé à 1 à 2 USD d'usage par mois, compris dans les 5 USD de Hobby à la consommation actuelle.
+6. **Alerte d'erreurs** : **fait côté serveur le 6 octobre 2026**, sans compte supplémentaire (courriel par Brevo,
+   § 6), avec une surveillance horaire par GitHub (§ 5). Reste possible : Sentry gratuit pour les erreurs des trois
+   interfaces (compte à créer par le propriétaire).
+7. **Sauvegardes de la base** : **fait le 6 octobre 2026** (§ 6) ; celles de Railway sont réservées à la formule Pro.
+   Reste au propriétaire : `node scripts/recuperer-sauvegarde.mjs` chaque semaine (copie hors de Railway).
 8. **Registre des demandes** : tenir à jour la section 11 à chaque nouvelle vague.
-9. **Distribuer et tester les APK 1.3.0** (compilés le 20 septembre à 17 h, voir la ligne Expo du tableau ci-dessus) : envoyer les liens aux chauffeurs et clients, puis dérouler sur un vrai téléphone les sections 5.6 à 5.9 du plan de vérification (notification écran verrouillé, GPS avec Waze ouvert, code de confirmation, sélecteur de date).
+9. **Distribuer et tester les APK 1.4.0** (compilés le 23 septembre, liens définitifs au § 2 ; à l'origine les 1.3.0 du 20 septembre) : envoyer les liens aux chauffeurs et clients, puis dérouler sur un vrai téléphone les sections 5.6 à 5.9 du plan de vérification (notification écran verrouillé, GPS avec Waze ouvert, code de confirmation, sélecteur de date).
 10. **Remise en forme des adresses déjà enregistrées** : **fait le 20 septembre à 17 h 30** avec l'accord du propriétaire. Script `backend/scripts/reformater-adresses.mjs` (simulation par défaut, refuse une base distante sans `--production`, ne touche jamais une adresse dont la municipalité reconnue changerait). Lancé dans le conteneur Railway : simulation lue (10 adresses à réécrire, 0 refusée), puis application (10 réécrites, 8 fiches clients avec espaces en trop, 2 courses allégées de « Canada » et de la province en toutes lettres), puis contre-simulation (0 à réécrire, 68 propres). À relancer seulement si des adresses anciennes réapparaissent (import).
 11. **Courriels à chaque étape de la course** (en route, démarrée, terminée) : non demandés, non faits ; seuls confirmation, annulation, rappels, code et récap partent.
+12. **expo-audio** (préparé le 6 octobre 2026, branche `expo-audio`, non fusionnée) : remplace `expo-av`, retiré à
+    partir d'Expo SDK 55. `expo-asset` aligné sur SDK 54 (sinon modules natifs en double, `expo-doctor` 16/18), et
+    permissions micro et services au premier plan d'`expo-audio` bloquées dans `app.json` (`expo-av` n'en déclarait
+    aucune). À fusionner avec la prochaine recompilation, puis à tester sur téléphone : son en mode silencieux, son
+    d'une course diffusée, permissions de l'APK (`aapt dump permissions`).
 
 ---
 
 ## 11. Historique des demandes et état
 
-État au 18 septembre 2026. « Web » signifie livré sur les versions web mais absent des APK du 13 septembre.
+Registre tenu à jour à chaque série de demandes (dernière entrée : 6 octobre 2026). « Web » signifie livré sur les versions web mais absent des APK du 13 septembre.
 
 ### Cahier des charges initial (8 septembre)
 
@@ -456,6 +538,7 @@ sinon l'application s'affiche mais ne peut plus se connecter. Les APK ne sont pa
 | 21 sept. | « Indique à ces 4 emplacements : Yves Christopher, Directeur Technique, Taxi Sylvain » (site, application de réservation, conditions, confidentialité) | **Fait et vérifié en ligne** (serveur et app Client redéployés, alias de l'ancienne adresse refait). Mention ajoutée au pied de page et à la page Contact du site WordPress, sous l'aide de l'écran de connexion de l'app Client (`LoginScreen.js`, version web seulement, les APK la prendront à la prochaine compilation), et dans la section « Nous joindre » de `conditions.html` et `confidentialite.html` (date de mise à jour portée au 21 septembre). La personne responsable au sens de la Loi 25 reste « le propriétaire » : non modifiée, à confirmer |
 | 21 sept. | « Comment obtenir une adresse contact@taxisylvain.ca ? », choix de la redirection gratuite | **Fait et vérifié** : `contact@taxisylvain.ca` existe. Réception : redirection ImprovMX (compte du propriétaire, offre gratuite) vers son Gmail ; envoi : Gmail « Envoyer en tant que » par le SMTP de Brevo. DNS chez Vercel : MX `mx1` et `mx2.improvmx.com`, TXT `v=spf1 include:spf.improvmx.com include:spf.brevo.com ~all` ; DKIM et DMARC de Brevo inchangés. LWS ne permet pas de boîte sur un domaine ajouté en multi-domaine. Adresse publiée sur le site WordPress et dans `conditions.html` et `confidentialite.html` (section courriel réécrite, fournisseurs ImprovMX et Google nommés, mention « Brevo pas encore activé » corrigée). Décision du propriétaire le même soir : les demandes d'accès et de correction (Loi 25) sont acceptées **par courriel ou par la poste**, écrit dans `confidentialite.html`, `conditions.html` et `suppression-compte.html`. Conséquence : surveiller cette boîte, la loi donne 30 jours pour répondre |
 | 21 sept. | Site vitrine WordPress sur `taxisylvain.ca` et `www` | **Fait et vérifié en ligne** : WordPress 7.1.1 installé à la main chez LWS (base partagée avec nskgroup.org, préfixe `ts_`), sept pages publiées, non indexé jusqu'à validation du propriétaire. Outil de publication et compte rendu dans le Jarvis : `livrables/sites-web/taxisylvain-site-wordpress/`. Ne dépend pas de ce dépôt |
+| 6 oct. | « Reprise du projet », puis « Vas-y » : exploitation (sauvegardes, alertes, environnement de test), vérification de Railway et de TestFlight, expo-audio, passation | **Fait et vérifié** : sauvegarde quotidienne de la base et restauration éprouvée, alertes d'erreurs par courriel, surveillance horaire GitHub (§ 5, § 6) ; déployé (Railway `35cf2a69`), 256 tests verts, 14 contrôles de mise en ligne verts, première sauvegarde en production (79 Ko), dossier des sauvegardes inaccessible depuis Internet (404 sur cinq adresses, encodées comprises). **Constats** (§ 8) : essai Railway qui se termine le 8 octobre, compilations TestFlight expirées le 2 octobre, disque à 175 Mo sur 500. expo-audio prêt sur une branche (§ 10, point 12). **Non fait** : environnement de test (attend la formule Hobby) ; copie de la sauvegarde sur le PC (refusée au mode automatique de Claude Code, à lancer par le propriétaire) |
 
 ---
 
