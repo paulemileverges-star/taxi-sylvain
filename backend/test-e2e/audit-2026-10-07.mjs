@@ -148,7 +148,11 @@ globalThis.fetch = (...a) => { const u = new URL(typeof a[0] === "string" || a[0
     assert.equal(etat.base, "ok");
     assert.equal(etat.migration, "20261007120000_audit_7_octobre");
     assert.ok(etat.version && etat.sauvegardes);
-    ok(`OPS-04 : /health/ready interroge la base (migration ${etat.migration}, version ${etat.version})`);
+    // État des envois sur 24 heures, sans aucune donnée personnelle (aucun envoi encore : pas de panne).
+    assert.deepEqual(etat.livraisons.enPanne, []);
+    assert.deepEqual(Object.keys(etat.livraisons).sort(), ["courriel", "enPanne", "notification", "notificationWeb"]);
+    assert.doesNotMatch(JSON.stringify(etat), /@|5145550/, "ni courriel ni téléphone dans l'état public");
+    ok(`OPS-04 : /health/ready interroge la base (migration ${etat.migration}, version ${etat.version}) et donne l'état des envois`);
   }
 
   // SEC-01 ----------------------------------------------------------------------------------------

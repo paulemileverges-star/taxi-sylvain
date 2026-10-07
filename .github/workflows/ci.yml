@@ -1,0 +1,107 @@
+# Intégration continue : à chaque envoi sur GitHub et à chaque demande de fusion, le code est
+# vérifié AVANT d'aller en production (audit du 7 octobre 2026, OPS-05 : seule la production était
+# surveillée, une régression ne se voyait que chez les vrais utilisateurs).
+#
+#   - Serveur : tests unitaires, puis les scénarios de bout en bout (rôles et permissions, temps réel,
+#     concurrence, sauvegardes, rapports) sur une base PostgreSQL JETABLE créée pour l'exécution,
+#     avec toutes les migrations du dépôt.
+#   - Sites web : construction de la console Dispatch et des versions web des deux applications.
+#
+# Aucune donnée réelle ni aucun message réel : aucune clé de fournisseur n'est donnée (courriels,
+# textos, appels, notifications, Google), les scénarios bloquent tout appel réseau vers l'extérieur,
+# et les comptes sont fictifs. Aucun secret GitHub n'est utilisé.
+#
+# Coût : environ 6 à 10 minutes par envoi, sur les 2 000 minutes gratuites par mois d'un dépôt privé
+# GitHub Free (la surveillance horaire en prend environ 720).
+name: Intégration continue
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Un nouvel envoi sur la même branche annule la vérification devenue inutile.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  serveur:
+    name: Serveur (tests et scénarios sur base jetable)
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: ci
+          POSTGRES_PASSWORD: ci
+          POSTGRES_DB: ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U ci"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+      - run: npm ci
+      - run: npm run build
+      - name: Tests unitaires
+        run: npm test
+      # Chaque scénario a sa propre base, créée par « prisma migrate deploy » avec toutes les migrations.
+      - name: Scénario de la vague du 6 octobre
+        run: node test-e2e/scenario-2026-10-06.mjs
+        env:
+          E2E_DATABASE_URL: postgresql://ci:ci@localhost:5432/ts_e2e_1006
+      - name: Scénario de l'audit du 7 octobre (rôles, temps réel, concurrence)
+        run: node test-e2e/audit-2026-10-07.mjs
+        env:
+          E2E_DATABASE_URL: postgresql://ci:ci@localhost:5432/ts_e2e_audit
+
+  sites-web:
+    name: Construction ${{ matrix.nom }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - nom: Console Dispatch
+            dossier: apps/dispatch-web
+            construction: npx vite build
+          - nom: App Chauffeur (web)
+            dossier: apps/driver-app
+            construction: npx expo export --platform web
+          - nom: App Client (web)
+            dossier: apps/client-app
+            construction: npx expo export --platform web
+    defaults:
+      run:
+        working-directory: ${{ matrix.dossier }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: ${{ matrix.dossier }}/package-lock.json
+      - run: npm ci
+      - name: Construction
+        run: ${{ matrix.construction }}
+        env:
+          VITE_VERSION_WEB: integration-continue
+          EXPO_PUBLIC_VERSION_WEB: integration-continue

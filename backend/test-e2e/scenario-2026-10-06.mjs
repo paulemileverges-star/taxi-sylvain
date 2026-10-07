@@ -3,7 +3,8 @@
 // vrai serveur local (aucune donnée de production, aucun fournisseur réel : courriels, textos,
 // appels, Google et notifications web sont neutralisés). À lancer depuis backend/ :
 //   node test-e2e/scenario-2026-10-06.mjs
-// Prérequis : PostgreSQL installé localement (PG_BIN, par défaut C:/Program Files/PostgreSQL/17/bin).
+// Prérequis : PostgreSQL installé localement (PG_BIN, par défaut C:/Program Files/PostgreSQL/17/bin),
+// ou une base vide fournie par E2E_DATABASE_URL (intégration continue, .github/workflows/ci.yml).
 // Couvre : fiche chauffeur modifiable, arrêts, adresses YUL (Arrivées et P4) et tarif du P4,
 // délais de 2 h (contact) et 3 h (départ), rapports par date de course, exports, récap notifié une
 // seule fois, régénération manuelle silencieuse.
@@ -12,15 +13,16 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import assert from "node:assert/strict";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 const BACKEND = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const PG_BIN = process.env.PG_BIN || "C:/Program Files/PostgreSQL/17/bin";
 const exe = (nom) => path.join(PG_BIN, process.platform === "win32" ? `${nom}.exe` : nom);
-const PORT_PG = 55433;
-const PORT_API = 4077;
+const PORT_PG = Number(process.env.PORT_PG || 55433);
+const PORT_API = Number(process.env.PORT_API || 4077);
 const DOSSIER = path.join(os.tmpdir(), "ts-e2e-1006");
-const DB_URL = `postgresql://postgres@localhost:${PORT_PG}/ts_e2e`;
+const DB_URL = process.env.E2E_DATABASE_URL || `postgresql://postgres@localhost:${PORT_PG}/ts_e2e`;
+const PG_LOCAL = !process.env.E2E_DATABASE_URL; // en CI, la base est fournie par le service PostgreSQL
 const JWT_SECRET = "secret-du-scenario-uniquement";
 const VIDE = path.join(DOSSIER, "env-vide");
 // Toutes les clés de fournisseurs forcées à vide : le serveur local ne peut rien envoyer à personne.
@@ -45,7 +47,7 @@ function lancer(cmd, args, options = {}) {
 let serveur = null;
 async function nettoyer() {
   if (serveur) serveur.kill();
-  spawnSync(exe("pg_ctl"), ["-D", path.join(DOSSIER, "pg"), "-m", "fast", "stop"], { stdio: "ignore" });
+  if (PG_LOCAL) spawnSync(exe("pg_ctl"), ["-D", path.join(DOSSIER, "pg"), "-m", "fast", "stop"], { stdio: "ignore" });
   await pause(500);
   fs.rmSync(DOSSIER, { recursive: true, force: true });
 }
@@ -54,17 +56,28 @@ async function principal() {
   fs.rmSync(DOSSIER, { recursive: true, force: true });
   fs.mkdirSync(DOSSIER, { recursive: true });
   fs.writeFileSync(VIDE, "");
-  lancer(exe("initdb"), ["-D", path.join(DOSSIER, "pg"), "-U", "postgres", "-A", "trust", "-E", "UTF8", "--locale=C"]);
-  // Sorties ignorées : le serveur PostgreSQL lancé en arrière-plan hériterait sinon des canaux de
-  // sortie, et Node attendrait leur fermeture indéfiniment.
-  const demarrage = spawnSync(exe("pg_ctl"), ["-D", path.join(DOSSIER, "pg"), "-o", `-p ${PORT_PG} -c listen_addresses=localhost`, "-l", path.join(DOSSIER, "pg.log"), "-w", "start"], { stdio: "ignore", timeout: 60000 });
-  if (demarrage.status !== 0) throw new Error(`PostgreSQL n'a pas démarré (voir ${path.join(DOSSIER, "pg.log")}).`);
-  lancer(exe("createdb"), ["-h", "localhost", "-p", String(PORT_PG), "-U", "postgres", "ts_e2e"]);
+  // Le serveur local ne peut contacter que lui-même : un oubli de neutralisation échoue, il ne sort
+  // pas (ajouté avec l'intégration continue, audit du 7 octobre 2026, OPS-05).
+  const bloqueur = path.join(DOSSIER, "bloquer-reseau.mjs");
+  fs.writeFileSync(bloqueur, `const o = globalThis.fetch;
+globalThis.fetch = (...a) => { const u = new URL(typeof a[0] === "string" || a[0] instanceof URL ? a[0] : a[0].url);
+  if (!["127.0.0.1", "localhost", "[::1]"].includes(u.hostname)) return Promise.reject(new Error("réseau extérieur bloqué (scénario)"));
+  return o(...a); };\n`);
+  if (PG_LOCAL) {
+    lancer(exe("initdb"), ["-D", path.join(DOSSIER, "pg"), "-U", "postgres", "-A", "trust", "-E", "UTF8", "--locale=C"]);
+    // Sorties ignorées : le serveur PostgreSQL lancé en arrière-plan hériterait sinon des canaux de
+    // sortie, et Node attendrait leur fermeture indéfiniment.
+    const demarrage = spawnSync(exe("pg_ctl"), ["-D", path.join(DOSSIER, "pg"), "-o", `-p ${PORT_PG} -c listen_addresses=localhost`, "-l", path.join(DOSSIER, "pg.log"), "-w", "start"], { stdio: "ignore", timeout: 60000 });
+    if (demarrage.status !== 0) throw new Error(`PostgreSQL n'a pas démarré (voir ${path.join(DOSSIER, "pg.log")}).`);
+    lancer(exe("createdb"), ["-h", "localhost", "-p", String(PORT_PG), "-U", "postgres", "ts_e2e"]);
+  }
   lancer(process.execPath, [path.join(BACKEND, "node_modules", "prisma", "build", "index.js"), "migrate", "deploy"], { cwd: BACKEND, env: { ...process.env } });
-  ok("base jetable créée, 23 migrations appliquées (dont celle du 6 octobre)");
 
   const { PrismaClient } = await import("@prisma/client");
   const prisma = new PrismaClient({ datasources: { db: { url: DB_URL } } });
+  const migrations = await prisma.$queryRawUnsafe('SELECT migration_name FROM "_prisma_migrations" WHERE finished_at IS NOT NULL');
+  assert.ok(migrations.some((m) => m.migration_name === "20261006120000_vague_6_octobre"));
+  ok(`base jetable créée, ${migrations.length} migrations appliquées (dont celle du 6 octobre)`);
   const jwt = (await import("jsonwebtoken")).default;
 
   // État de la production avant la vague : YUL au centre des pistes, sans P4.
@@ -76,7 +89,7 @@ async function principal() {
   const jeton = (u) => jwt.sign({ id: u.id, role: u.role, name: u.name, permissions: u.permissions || [] }, JWT_SECRET);
   const J = { dispatch: jeton(dispatch), chauffeur: jeton(chauffeur), client: jeton(client) };
 
-  serveur = spawn(process.execPath, ["src/index.js"], { cwd: BACKEND, env: { ...process.env }, stdio: ["ignore", "pipe", "pipe"] });
+  serveur = spawn(process.execPath, ["--import", pathToFileURL(bloqueur).href, "src/index.js"], { cwd: BACKEND, env: { ...process.env }, stdio: ["ignore", "pipe", "pipe"] });
   let journal = "";
   serveur.stdout.on("data", (d) => { journal += d; });
   serveur.stderr.on("data", (d) => { journal += d; });
