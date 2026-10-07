@@ -10,12 +10,26 @@ export function normalize(s) {
     .replace(/[^a-z0-9]/g, "");
 }
 
-// « Québec » désigne la province dans presque toutes les adresses : on ne retient la ville de
-// Québec que si la partie suivante est sa région (Capitale-Nationale).
+// « Québec » désigne la province dans la plupart des adresses. C'est la VILLE de Québec quand la
+// partie suivante est sa région (Capitale-Nationale) ou la province elle-même (« QC », « QC G1R 1A1 »,
+// « Québec »). Audit du 7 octobre 2026 (B08) : la forme unique « 12 Rue X, Québec, QC G1R 1A1 » n'était
+// pas reconnue (seule la région l'était), et la course partait sans le tarif de Québec.
 const QUEBEC_CITY_REGIONS = ["capitalenationale", "agglomerationdequebec"];
+const MARQUE_PROVINCE = /^(qc|quebec)([a-z]\d[a-z]\d[a-z]\d)?$/;
+
+/** La partie i d'une adresse découpée aux virgules est-elle la ville de Québec ? */
+export function estVilleDeQuebec(parts, i) {
+  if (normalize(parts[i]) !== "quebec") return false;
+  const suivante = normalize(parts[i + 1] || "");
+  return Boolean(suivante) && (QUEBEC_CITY_REGIONS.includes(suivante) || MARQUE_PROVINCE.test(suivante));
+}
+
+// La province et le code postal en fin d'adresse sans virgule (« 12 rue X Chambly QC J3L 2Y7 »).
+const FIN_PROVINCE = /(?:\s+(?:qc|québec|quebec))?(?:\s+[a-z]\d[a-z]\s?\d[a-z]\d)?\s*$/i;
 
 export function matchZone(address, zones) {
-  const parts = String(address || "").split(",").map((p) => normalize(p)).filter(Boolean);
+  const brutes = String(address || "").split(",").map((p) => p.trim()).filter(Boolean);
+  const parts = brutes.map((p) => normalize(p));
   const byKey = new Map(zones.map((z) => [normalize(z.name), z]));
 
   // 1. Une partie de l'adresse est exactement une municipalité connue (de gauche à droite :
@@ -23,17 +37,23 @@ export function matchZone(address, zones) {
   for (let i = 0; i < parts.length; i++) {
     const zone = byKey.get(parts[i]);
     if (!zone) continue;
-    if (parts[i] === "quebec" && !QUEBEC_CITY_REGIONS.includes(parts[i + 1])) continue;
+    if (parts[i] === "quebec" && !estVilleDeQuebec(parts, i)) continue;
     return zone;
   }
 
-  // 2. Sinon, la municipalité est contenue dans l'adresse (« Vieux-Longueuil », « 12 rue X Chambly QC ») :
-  //    on prend la plus longue correspondance pour préférer « Saint-Jean-sur-Richelieu » à « Saint-Jean ».
-  const whole = normalize(address);
+  // 2. Sinon, la municipalité est contenue dans la partie « ville » de l'adresse (« Vieux-Longueuil »).
+  //    On prend la plus longue correspondance pour préférer « Saint-Jean-sur-Richelieu » à
+  //    « Saint-Jean ». Audit du 7 octobre 2026 (B07) : la recherche portait sur l'adresse entière, et
+  //    « 12 Rue de Chambly, Montréal » prenait le tarif de Chambly. La première partie (numéro et rue)
+  //    n'est plus jamais lue ; sans virgule, seule la FIN du texte (avant la province) compte.
+  const candidates = parts.length > 1
+    ? parts.slice(1).map((p) => ({ texte: p, fin: false }))
+    : [{ texte: normalize(String(address || "").replace(FIN_PROVINCE, "")), fin: true }];
   let best = null;
   for (const [key, zone] of byKey) {
     if (key === "quebec" || key.length < 5) continue;
-    if (whole.includes(key) && (!best || key.length > best.key.length)) best = { key, zone };
+    const trouve = candidates.some((c) => (c.fin ? c.texte.endsWith(key) : c.texte.includes(key)));
+    if (trouve && (!best || key.length > best.key.length)) best = { key, zone };
   }
   return best ? best.zone : null;
 }

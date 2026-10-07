@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { requireAuth } from "../middleware/auth.js";
+import { quotaParCompte } from "../middleware/rateLimit.js";
 import { publicKey, isWebPushConfigured, abonnementValide, enregistrerAbonnement, retirerAbonnement } from "../lib/webPush.js";
 
 // Abonnement des navigateurs aux notifications Web Push (voir lib/webPush.js). Utilisé par les
@@ -12,7 +13,7 @@ router.get("/web/key", (req, res) => {
   res.json({ configured: isWebPushConfigured(), publicKey: publicKey() });
 });
 
-router.post("/web/subscribe", async (req, res) => {
+router.post("/web/subscribe", quotaParCompte("push", { windowMs: 60 * 60 * 1000, max: 20 }), async (req, res) => {
   const sub = req.body?.subscription;
   if (!abonnementValide(sub)) return res.status(400).json({ error: "Abonnement invalide." });
   if (!isWebPushConfigured()) return res.status(503).json({ error: "Notifications web non configurées." });
@@ -22,7 +23,7 @@ router.post("/web/subscribe", async (req, res) => {
 
 // À la déconnexion : ce navigateur ne doit plus recevoir les notifications de ce compte.
 router.delete("/web/subscribe", async (req, res) => {
-  await retirerAbonnement(req.body?.endpoint);
+  await retirerAbonnement(req.body?.endpoint, req.user.id);
   res.json({ ok: true });
 });
 

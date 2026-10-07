@@ -3,6 +3,8 @@ import { prisma } from "../lib/prisma.js";
 import { requireAuth, requirePermission } from "../middleware/auth.js";
 import { personalRoom } from "../lib/rooms.js";
 import { notifyUsers } from "../lib/push.js";
+import { quotaParCompte } from "../middleware/rateLimit.js";
+import { texteDeMessage, LONGUEUR_MAX_MESSAGE } from "./messages.js";
 
 const router = Router();
 router.use(requireAuth);
@@ -20,13 +22,17 @@ async function assertParticipant(conversationId, userId) {
 // chauffeurs et/ou clients. Le créateur est automatiquement ajouté comme participant.
 router.post("/", requirePermission("groups"), async (req, res) => {
   const { name, participantIds } = req.body;
-  const ids = Array.isArray(participantIds) ? [...new Set(participantIds)] : [];
+  const ids = Array.isArray(participantIds) ? [...new Set(participantIds.filter((x) => typeof x === "string"))] : [];
   if (ids.length === 0) return res.status(400).json({ error: "Choisissez au moins un correspondant." });
+  if (ids.length > 200) return res.status(400).json({ error: "Un groupe compte au plus 200 personnes." });
+  // Tous les correspondants doivent être de vrais comptes (avant : identifiant inconnu = erreur 500).
+  const existants = await prisma.user.count({ where: { id: { in: ids } } });
+  if (existants !== ids.length) return res.status(400).json({ error: "Un des correspondants est introuvable." });
 
   const allIds = ids.includes(req.user.id) ? ids : [...ids, req.user.id];
   const conversation = await prisma.conversation.create({
     data: {
-      name: name || null,
+      name: typeof name === "string" && name.trim() ? name.trim().slice(0, 120) : null,
       createdById: req.user.id,
       participants: { create: allIds.map((userId) => ({ userId })) },
     },
@@ -57,9 +63,9 @@ router.get("/:id/messages", async (req, res) => {
   res.json(messages);
 });
 
-router.post("/:id/messages", async (req, res) => {
-  const { text } = req.body;
-  if (!text || !text.trim()) return res.status(400).json({ error: "Message vide." });
+router.post("/:id/messages", quotaParCompte("messages", { windowMs: 60 * 1000, max: 30 }), async (req, res) => {
+  const text = texteDeMessage(req.body?.text);
+  if (!text) return res.status(400).json({ error: `Message vide ou trop long (${LONGUEUR_MAX_MESSAGE} caractères au plus).` });
 
   const isMember = await assertParticipant(req.params.id, req.user.id);
   if (!isMember && req.user.role !== "DISPATCH") return res.status(403).json({ error: "Accès refusé." });
@@ -74,10 +80,12 @@ router.post("/:id/messages", async (req, res) => {
     include: { user: { select: { id: true, role: true } } },
   });
 
+  // Chaque membre dans SA salle personnelle, jamais une salle commune à l'équipe : un groupe privé
+  // ne doit parvenir qu'à ses membres (audit du 7 octobre 2026, SEC-03).
   const io = req.app.get("io");
   if (io) {
-    const rooms = new Set(participants.map((p) => personalRoom(p.user)).filter(Boolean));
-    for (const room of rooms) io.to(room).emit("message:group", { conversationId: req.params.id, message });
+    const rooms = [...new Set(participants.map((p) => personalRoom(p.user)).filter(Boolean))];
+    if (rooms.length) io.to(rooms).emit("message:group", { conversationId: req.params.id, message });
   }
 
   const recipientIds = participants
@@ -110,8 +118,8 @@ router.delete("/:id", requirePermission("groups"), async (req, res) => {
 
   const io = req.app.get("io");
   if (io) {
-    const rooms = new Set(participants.map((p) => personalRoom(p.user)).filter(Boolean));
-    for (const room of rooms) io.to(room).emit("conversation:deleted", { conversationId: conversation.id });
+    const rooms = [...new Set(participants.map((p) => personalRoom(p.user)).filter(Boolean))];
+    if (rooms.length) io.to(rooms).emit("conversation:deleted", { conversationId: conversation.id });
   }
   res.status(204).end();
 });

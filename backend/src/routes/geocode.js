@@ -4,9 +4,14 @@ import { requireAuth } from "../middleware/auth.js";
 import { formatFromNominatim, buildGeocodeParams, confidenceFromOsm, expandAbbreviations } from "../lib/addressFormat.js";
 import { googleActif, suggestions as suggestionsGoogle, detailsLieu } from "../lib/googleMaps.js";
 import { rechercheAeroportYul, CODES_YUL } from "../lib/aeroportYul.js";
+import { quotaParCompte } from "../middleware/rateLimit.js";
+import { rechercherNominatim } from "../lib/nominatim.js";
 
 const router = Router();
 router.use(requireAuth);
+// Chaque recherche peut coûter (Google) ou solliciter un service public (OpenStreetMap) : 60 par
+// minute et par compte au plus (audit du 7 octobre 2026, SEC-14), largement assez pour la frappe.
+router.use(quotaParCompte("adresses", { windowMs: 60 * 1000, max: 60 }));
 
 // Aéroport Montréal-Trudeau : seules deux adresses sont proposées (demande du propriétaire du
 // 6 octobre 2026), les Arrivées et le stationnement P4 (débarcadère Express), tenues dans le
@@ -29,7 +34,7 @@ async function adressesYul() {
 // coordonnées : l'application demande /geocode/place/:placeId au moment du choix ; une ancienne
 // version qui ne le fait pas envoie le texte, que le serveur géocode alors lui-même avec Google.
 router.get("/search", async (req, res) => {
-  const q = String(req.query.q || "").trim();
+  const q = String(req.query.q || "").trim().slice(0, 200);
   if (q.length < 3) return res.json([]);
   if (rechercheAeroportYul(q)) return res.json(await adressesYul());
 
@@ -43,13 +48,12 @@ router.get("/search", async (req, res) => {
     }
   }
 
+  // Repli OpenStreetMap : une requête par seconde pour toute l'application, réponses en cache
+  // (lib/nominatim.js, politique du serveur public).
   const params = buildGeocodeParams({ q: expandAbbreviations(q) });
   try {
-    const response = await fetch(`https://nominatim.openstreetmap.org/search?${params}`, {
-      headers: { "User-Agent": "TaxiSylvain/1.0 (+https://taxisylvain.ca)" },
-    });
-    if (!response.ok) return res.status(502).json({ error: "Service de suggestions indisponible." });
-    const results = await response.json();
+    const results = await rechercherNominatim(params);
+    if (!results) return res.status(503).json({ error: "Service de suggestions occupé. Réessayez dans un instant." });
     res.json(
       results
         .map((r) => {

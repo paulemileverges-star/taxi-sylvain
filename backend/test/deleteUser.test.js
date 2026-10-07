@@ -10,8 +10,8 @@ process.env.DATABASE_URL = process.env.DATABASE_URL || "postgresql://test:test@l
 const { deleteUserCascade, removeUserUploads } = await import("../src/lib/deleteUser.js");
 
 // Fausse base : juste ce que deleteUserCascade utilise, avec une vraie annulation en cas d'erreur.
-function fakeDb({ users = [], rides = [] }) {
-  const state = { users: structuredClone(users), rides: structuredClone(rides) };
+function fakeDb({ users = [], rides = [], ratings = [] }) {
+  const state = { users: structuredClone(users), rides: structuredClone(rides), ratings: structuredClone(ratings) };
   const journal = [];
   const matches = (row, where = {}) =>
     Object.entries(where).every(([key, cond]) => {
@@ -34,7 +34,16 @@ function fakeDb({ users = [], rides = [] }) {
     groupMessage: noop("groupMessage"),
     conversationParticipant: noop("conversationParticipant"),
     message: noop("message"),
-    rating: noop("rating"),
+    rating: {
+      findMany: async ({ where }) => state.ratings.filter((r) => matches(r, where)).map((r) => ({ toUserId: r.toUserId })),
+      deleteMany: async ({ where }) => {
+        journal.push("rating.deleteMany");
+        state.ratings = state.ratings.filter((r) => !matches(r, where));
+        return { count: 0 };
+      },
+    },
+    // Recalcul de moyenne (lib/moyennes.js) : on note quel compte est recalculé.
+    $executeRaw: async (morceaux, ...valeurs) => { journal.push(`moyenne:${valeurs[0]}`); return 1; },
     schedule: noop("schedule"),
     weeklyReport: noop("weeklyReport"),
     user: {
@@ -196,18 +205,39 @@ test("les courses retirées ou annulées par une suppression sortent de l'agenda
   assert.deepEqual(envoyerAnnulationsAgenda(null, { send }), []);
 });
 
-test("après la suppression d'un chauffeur, le client et le Dispatch voient la course en attente", () => {
+test("après la suppression d'un chauffeur, le client et l'équipe autorisée aux courses voient la course en attente", () => {
   const emis = [];
+  // Une émission peut viser plusieurs salles à la fois (lib/equipe.js) : on garde la liste.
   const salle = (room) => ({
-    emit: (evenement, donnees) => emis.push({ room, evenement, donnees }),
-    disconnectSockets: () => emis.push({ room, evenement: "deconnexion" }),
+    emit: (evenement, donnees) => emis.push({ rooms: [].concat(room), evenement, donnees }),
+    except: () => salle(room),
+    disconnectSockets: () => emis.push({ rooms: [].concat(room), evenement: "deconnexion" }),
     socketsLeave: () => {},
   });
   const io = { to: salle, in: salle };
   announceDeletion(io, { userId: "drv4", role: "DRIVER", annulees: [], aReaffecter: [{ id: "z1", driver: null }] }, "Jean");
-  const vers = (room, evenement) => emis.find((e) => e.room === room && e.evenement === evenement);
+  const vers = (room, evenement) => emis.find((e) => e.rooms.includes(room) && e.evenement === evenement);
   assert.ok(vers("user:drv4", "deconnexion"), "le chauffeur supprimé est déconnecté");
   assert.equal(vers("ride:z1", "ride:status")?.donnees.status, "REQUESTED", "le client est prévenu");
-  assert.equal(vers("dispatch", "ride:updated")?.donnees.status, "REQUESTED");
-  assert.match(vers("dispatch", "ride:notification")?.donnees.text, /chauffeur de Jean.*1 course\(s\) à réaffecter/);
+  assert.equal(vers("equipe:courses", "ride:updated")?.donnees.status, "REQUESTED");
+  assert.ok(vers("equipe:schedule", "ride:updated"), "la Cédule aussi");
+  assert.match(vers("equipe:courses", "ride:notification")?.donnees.text, /chauffeur de Jean.*1 course\(s\) à réaffecter/);
+  // Audit du 7 octobre 2026 (SEC-02) : plus rien de ces courses n'est envoyé à toute l'équipe.
+  assert.equal(emis.filter((e) => e.rooms.includes("dispatch")).length, 0);
+});
+
+test("supprimer un compte recalcule la moyenne des personnes qu'il avait notées, sans ses notes (B17)", async () => {
+  const { db, state, journal } = fakeDb({
+    users: [{ id: "cli1", role: "CLIENT" }, { id: "drv1", role: "DRIVER" }, { id: "drv2", role: "DRIVER" }],
+    ratings: [
+      { id: "n1", fromUserId: "cli1", toUserId: "drv1", stars: 1 },
+      { id: "n2", fromUserId: "cli1", toUserId: "drv2", stars: 2 },
+      { id: "n3", fromUserId: "drv1", toUserId: "cli1", stars: 5 },
+    ],
+  });
+  await deleteUserCascade("cli1", { db, removeFiles: async () => 0 });
+  assert.deepEqual(state.ratings, [], "notes données et reçues effacées");
+  assert.ok(journal.includes("moyenne:drv1") && journal.includes("moyenne:drv2"), "les deux chauffeurs notés sont recalculés");
+  assert.ok(!journal.includes("moyenne:cli1"), "le compte supprimé n'est pas recalculé");
+  assert.ok(journal.indexOf("rating.deleteMany") < journal.indexOf("moyenne:drv1"), "recalcul après l'effacement des notes");
 });

@@ -15,6 +15,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import zlib from "node:zlib";
+import crypto from "node:crypto";
 import express from "express";
 import { prisma } from "./prisma.js";
 import { uploadsDir } from "./uploads.js";
@@ -60,28 +61,93 @@ export function ageDerniereHeures(fichiers, maintenant = new Date()) {
 
 const guillemets = (nom) => `"${String(nom).replace(/"/g, '""')}"`;
 
-/** Lit toute la base : { format, version, creeLe, migrations, comptes, tables }. */
+// Liens entre tables (clés étrangères), lus dans le catalogue de PostgreSQL : enregistrés dans la
+// sauvegarde pour pouvoir vérifier, avant toute restauration, que chaque référence existe.
+const REQUETE_LIENS = `
+  SELECT enfant.relname::text AS enfant, parent.relname::text AS parent,
+    (SELECT array_agg(a.attname::text ORDER BY k.ord) FROM unnest(c.conkey) WITH ORDINALITY AS k(num, ord)
+       JOIN pg_attribute a ON a.attrelid = c.conrelid AND a.attnum = k.num) AS colonnes,
+    (SELECT array_agg(a.attname::text ORDER BY k.ord) FROM unnest(c.confkey) WITH ORDINALITY AS k(num, ord)
+       JOIN pg_attribute a ON a.attrelid = c.confrelid AND a.attnum = k.num) AS "colonnesParent"
+  FROM pg_constraint c
+  JOIN pg_class enfant ON enfant.oid = c.conrelid
+  JOIN pg_class parent ON parent.oid = c.confrelid
+  JOIN pg_namespace n ON n.oid = enfant.relnamespace
+  WHERE c.contype = 'f' AND n.nspname = 'public'`;
+
+/**
+ * Lit toute la base : { format, version, creeLe, migrations, comptes, tables, liens }.
+ *
+ * Audit du 7 octobre 2026 (SEC-15) : les tables étaient lues l'une après l'autre, chacune à un instant
+ * différent. Une course supprimée ou un compte effacé ENTRE deux lectures donnait une sauvegarde
+ * incohérente (course rattachée à un compte absent), acceptée puis impossible à restaurer. Toutes les
+ * lectures se font désormais dans UNE transaction en lecture seule, de niveau REPEATABLE READ : elles
+ * voient toutes la même photographie de la base, quelles que soient les écritures en cours.
+ */
 export async function lireBase(client = prisma) {
-  const tables = await client.$queryRawUnsafe(
-    "SELECT table_name FROM information_schema.tables WHERE table_schema = 'public' AND table_type = 'BASE TABLE' ORDER BY table_name"
-  );
-  const contenu = { format: FORMAT, version: 1, creeLe: new Date().toISOString(), migrations: [], comptes: {}, tables: {} };
-  for (const { table_name: nom } of tables) {
-    const [{ lignes }] = await client.$queryRawUnsafe(`SELECT COALESCE(json_agg(t), '[]'::json) AS lignes FROM ${guillemets(nom)} t`);
-    contenu.tables[nom] = lignes;
-    contenu.comptes[nom] = lignes.length;
+  const lire = async (db) => {
+    const tables = await db.$queryRawUnsafe(
+      "SELECT table_name FROM information_schema.tables WHERE table_schema = 'public' AND table_type = 'BASE TABLE' ORDER BY table_name"
+    );
+    const contenu = { format: FORMAT, version: 2, creeLe: new Date().toISOString(), migrations: [], comptes: {}, tables: {}, liens: [] };
+    for (const { table_name: nom } of tables) {
+      const [{ lignes }] = await db.$queryRawUnsafe(`SELECT COALESCE(json_agg(t), '[]'::json) AS lignes FROM ${guillemets(nom)} t`);
+      contenu.tables[nom] = lignes;
+      contenu.comptes[nom] = lignes.length;
+    }
+    contenu.liens = (await db.$queryRawUnsafe(REQUETE_LIENS)).map((l) => ({
+      enfant: l.enfant, parent: l.parent, colonnes: l.colonnes || [], colonnesParent: l.colonnesParent || [],
+    }));
+    contenu.migrations = (contenu.tables._prisma_migrations || [])
+      .filter((m) => m.finished_at && !m.rolled_back_at)
+      .map((m) => m.migration_name)
+      .sort();
+    return contenu;
+  };
+  if (typeof client.$transaction !== "function") return lire(client);
+  return client.$transaction(async (tx) => {
+    await tx.$executeRawUnsafe("SET TRANSACTION READ ONLY");
+    return lire(tx);
+  }, { isolationLevel: "RepeatableRead", timeout: 5 * 60 * 1000, maxWait: 30 * 1000 });
+}
+
+/**
+ * Références orphelines d'une sauvegarde : une ligne qui pointe vers une ligne absente de la table
+ * visée. Liste vide = sauvegarde cohérente. Les sauvegardes d'avant le 7 octobre 2026 (sans liens
+ * enregistrés) ne peuvent pas être vérifiées ainsi : liste vide.
+ */
+export function verifierRelations(contenu) {
+  const orphelins = [];
+  for (const lien of contenu?.liens || []) {
+    const enfants = contenu.tables?.[lien.enfant];
+    const parents = contenu.tables?.[lien.parent];
+    if (!Array.isArray(enfants) || !Array.isArray(parents) || !lien.colonnes.length) continue;
+    const cle = (ligne, colonnes) => colonnes.map((c) => String(ligne[c])).join("\u0000");
+    const connues = new Set(parents.map((p) => cle(p, lien.colonnesParent)));
+    for (const ligne of enfants) {
+      if (lien.colonnes.some((c) => ligne[c] === null || ligne[c] === undefined)) continue;
+      if (!connues.has(cle(ligne, lien.colonnes))) {
+        orphelins.push({ table: lien.enfant, colonnes: lien.colonnes, valeur: lien.colonnes.map((c) => ligne[c]).join(", "), parent: lien.parent });
+      }
+    }
   }
-  contenu.migrations = (contenu.tables._prisma_migrations || [])
-    .filter((m) => m.finished_at && !m.rolled_back_at)
-    .map((m) => m.migration_name)
-    .sort();
-  return contenu;
+  return orphelins;
+}
+
+function refuserSiIncoherente(contenu) {
+  const orphelins = verifierRelations(contenu);
+  if (orphelins.length) {
+    const exemples = orphelins.slice(0, 3).map((o) => `${o.table}.${o.colonnes.join("+")} = ${o.valeur} (absent de ${o.parent})`).join(" ; ");
+    throw new Error(`Sauvegarde incohérente : ${orphelins.length} référence(s) orpheline(s), par exemple ${exemples}.`);
+  }
 }
 
 /** Fait une sauvegarde maintenant et efface les plus anciennes. Rend { fichier, octets, comptes }. */
 export async function faireSauvegarde({ client = prisma, dossier = sauvegardesDir, maintenant = new Date() } = {}) {
   fs.mkdirSync(dossier, { recursive: true });
   const contenu = await lireBase(client);
+  // Jamais de fichier écrit pour une photographie incohérente : l'erreur part en alerte.
+  refuserSiIncoherente(contenu);
   const nom = nomSauvegarde(maintenant);
   const donnees = zlib.gzipSync(Buffer.from(JSON.stringify(contenu), "utf8"), { level: 9 });
   // Écriture dans un fichier temporaire puis renommage : jamais de sauvegarde à moitié écrite.
@@ -116,7 +182,82 @@ export function lireFichierSauvegarde(donnees) {
   for (const [nom, lignes] of Object.entries(contenu.tables)) {
     if (!Array.isArray(lignes) || lignes.length !== contenu.comptes?.[nom]) throw new Error(`Table ${nom} incomplète dans la sauvegarde.`);
   }
+  // Chaque référence doit exister (sauvegardes à partir du 7 octobre 2026) : une sauvegarde
+  // incohérente est refusée ici, avant toute restauration.
+  refuserSiIncoherente(contenu);
   return contenu;
+}
+
+// Copie hors du disque de Railway (audit du 7 octobre 2026, SEC-15) : les sauvegardes sont sur le même
+// disque que les photos ; perdre ce disque, c'était perdre aussi les sauvegardes. Chaque semaine, la
+// plus récente part par courriel, CHIFFRÉE (AES-256-GCM), à l'adresse SAUVEGARDE_COURRIEL. La clé
+// (SAUVEGARDE_CLE, 32 octets en base64) n'est jamais envoyée : le propriétaire la garde à part ; sans
+// elle, la pièce jointe est illisible. Déchiffrement : scripts/dechiffrer-sauvegarde.mjs.
+const ENTETE_CHIFFRE = Buffer.from("TSAUV1");
+
+/** Clé de chiffrement de la copie externe (Buffer de 32 octets), ou null si absente ou invalide. */
+export function cleCopieExterne(valeur = process.env.SAUVEGARDE_CLE) {
+  if (typeof valeur !== "string" || !valeur.trim()) return null;
+  const cle = Buffer.from(valeur.trim(), "base64");
+  return cle.length === 32 ? cle : null;
+}
+
+export function chiffrerSauvegarde(donnees, cle) {
+  const iv = crypto.randomBytes(12);
+  const chiffreur = crypto.createCipheriv("aes-256-gcm", cle, iv);
+  const chiffre = Buffer.concat([chiffreur.update(donnees), chiffreur.final()]);
+  return Buffer.concat([ENTETE_CHIFFRE, iv, chiffreur.getAuthTag(), chiffre]);
+}
+
+export function dechiffrerSauvegarde(paquet, cle) {
+  if (!Buffer.isBuffer(paquet) || !paquet.subarray(0, ENTETE_CHIFFRE.length).equals(ENTETE_CHIFFRE)) {
+    throw new Error("Ce fichier n'est pas une copie chiffrée de sauvegarde Taxi Sylvain.");
+  }
+  const debut = ENTETE_CHIFFRE.length;
+  const iv = paquet.subarray(debut, debut + 12);
+  const tag = paquet.subarray(debut + 12, debut + 28);
+  const dechiffreur = crypto.createDecipheriv("aes-256-gcm", cle, iv);
+  dechiffreur.setAuthTag(tag);
+  return Buffer.concat([dechiffreur.update(paquet.subarray(debut + 28)), dechiffreur.final()]);
+}
+
+export function copieExterneStatusLine() {
+  if (!process.env.SAUVEGARDE_COURRIEL && !process.env.SAUVEGARDE_CLE) return "Copie externe des sauvegardes : inactive (SAUVEGARDE_COURRIEL et SAUVEGARDE_CLE absentes).";
+  if (!cleCopieExterne()) return "Copie externe des sauvegardes : INACTIVE, SAUVEGARDE_CLE invalide (32 octets en base64 attendus).";
+  if (!process.env.SAUVEGARDE_COURRIEL) return "Copie externe des sauvegardes : INACTIVE, SAUVEGARDE_COURRIEL absente.";
+  return "Copie externe des sauvegardes : active (chaque dimanche, chiffrée, par courriel).";
+}
+
+/** Envoie la sauvegarde la plus récente, chiffrée. Rend { envoye } ou { ignore: raison }. */
+export async function envoyerCopieExterne({ dossier = sauvegardesDir, envoyer, maintenant = new Date() } = {}) {
+  const cle = cleCopieExterne();
+  const destinataire = process.env.SAUVEGARDE_COURRIEL;
+  if (!cle || !destinataire) return { ignore: "copie-externe-inactive" };
+  let fichiers = [];
+  try { fichiers = fs.readdirSync(dossier); } catch { fichiers = []; }
+  const derniere = trierSauvegardes(fichiers)[0];
+  if (!derniere) return { ignore: "aucune-sauvegarde" };
+  const paquet = chiffrerSauvegarde(fs.readFileSync(path.join(dossier, derniere)), cle);
+  const { sendMail } = envoyer ? { sendMail: envoyer } : await import("./mailer.js");
+  const resultat = await sendMail({
+    to: destinataire,
+    subject: `Sauvegarde chiffrée Taxi Sylvain du ${derniere.slice(13, 23)}`,
+    text: `Copie hebdomadaire de la base, chiffrée. Pièce jointe : ${derniere}.chiffre (${Math.round(paquet.length / 1024)} Ko).
+
+Illisible sans la clé gardée à part. Pour la relire : node backend/scripts/dechiffrer-sauvegarde.mjs "<fichier .chiffre>" (voir docs/PASSATION.md).`,
+    html: `<p>Copie hebdomadaire de la base, chiffrée : <b>${derniere}.chiffre</b> (${Math.round(paquet.length / 1024)} Ko).</p><p>Illisible sans la clé gardée à part. Pour la relire : <code>node backend/scripts/dechiffrer-sauvegarde.mjs</code> (voir docs/PASSATION.md).</p>`,
+    pieceJointe: { filename: `${derniere}.chiffre`, contentBase64: paquet.toString("base64"), contentType: "application/octet-stream" },
+  });
+  if (!resultat?.ok) throw new Error(`Copie externe non envoyée : ${resultat?.error || "erreur inconnue"}`);
+  return { envoye: true, fichier: derniere, octets: paquet.length, le: maintenant.toISOString() };
+}
+
+/** État des sauvegardes pour la surveillance (sans aucune donnée personnelle). */
+export function etatSauvegardes(dossier = sauvegardesDir, maintenant = new Date()) {
+  let fichiers = [];
+  try { fichiers = fs.readdirSync(dossier); } catch { fichiers = []; }
+  const age = ageDerniereHeures(fichiers, maintenant);
+  return { nombre: trierSauvegardes(fichiers).length, ageHeures: Number.isFinite(age) ? Math.round(age * 10) / 10 : null, enRetard: !(age <= 30) };
 }
 
 /**

@@ -58,10 +58,11 @@ async function post(url, headers, body) {
 }
 
 /**
- * Envoie un courriel. `calendar` est optionnel : { filename, content, method }.
+ * Envoie un courriel. `calendar` est optionnel : { filename, content, method }. `pieceJointe` aussi :
+ * { filename, contentBase64, contentType } (copie chiffrée hebdomadaire des sauvegardes).
  * Ne lève jamais d'exception — un fournisseur en panne ne doit pas faire échouer une course.
  */
-export async function sendMail({ to, toName, subject, html, text, calendar }) {
+export async function sendMail({ to, toName, subject, html, text, calendar, pieceJointe }) {
   const provider = mailProvider();
   const from = parseFrom();
   if (!provider || !from) return { ok: false, skipped: true, error: "courriels non configurés" };
@@ -82,6 +83,7 @@ export async function sendMail({ to, toName, subject, html, text, calendar }) {
         htmlContent: html,
         textContent: text,
         ...(attachmentBase64 ? { attachment: [{ name: filename, content: attachmentBase64 }] } : {}),
+        ...(pieceJointe ? { attachment: [{ name: pieceJointe.filename, content: pieceJointe.contentBase64 }] } : {}),
       }
     );
   } else {
@@ -94,6 +96,9 @@ export async function sendMail({ to, toName, subject, html, text, calendar }) {
           content_type: `text/calendar; method=${calendar.method || "REQUEST"}; charset=UTF-8`,
         },
       ];
+    }
+    if (pieceJointe) {
+      body.attachments = [{ filename: pieceJointe.filename, content: pieceJointe.contentBase64, content_type: pieceJointe.contentType || "application/octet-stream" }];
     }
     result = await post("https://api.resend.com/emails", { Authorization: `Bearer ${process.env.RESEND_API_KEY}` }, body);
   }

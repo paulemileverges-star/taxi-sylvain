@@ -43,7 +43,30 @@ test("le rôle et les permissions viennent de la base, pas du jeton", async () =
   const mw = makeRequireAuth(async (id) => ({ id, role: "ADMIN", name: "Collaborateur", permissions: ["courses"] }));
   const r = await run(mw, { authorization: jeton({ id: "adm1", role: "ADMIN", name: "Collaborateur", permissions: ["drivers"] }) });
   assert.equal(r.status, "suivant");
-  assert.deepEqual(r.req.user, { id: "adm1", role: "ADMIN", name: "Collaborateur", permissions: ["courses"] });
+  assert.deepEqual(r.req.user, { id: "adm1", role: "ADMIN", name: "Collaborateur", permissions: ["courses"], sessionVersion: 0 });
+});
+
+test("SEC-07 : après un changement de mot de passe, les anciens jetons sont refusés", async () => {
+  // Le compte est passé à la génération de sessions 1 (mot de passe changé).
+  const mw = makeRequireAuth(async (id) => ({ id, role: "CLIENT", name: "Client", permissions: [], sessionVersion: 1 }));
+  const ancien = await run(mw, { authorization: jeton({ id: "cli1", role: "CLIENT", sv: 0 }) });
+  assert.equal(ancien.status, 401, "jeton de la génération précédente");
+  const sansNumero = await run(mw, { authorization: jeton({ id: "cli1", role: "CLIENT" }) });
+  assert.equal(sansNumero.status, 401, "jeton émis avant les générations : vaut 0, donc refusé ici");
+  const nouveau = await run(mw, { authorization: jeton({ id: "cli1", role: "CLIENT", sv: 1 }) });
+  assert.equal(nouveau.status, "suivant", "jeton de la génération en cours");
+});
+
+test("SEC-07 : un compte jamais changé garde ses jetons d'avant les générations", async () => {
+  const mw = makeRequireAuth(async (id) => ({ id, role: "DRIVER", name: "Chauffeur", permissions: [], sessionVersion: 0 }));
+  const r = await run(mw, { authorization: jeton({ id: "drv1", role: "DRIVER" }) });
+  assert.equal(r.status, "suivant");
+});
+
+test("SEC-19 : un jeton de lien d'export n'ouvre aucune autre route", async () => {
+  const mw = makeRequireAuth(async (id) => ({ id, role: "DRIVER", name: "Chauffeur", permissions: [], sessionVersion: 0 }));
+  const r = await run(mw, { authorization: jeton({ id: "drv1", portee: "export-rapport" }) });
+  assert.equal(r.status, 401);
 });
 
 test("seul du texte est accepté comme courriel ou mot de passe", () => {

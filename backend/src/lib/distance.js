@@ -35,13 +35,11 @@ export async function geocodeAddress(address) {
     // Les abréviations (« Boul. », « N ») empêchent OpenStreetMap de trouver l'adresse : on les
     // écrit en toutes lettres avant d'appeler.
     const { expandAbbreviations } = await import("./addressFormat.js");
+    // Même file que les suggestions : une requête par seconde au plus, réponses en cache.
+    const { rechercherNominatim } = await import("./nominatim.js");
     const params = new URLSearchParams({ q: expandAbbreviations(address), format: "jsonv2", limit: "1", countrycodes: "ca,us", addressdetails: "1" });
-    const res = await fetch(`https://nominatim.openstreetmap.org/search?${params}`, {
-      headers: { "User-Agent": "TaxiSylvain/1.0 (+https://taxisylvain.ca)" },
-      signal: AbortSignal.timeout(4000),
-    });
-    if (!res.ok) return null;
-    const [first] = await res.json();
+    const resultats = await rechercherNominatim(params);
+    const first = Array.isArray(resultats) ? resultats[0] : null;
     return first ? { lat: parseFloat(first.lat), lng: parseFloat(first.lon), raw: first } : null;
   } catch {
     return null;

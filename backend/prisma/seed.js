@@ -1,9 +1,23 @@
-// Crée des comptes de démonstration. Lancer avec : npm run seed
+// Crée des comptes de démonstration sur une base LOCALE d'essai. Lancer avec : npm run seed
+//
+// Audit du 7 octobre 2026 (SEC-18) : le script créait trois comptes, dont un compte Dispatch, avec un
+// mot de passe commun écrit ici même, sans vérifier la base visée. Désormais :
+//   - il refuse toute base qui n'est pas sur cette machine (localhost), et tout environnement de
+//     production ou Railway, AVANT de se connecter ;
+//   - le mot de passe est tiré au hasard à chaque lancement et affiché une seule fois.
+import crypto from "node:crypto";
 import bcrypt from "bcryptjs";
-import { prisma } from "../src/lib/prisma.js";
+import { baseLocale } from "../src/lib/baseLocale.js";
+
+if (!baseLocale(process.env.DATABASE_URL)) {
+  console.error("Refusé : les comptes de démonstration ne se créent que sur une base locale (localhost), jamais en production.");
+  process.exit(1);
+}
+const { prisma } = await import("../src/lib/prisma.js");
 
 async function main() {
-  const password = await bcrypt.hash("password123", 10);
+  const motDePasse = crypto.randomBytes(9).toString("base64url");
+  const password = await bcrypt.hash(motDePasse, 10);
 
   await prisma.user.upsert({
     where: { email: "dispatch@taxi-sylvain.com" },
@@ -43,7 +57,8 @@ async function main() {
     },
   });
 
-  console.log("Comptes de démonstration créés (mot de passe : password123)");
+  console.log(`Comptes de démonstration créés sur la base locale (mot de passe de cette fois : ${motDePasse}).`);
+  console.log("Un compte qui existait déjà garde son ancien mot de passe.");
 }
 
 main().finally(() => prisma.$disconnect());

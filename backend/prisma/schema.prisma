@@ -33,12 +33,17 @@ model User {
   phone        String
   passwordHash String
   createdAt    DateTime @default(now())
+  // Génération des sessions : chaque jeton porte ce numéro ; changer de mot de passe l'incrémente et
+  // révoque tous les jetons déjà distribués (audit du 7 octobre 2026, SEC-07).
+  sessionVersion Int @default(0)
 
   // Champs spécifiques chauffeur
   carModel    String?
   carColor    String? // couleur du véhicule, modifiable par le Dispatch (6 octobre 2026)
   plate       String?
-  ratingAvg   Float?  @default(5.0)
+  // Moyenne des notes reçues ; vide tant qu'aucune note n'a été donnée (audit du 7 octobre 2026,
+  // B17 : un 5/5 par défaut affichait une note fictive aux nouveaux comptes).
+  ratingAvg   Float?
   photoUrl    String? // photo du chauffeur (besoin #13)
   carPhotoUrl String? // photo du véhicule (besoin #13)
 
@@ -168,6 +173,10 @@ model Rating {
   stars      Int
   comment    String?
   createdAt  DateTime @default(now())
+
+  // Une seule note par personne et par course, garantie par la base même sous requêtes simultanées
+  // (audit du 7 octobre 2026, CONC-02).
+  @@unique([rideId, fromUserId])
 }
 
 // Dernière lecture d'un fil de discussion par un utilisateur — sert à compter les messages non lus

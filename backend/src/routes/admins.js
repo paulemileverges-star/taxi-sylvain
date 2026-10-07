@@ -6,6 +6,7 @@ import { deleteUserCascade, announceDeletion } from "../lib/deleteUser.js";
 import { RIDE_STATUSES_BLOQUANTS, courseEnCoursBloque, dateLimite, courrielDecision } from "../lib/accountDeletion.js";
 import { generateTempPassword, realEmailOrNull } from "../lib/placeholderEmail.js";
 import { isMailConfigured, mailProvider, parseFrom, sendMail } from "../lib/mailer.js";
+import { actualiserSallesEquipe } from "../lib/equipe.js";
 
 // Gestion des comptes Admin (besoin #20) — des collaborateurs que Taxi Sylvain (Dispatch) crée
 // lui-même pour l'aider à gérer la plateforme, avec un accès limité aux fonctionnalités qu'il
@@ -65,9 +66,12 @@ router.patch("/:id/permissions", async (req, res) => {
   const admin = await prisma.user.update({
     where: { id: req.params.id },
     data: { permissions: perms },
-    select: { id: true, permissions: true },
+    select: { id: true, role: true, permissions: true },
   });
-  res.json(admin);
+  // Ses connexions temps réel déjà ouvertes suivent tout de suite ses nouveaux droits (audit du
+  // 7 octobre 2026, SEC-02) : avant, elles gardaient les anciens jusqu'à la reconnexion.
+  await actualiserSallesEquipe(req.app.get("io"), admin);
+  res.json({ id: admin.id, permissions: admin.permissions });
 });
 
 router.delete("/:id", async (req, res) => {
@@ -106,8 +110,6 @@ router.post("/deletion-requests/:userId/approve", async (req, res) => {
   const user = await prisma.user.findUnique({ where: { id: req.params.userId }, select: { id: true, role: true, name: true, email: true, deletionRequestedAt: true } });
   if (!user || !user.deletionRequestedAt) return res.status(404).json({ error: "Aucune demande de suppression en attente pour ce compte." });
   const io = req.app.get("io");
-  // Prévenu avant l'effacement : après, sa connexion est coupée et le compte n'existe plus.
-  io?.to(`user:${user.id}`).emit("account:deletion-decided", { approved: true });
   let result;
   try {
     result = await deleteUserCascade(user.id, { refuseIfActive: courseEnCoursBloque(user.role) });
@@ -116,6 +118,10 @@ router.post("/deletion-requests/:userId/approve", async (req, res) => {
     if (e.code === "COMPTE_INTROUVABLE") return res.status(404).json({ error: e.message });
     throw e;
   }
+  // Prévenu seulement une fois l'effacement réussi (audit du 7 octobre 2026, B21 : un refus pour
+  // course en cours affichait quand même « compte supprimé » dans l'application), et avant que
+  // announceDeletion ne coupe ses connexions.
+  io?.to(`user:${user.id}`).emit("account:deletion-decided", { approved: true });
   announceDeletion(io, result, user.name);
   io?.to("dispatch").emit("account:deletion-changed", { userId: user.id });
   courrielDeDecision(user, { approuvee: true });

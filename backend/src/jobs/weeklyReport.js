@@ -5,6 +5,7 @@ import { isMailConfigured, sendMail } from "../lib/mailer.js";
 import { realEmailOrNull } from "../lib/placeholderEmail.js";
 import { previousWeekRange } from "../lib/semaines.js";
 import { filtrePeriode, ligneCourse, totaux, STATUT_EFFECTUEE } from "../lib/rapports.js";
+import { AUDIENCES, emettreEquipe } from "../lib/equipe.js";
 
 // Récapitulatif hebdomadaire par chauffeur (besoin #14).
 //
@@ -106,12 +107,13 @@ async function courrielRecapDispatch({ weekStart, weekEnd, lignes }) {
 
 async function courrielRecap(driver, report) {
   const adresse = realEmailOrNull(driver?.email);
-  if (!adresse || !isMailConfigured()) return;
+  if (!adresse || !isMailConfigured()) return { ok: false, skipped: true };
   try {
     const { subject, html, text } = messageRecap({ nom: driver.name, ...report });
-    await sendMail({ to: adresse, toName: driver.name, subject, html, text });
+    return await sendMail({ to: adresse, toName: driver.name, subject, html, text });
   } catch (e) {
     console.error("Courriel de récap non envoyé :", e.message);
+    return { ok: false, error: e.message };
   }
 }
 
@@ -135,7 +137,11 @@ export function regrouperRecaps(rides) {
 // Calcule (ou recalcule) le récap de la semaine pour chaque chauffeur et l'enregistre.
 // « courriel » = génération automatique du lundi 04 h 00 : courriel et notification, UNE fois par
 // chauffeur et par semaine. Une régénération manuelle depuis la console recalcule en silence.
-export async function generateWeeklyReports(io, range, { courriel = false } = {}) {
+// « synthese » : courriel de synthèse au Dispatch — « toujours » (lundi 04 h 00), « si-nouveaux »
+// (reprise au démarrage ou relance horaire : seulement si un chauffeur vient d'être prévenu), ou
+// « jamais ». Audit du 7 octobre 2026 (B16) : un récap dont aucun envoi n'a abouti (panne) n'est plus
+// marqué « notifié » ; la relance horaire du lundi et le démarrage du serveur le retentent.
+export async function generateWeeklyReports(io, range, { courriel = false, synthese = courriel ? "toujours" : "jamais" } = {}) {
   const { weekStart, weekEnd } = range || previousWeekRange();
 
   const rides = await prisma.ride.findMany({
@@ -149,6 +155,7 @@ export async function generateWeeklyReports(io, range, { courriel = false } = {}
   await prisma.weeklyReport.deleteMany({ where: { weekStart, driverId: { notIn: Object.keys(recaps) } } });
 
   const results = [];
+  let prevenus = 0;
   for (const [driverId, { stats, courses }] of Object.entries(recaps)) {
     const report = await prisma.weeklyReport.upsert({
       where: { driverId_weekStart: { driverId, weekStart } },
@@ -163,17 +170,24 @@ export async function generateWeeklyReports(io, range, { courriel = false } = {}
     const marque = await prisma.weeklyReport.updateMany({ where: { id: report.id, notifiedAt: null }, data: { notifiedAt: new Date() } });
     if (marque.count === 0) continue;
     if (io) io.to(`driver:${driverId}`).emit("report:ready", report);
-    notifyUser(driverId, {
+    const push = await notifyUser(driverId, {
       title: "Votre récap de la semaine est prêt",
       body: `${stats.rideCount} course${stats.rideCount > 1 ? "s" : ""} · ${stats.totalFare.toFixed(2)} $ · redevance ${stats.royaltyDue.toFixed(2)} $`,
       data: { type: "report:ready" },
     });
-    await courrielRecap(report.driver, { weekStart, weekEnd, ...stats, courses });
+    const mail = await courrielRecap(report.driver, { weekStart, weekEnd, ...stats, courses });
+    const parvenu = (push?.envoyes || 0) > 0 || mail?.ok;
+    const panne = push?.echec || Boolean(mail && !mail.ok && !mail.skipped);
+    if (!parvenu && panne) {
+      await prisma.weeklyReport.updateMany({ where: { id: report.id }, data: { notifiedAt: null } });
+    } else {
+      prevenus += 1;
+    }
   }
-  if (io) io.to("dispatch").emit("report:generated", { weekStart, weekEnd, count: results.length });
+  emettreEquipe(io, AUDIENCES.rapports, "report:generated", { weekStart, weekEnd, count: results.length });
   // Le Dispatch reçoit la synthèse de tous les chauffeurs, même une semaine sans course (pour
   // savoir que la tâche a bien tourné).
-  if (courriel) {
+  if (synthese === "toujours" || (synthese === "si-nouveaux" && prevenus > 0)) {
     await courrielRecapDispatch({
       weekStart, weekEnd,
       lignes: results.map((r) => ({ name: r.driver?.name || r.driverId, rideCount: r.rideCount, totalFare: r.totalFare, royaltyDue: r.royaltyDue })),

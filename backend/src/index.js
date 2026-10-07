@@ -37,9 +37,15 @@ import { generateWeeklyReports } from "./jobs/weeklyReport.js";
 import { sendRideReminders } from "./jobs/rideReminders.js";
 import { voiceStatusLine } from "./lib/twilioVoice.js";
 import { FUSEAU_TAXI } from "./lib/ridesOrder.js";
-import { fichiersPublics, faireSauvegarde, sauvegardeSiAncienne, sauvegardesStatusLine } from "./lib/sauvegarde.js";
+import {
+  fichiersPublics, faireSauvegarde, sauvegardeSiAncienne, sauvegardesStatusLine, etatSauvegardes, envoyerCopieExterne, copieExterneStatusLine,
+} from "./lib/sauvegarde.js";
 import { alertesStatusLine, signalerErreur } from "./lib/alertes.js";
+import { prisma } from "./lib/prisma.js";
+import { previousWeekRange } from "./lib/semaines.js";
+import { VERSION_SERVEUR } from "./version.js";
 
+const DEMARRE_LE = new Date().toISOString();
 const app = express();
 app.set("trust proxy", 1); // derrière le proxy Railway — nécessaire pour que req.ip soit la vraie IP (limiteur de tentatives)
 
@@ -60,12 +66,31 @@ console.log(voiceStatusLine());
 console.log(webPushStatusLine());
 console.log(alertesStatusLine());
 console.log(sauvegardesStatusLine());
+console.log(copieExterneStatusLine());
+console.log(`Version du serveur : ${VERSION_SERVEUR}`);
 // Photos servies en lecture seule : jamais interprétées comme une page (nosniff) ni exécutées
 // (sandbox), même si un fichier piégé avait été déposé avant le verrouillage de l'envoi. Le
 // dossier caché des sauvegardes (.sauvegardes/) n'est jamais servi (voir lib/sauvegarde.js).
 app.use("/uploads", fichiersPublics(uploadsDir));
 
+// /health : le programme répond (vivant). /health/ready : il peut vraiment servir — la base répond,
+// avec la version du code, la dernière migration appliquée et l'âge de la dernière sauvegarde, pour
+// la surveillance (audit du 7 octobre 2026, OPS-04 : /health restait vert base en panne). Aucune
+// donnée personnelle.
 app.get("/health", (req, res) => res.json({ ok: true }));
+app.get("/health/ready", async (req, res) => {
+  res.setHeader("Cache-Control", "no-store");
+  const etat = { version: VERSION_SERVEUR, demarreLe: DEMARRE_LE, sauvegardes: etatSauvegardes() };
+  try {
+    const [ligne] = await Promise.race([
+      prisma.$queryRawUnsafe('SELECT migration_name FROM "_prisma_migrations" WHERE finished_at IS NOT NULL AND rolled_back_at IS NULL ORDER BY migration_name DESC LIMIT 1'),
+      new Promise((_, rejeter) => setTimeout(() => rejeter(new Error("délai dépassé")), 3000)),
+    ]);
+    res.json({ ok: true, base: "ok", migration: ligne?.migration_name || null, ...etat });
+  } catch {
+    res.status(503).json({ ok: false, base: "panne", ...etat });
+  }
+});
 
 // Liens de téléchargement Android définitifs, à donner aux chauffeurs et aux clients :
 // /telecharger/chauffeur.apk et /telecharger/client.apk renvoient vers le fichier le plus récent
@@ -126,6 +151,18 @@ const HORLOGE_QUEBEC = { timezone: FUSEAU_TAXI };
 // par courriel et notification à chaque chauffeur, une seule fois par semaine (jobs/weeklyReport.js).
 // POST /api/reports/generate recalcule à la main, sans courriel ni notification.
 cron.schedule("0 4 * * 1", () => generateWeeklyReports(io, undefined, { courriel: true }).catch((e) => signalerErreur("Récap hebdomadaire du lundi", e)), HORLOGE_QUEBEC);
+// Audit du 7 octobre 2026 (B16) : un récap dont aucun envoi n'a abouti (panne) redevient « à
+// envoyer » ; il est retenté chaque heure le lundi et le mardi (sans nouvelle synthèse au Dispatch).
+cron.schedule("0 5-23 * * 1,2", () => generateWeeklyReports(io, undefined, { courriel: true, synthese: "jamais" }).catch((e) => signalerErreur("Relance du récap hebdomadaire", e)), HORLOGE_QUEBEC);
+// Serveur arrêté le lundi à 04 h 00 : au démarrage, si AUCUN chauffeur n'a été prévenu pour la semaine
+// dernière, le récap part maintenant (une seule fois par chauffeur, grâce à notifiedAt).
+async function rattraperRecapHebdomadaire() {
+  const { weekStart } = previousWeekRange();
+  const dejaPrevenus = await prisma.weeklyReport.count({ where: { weekStart, notifiedAt: { not: null } } });
+  if (dejaPrevenus > 0) return;
+  await generateWeeklyReports(io, undefined, { courriel: true, synthese: "si-nouveaux" });
+}
+setTimeout(() => rattraperRecapHebdomadaire().catch((e) => signalerErreur("Rattrapage du récap hebdomadaire au démarrage", e)), 120_000).unref();
 
 // Rappels de course programmés (besoin #1) — voir src/jobs/rideReminders.js.
 cron.schedule("* * * * *", () => sendRideReminders(io).catch((e) => signalerErreur("Rappels de course", e)), HORLOGE_QUEBEC);
@@ -135,6 +172,11 @@ cron.schedule("* * * * *", () => sendRideReminders(io).catch((e) => signalerErre
 const journaliserSauvegarde = (r) => r && console.log(`Sauvegarde de la base faite : ${r.fichier} (${Math.round(r.octets / 1024)} Ko).`);
 cron.schedule("30 3 * * *", () => faireSauvegarde().then(journaliserSauvegarde).catch((e) => signalerErreur("Sauvegarde de la base", e)), HORLOGE_QUEBEC);
 setTimeout(() => sauvegardeSiAncienne().then(journaliserSauvegarde).catch((e) => signalerErreur("Sauvegarde de la base (rattrapage au démarrage)", e)), 60_000).unref();
+// Copie chiffrée hors de Railway, chaque dimanche à 05 h 00 (lib/sauvegarde.js, inactive tant que
+// SAUVEGARDE_COURRIEL et SAUVEGARDE_CLE ne sont pas posées). Un échec part en alerte.
+cron.schedule("0 5 * * 0", () => envoyerCopieExterne()
+  .then((r) => r?.envoye && console.log(`Copie externe envoyée : ${r.fichier} (${Math.round(r.octets / 1024)} Ko, chiffrée).`))
+  .catch((e) => signalerErreur("Copie externe des sauvegardes", e)), HORLOGE_QUEBEC);
 
 const port = process.env.PORT || 4000;
 server.listen(port, () => console.log(`Taxi Sylvain API en écoute sur le port ${port}`));

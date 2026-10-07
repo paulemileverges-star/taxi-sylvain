@@ -5,7 +5,7 @@ import fs from "fs";
 import path from "path";
 import { prisma } from "../lib/prisma.js";
 import { uploadsDir } from "../lib/uploads.js";
-import { requireAuth, requirePermission } from "../middleware/auth.js";
+import { requireAuth, requirePermission, requireAnyPermission } from "../middleware/auth.js";
 import { deleteUserCascade, announceDeletion } from "../lib/deleteUser.js";
 import { getOnlineDriverIds } from "../lib/onlineDrivers.js";
 import { streamListPdf, streamListXlsx } from "../lib/exportReport.js";
@@ -13,6 +13,9 @@ import { generateTempPassword, realEmailOrNull } from "../lib/placeholderEmail.j
 import { parseImportFile, pick } from "../lib/bulkImport.js";
 import { getAllDriverLocations } from "../lib/driverLocations.js";
 import { donneesFicheChauffeur } from "../lib/ficheChauffeur.js";
+import { AUDIENCES, aPermission, emettreEquipe } from "../lib/equipe.js";
+import { formatImageReel } from "../lib/images.js";
+import { reinitialiserMotDePasse } from "../lib/motsDePasse.js";
 
 const importUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024 } });
 
@@ -83,8 +86,7 @@ const upload = multer({
 async function canEditPhotos(req, res, next) {
   const { id } = req.params;
   if (!isSafeId(id)) return res.status(404).json({ error: "Chauffeur introuvable." });
-  const isAdminWithAccess = req.user.role === "ADMIN" && req.user.permissions?.includes("drivers");
-  if (req.user.role !== "DISPATCH" && !isAdminWithAccess && req.user.id !== id) {
+  if (!aPermission(req.user, "drivers") && req.user.id !== id) {
     return res.status(403).json({ error: "Accès refusé." });
   }
   const target = await prisma.user.findUnique({ where: { id }, select: { role: true, photoUrl: true, carPhotoUrl: true } });
@@ -113,6 +115,19 @@ router.get("/", requirePermission("drivers"), async (req, res) => {
     // emailVerifiedAt : la console montre qui n’a pas encore confirmé son courriel (et peut le faire à sa place).
     // Courriel et téléphone : pré-remplissent la fenêtre « Modifier » (route réservée à la permission chauffeurs).
     select: { id: true, name: true, email: true, phone: true, carModel: true, carColor: true, plate: true, ratingAvg: true, photoUrl: true, carPhotoUrl: true, emailVerifiedAt: true },
+    orderBy: { name: "asc" },
+  });
+  const onlineIds = getOnlineDriverIds();
+  res.json(drivers.map((d) => ({ ...d, online: onlineIds.has(d.id) })));
+});
+
+// Liste minimale des chauffeurs pour les sélecteurs des pages Courses, Cédule et Messagerie
+// (audit du 7 octobre 2026, F04) : un collaborateur autorisé aux courses doit pouvoir choisir un
+// chauffeur sans recevoir les courriels et téléphones réservés à la permission Chauffeurs.
+router.get("/choix", requireAnyPermission("drivers", "courses", "schedule", "groups"), async (req, res) => {
+  const drivers = await prisma.user.findMany({
+    where: { role: "DRIVER" },
+    select: { id: true, name: true, carModel: true, carColor: true, plate: true, ratingAvg: true, photoUrl: true, carPhotoUrl: true },
     orderBy: { name: "asc" },
   });
   const onlineIds = getOnlineDriverIds();
@@ -155,10 +170,23 @@ router.patch("/:id", requirePermission("drivers"), async (req, res) => {
   });
   const io = req.app.get("io");
   if (io) {
-    io.to("dispatch").emit("driver:updated", chauffeur);
+    emettreEquipe(io, AUDIENCES.chauffeurs, "driver:updated", chauffeur);
+    // Courses et Cédule n'ont besoin que du nom et du véhicule, sans courriel ni téléphone.
+    // eslint-disable-next-line no-unused-vars
+    const { email, phone, emailVerifiedAt, ...reduite } = chauffeur;
+    emettreEquipe(io, ["courses", "schedule"], "driver:updated", reduite, { sauf: AUDIENCES.chauffeurs });
     io.to(`driver:${id}`).emit("driver:updated", chauffeur);
   }
   res.json(chauffeur);
+});
+
+// Nouveau mot de passe temporaire pour un chauffeur qui a perdu le sien, ou créé par import
+// (audit du 7 octobre 2026, B05) : il est montré une seule fois au Dispatch, et toutes les sessions
+// ouvertes du chauffeur sont fermées.
+router.post("/:id/reset-password", requirePermission("drivers"), async (req, res) => {
+  const resultat = await reinitialiserMotDePasse(String(req.params.id), "DRIVER", req.app.get("io"));
+  if (!resultat) return res.status(404).json({ error: "Chauffeur introuvable." });
+  res.json(resultat);
 });
 
 // Suppression d'un chauffeur depuis la console. Seul un compte CHAUFFEUR peut être visé ici :
@@ -191,39 +219,58 @@ router.post("/import", requirePermission("drivers"), importUpload.single("file")
     const phone = pick(row, "telephone", "téléphone", "phone");
     if (!name || !email || !phone) { skipped.push({ row, reason: "Nom, courriel ou téléphone manquant." }); continue; }
     try {
-      const { driver } = await createDriverAccount({
+      const { driver, tempPassword } = await createDriverAccount({
         name, email, phone,
         carModel: pick(row, "vehicule", "véhicule", "carmodel") || undefined,
+        carColor: pick(row, "couleur", "color") || undefined,
         plate: pick(row, "plaque", "plate") || undefined,
       });
-      created.push(driver.name);
+      created.push({ id: driver.id, name: driver.name, email: driver.email, tempPassword });
     } catch (e) {
       skipped.push({ row, reason: e.message });
     }
   }
-  res.json({ createdCount: created.length, skippedCount: skipped.length, skipped });
+  // Les mots de passe temporaires ne sont montrés qu'ici, une seule fois : sans eux, les comptes
+  // importés restaient inaccessibles (audit du 7 octobre 2026, B05).
+  res.json({ createdCount: created.length, skippedCount: skipped.length, skipped, created });
 });
 
 // Dernières positions connues des chauffeurs en course — carte en direct du Dispatch.
-router.get("/locations", (req, res) => {
-  if (req.user.role !== "DISPATCH" && req.user.role !== "ADMIN") return res.status(403).json({ error: "Accès refusé." });
+router.get("/locations", requireAnyPermission(...AUDIENCES.positions), (req, res) => {
   res.json(getAllDriverLocations());
 });
 
 // Recherche dans les bases clients / chauffeurs / courses (besoin #14)
-router.get("/search", requirePermission("drivers"), async (req, res) => {
-  const q = String(req.query.q || "");
+// Chaque famille de résultats suit sa permission (audit du 7 octobre 2026, F04 et SEC-02) :
+// chauffeurs avec « Chauffeurs », clients avec « Clients », courses avec « Courses » ou « Cédule ».
+// Les comptes de l'équipe n'apparaissent qu'au Dispatch.
+router.get("/search", requireAnyPermission("drivers", "clients", "courses", "schedule"), async (req, res) => {
+  const q = String(req.query.q || "").trim().slice(0, 100);
+  if (q.length < 2) return res.json({ users: [], rides: [] });
+  const roles = [
+    aPermission(req.user, "drivers") && "DRIVER",
+    aPermission(req.user, "clients") && "CLIENT",
+    req.user.role === "DISPATCH" && "ADMIN",
+    req.user.role === "DISPATCH" && "DISPATCH",
+  ].filter(Boolean);
+  const voitCourses = aPermission(req.user, ...AUDIENCES.courses);
   const [users, rides] = await Promise.all([
-    prisma.user.findMany({
-      where: { OR: [{ name: { contains: q, mode: "insensitive" } }, { email: { contains: q, mode: "insensitive" } }] },
-      select: { id: true, name: true, role: true, email: true },
-    }),
-    prisma.ride.findMany({
-      where: { OR: [{ pickupAddress: { contains: q, mode: "insensitive" } }, { destAddress: { contains: q, mode: "insensitive" } }] },
-      take: 20,
-    }),
+    roles.length
+      ? prisma.user.findMany({
+        where: { role: { in: roles }, OR: [{ name: { contains: q, mode: "insensitive" } }, { email: { contains: q, mode: "insensitive" } }] },
+        select: { id: true, name: true, role: true, email: true },
+        take: 50,
+      })
+      : [],
+    voitCourses
+      ? prisma.ride.findMany({
+        where: { OR: [{ pickupAddress: { contains: q, mode: "insensitive" } }, { destAddress: { contains: q, mode: "insensitive" } }] },
+        orderBy: { createdAt: "desc" },
+        take: 20,
+      })
+      : [],
   ]);
-  res.json({ users, rides });
+  res.json({ users: users.map((u) => ({ ...u, email: realEmailOrNull(u.email) })), rides });
 });
 
 // Export de la base de chauffeurs (PDF ou Excel).
@@ -242,7 +289,7 @@ router.get("/export", requirePermission("drivers"), async (req, res) => {
     carModel: d.carModel || "",
     carColor: d.carColor || "",
     plate: d.plate || "",
-    ratingAvg: d.ratingAvg?.toFixed(1) ?? "5.0",
+    ratingAvg: d.ratingAvg != null ? d.ratingAvg.toFixed(1) : "Aucune note",
     createdAt: new Date(d.createdAt).toLocaleDateString("fr-CA"),
   }));
   const columns = [
@@ -271,6 +318,16 @@ router.post(
   upload.fields([{ name: "photo", maxCount: 1 }, { name: "carPhoto", maxCount: 1 }]),
   async (req, res) => {
     const { id } = req.params;
+    // Le type annoncé par le téléphone ne suffit pas : le fichier doit être une vraie image JPEG,
+    // PNG ou WebP de taille raisonnable, sinon il est effacé (audit du 7 octobre 2026, SEC-13).
+    const recus = [req.files?.photo?.[0], req.files?.carPhoto?.[0]].filter(Boolean);
+    for (const fichier of recus) {
+      const verdict = await formatImageReel(fichier.path, fichier.mimetype);
+      if (!verdict.ok) {
+        await Promise.all(recus.map((f) => fs.promises.unlink(f.path).catch(() => null)));
+        return res.status(400).json({ error: verdict.raison });
+      }
+    }
     const data = {};
     if (req.files?.photo?.[0]) data.photoUrl = `/uploads/${req.files.photo[0].filename}`;
     if (req.files?.carPhoto?.[0]) data.carPhotoUrl = `/uploads/${req.files.carPhoto[0].filename}`;

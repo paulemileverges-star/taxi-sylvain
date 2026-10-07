@@ -3,6 +3,7 @@ import { prisma } from "../lib/prisma.js";
 import { requireAuth } from "../middleware/auth.js";
 import { cleanAddressText } from "../lib/addressFormat.js";
 import { realEmailOrNull } from "../lib/placeholderEmail.js";
+import { aPermission, estEquipe } from "../lib/equipe.js";
 
 // Saisie intuitive côté Dispatch : propose, au fur et à mesure de la frappe, ce que la base
 // contient déjà (clients, chauffeurs, adresses déjà utilisées, numéros de vol) pour éviter de
@@ -12,10 +13,24 @@ router.use(requireAuth);
 
 const LIMIT = 8;
 
+// Chaque type de suggestion exige l'une des permissions des pages qui s'en servent (audit du
+// 7 octobre 2026, SEC-02) : avant, tout compte ADMIN, même sans aucun droit, lisait ainsi les
+// téléphones et adresses des clients que la page Clients lui refusait.
+export const PERMISSIONS_SUGGESTION = {
+  client: ["clients", "courses"],
+  driver: ["drivers", "courses", "schedule"],
+  address: ["courses", "schedule", "clients"],
+  flight: ["courses", "schedule"],
+  zone: ["courses"],
+};
+
 router.get("/", async (req, res) => {
-  if (req.user.role !== "DISPATCH" && req.user.role !== "ADMIN") return res.status(403).json({ error: "Accès refusé." });
-  const q = String(req.query.q || "").trim();
+  if (!estEquipe(req.user)) return res.status(403).json({ error: "Accès refusé." });
+  const q = String(req.query.q || "").trim().slice(0, 100);
   const field = String(req.query.field || "");
+  const requises = PERMISSIONS_SUGGESTION[field];
+  if (!requises) return res.json([]);
+  if (!aPermission(req.user, ...requises)) return res.status(403).json({ error: "Accès refusé : cette fonctionnalité n'est pas autorisée pour votre compte." });
   if (q.length < 2) return res.json([]);
   const like = { contains: q, mode: "insensitive" };
 

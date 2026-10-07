@@ -73,9 +73,28 @@ export function callAllowedForStatus(status) {
 // pas relier indéfiniment un client et un chauffeur une fois la course passée.
 export const SESSION_TTL_SECONDS = 4 * 60 * 60;
 
+const serviceProxy = () => getClient().proxy.v1.services(process.env.TWILIO_PROXY_SERVICE_SID);
+
+/**
+ * Ferme la session d'appel masqué d'une course : changement de chauffeur, annulation, suppression ou
+ * fin de course (audit du 7 octobre 2026, SEC-16). Sans cela, l'ancien chauffeur restait relié au
+ * client par le numéro relais jusqu'à l'expiration de la session. Jamais bloquant.
+ */
+export async function fermerSessionAppel(rideId, { service } = {}) {
+  if (!rideId || (!service && !isConfigured())) return false;
+  try {
+    await (service || serviceProxy()).sessions(`ride-${rideId}`).remove();
+    return true;
+  } catch {
+    return false; // aucune session ouverte pour cette course : rien à fermer
+  }
+}
+
 // Crée (ou réutilise, si déjà ouverte) la session Proxy pour cette course, avec le client et le
-// chauffeur comme participants, et renvoie le numéro masqué à composer.
-export async function getOrCreateCallSession(ride) {
+// chauffeur comme participants, et renvoie le numéro masqué à composer. Une session dont les
+// participants ne sont plus exactement le client et le chauffeur actuels (chauffeur remplacé, numéro
+// corrigé) est fermée puis recréée : personne d'autre ne doit rester relié au client.
+export async function getOrCreateCallSession(ride, { service: serviceInjecte } = {}) {
   // Vérifié avant tout appel à Twilio : un numéro mal saisi donne un message clair au lieu d'une
   // erreur technique de Twilio.
   const clientPhone = toE164(ride.client?.phone);
@@ -83,7 +102,7 @@ export async function getOrCreateCallSession(ride) {
   const driverPhone = toE164(ride.driver?.phone);
   if (!driverPhone) throw invalidPhone("du chauffeur");
 
-  const service = getClient().proxy.v1.services(process.env.TWILIO_PROXY_SERVICE_SID);
+  const service = serviceInjecte || serviceProxy();
   const uniqueName = `ride-${ride.id}`;
 
   let session = null;
@@ -96,6 +115,14 @@ export async function getOrCreateCallSession(ride) {
   if (session && !["open", "in-progress"].includes(session.status)) {
     await service.sessions(session.sid).remove().catch(() => null);
     session = null;
+  }
+  if (session) {
+    const presents = await service.sessions(session.sid).participants.list();
+    const attendus = new Set([clientPhone, driverPhone]);
+    if (presents.some((p) => !attendus.has(p.identifier))) {
+      await service.sessions(session.sid).remove().catch(() => null);
+      session = null;
+    }
   }
   if (!session) {
     session = await service.sessions.create({ uniqueName, mode: "voice-only", ttl: SESSION_TTL_SECONDS });

@@ -5,6 +5,8 @@ import { uploadsDir } from "./uploads.js";
 import { RIDE_STATUSES_BLOQUANTS, messageCourseEnCours } from "./accountDeletion.js";
 import { clearDriverLocation } from "./driverLocations.js";
 import { RIDE_INCLUDE, sendRideCancellation } from "./rideEmails.js";
+import { AUDIENCES, emettreEquipe } from "./equipe.js";
+import { recalculerMoyennes } from "./moyennes.js";
 
 // Courses pas encore terminées, et courses déjà confiées à un chauffeur.
 const NON_TERMINEES = ["REQUESTED", "BROADCAST", "ACCEPTED", "EN_ROUTE", "STARTED"];
@@ -108,7 +110,11 @@ export async function deleteUserCascade(userId, { db = prisma, removeFiles = rem
     await tx.conversationParticipant.deleteMany({ where: { userId } });
     await tx.message.deleteMany({ where: { senderId: userId } });
     await tx.message.deleteMany({ where: { driverId: userId } }); // fil direct dispatch<->chauffeur
+    // Les personnes que ce compte avait notées gardent une moyenne juste : elle est recalculée sans
+    // ses notes (audit du 7 octobre 2026, B17 : la moyenne restait figée sur des notes effacées).
+    const notees = await tx.rating.findMany({ where: { fromUserId: userId }, select: { toUserId: true } });
     await tx.rating.deleteMany({ where: { OR: [{ fromUserId: userId }, { toUserId: userId }] } });
+    await recalculerMoyennes(notees.map((n) => n.toUserId).filter((id) => id !== userId), tx);
     await tx.schedule.deleteMany({ where: { driverId: userId } });
     await tx.weeklyReport.deleteMany({ where: { driverId: userId } });
 
@@ -144,8 +150,9 @@ export function announceDeletion(io, result, nom) {
   try {
     // Le compte n'existe plus : ses connexions en temps réel encore ouvertes sont coupées.
     if (result.userId) io.in(`user:${result.userId}`).disconnectSockets(true);
+    // Évènements envoyés à l'équipe autorisée seulement (courses, positions), voir lib/equipe.js.
     if (result.role === "DRIVER" && result.userId && clearDriverLocation(result.userId)) {
-      io.to("dispatch").emit("driver:location:clear", { driverId: result.userId });
+      emettreEquipe(io, AUDIENCES.positions, "driver:location:clear", { driverId: result.userId });
     }
     for (const ride of result.annulees) {
       io.to("drivers").emit("ride:taken", { id: ride.id });
@@ -153,15 +160,15 @@ export function announceDeletion(io, result, nom) {
         io.to(`driver:${ride.driverId}`).emit("ride:taken", { id: ride.id });
         io.in(`user:${ride.driverId}`).socketsLeave(`ride:${ride.id}`);
         // Course annulée alors que son chauffeur était en route : il disparaît de la carte.
-        if (clearDriverLocation(ride.driverId)) io.to("dispatch").emit("driver:location:clear", { driverId: ride.driverId });
+        if (clearDriverLocation(ride.driverId)) emettreEquipe(io, AUDIENCES.positions, "driver:location:clear", { driverId: ride.driverId });
       }
       io.to(`ride:${ride.id}`).emit("ride:status", { id: ride.id, status: "CANCELLED" });
-      io.to("dispatch").emit("ride:updated", { id: ride.id, status: "CANCELLED" });
+      emettreEquipe(io, AUDIENCES.courses, "ride:updated", { id: ride.id, status: "CANCELLED" });
     }
     for (const ride of result.aReaffecter) {
       // Le client suit peut-être sa course : son écran repasse « en attente d'un chauffeur ».
       io.to(`ride:${ride.id}`).emit("ride:status", { id: ride.id, status: "REQUESTED", driverId: null });
-      io.to("dispatch").emit("ride:updated", { id: ride.id, status: "REQUESTED", driverId: null });
+      emettreEquipe(io, AUDIENCES.courses, "ride:updated", { id: ride.id, status: "REQUESTED", driverId: null });
     }
     const total = result.annulees.length + result.aReaffecter.length;
     if (total > 0) {
@@ -169,7 +176,7 @@ export function announceDeletion(io, result, nom) {
       const detail = [];
       if (result.annulees.length) detail.push(`${result.annulees.length} course(s) annulée(s)`);
       if (result.aReaffecter.length) detail.push(`${result.aReaffecter.length} course(s) à réaffecter`);
-      io.to("dispatch").emit("ride:notification", {
+      emettreEquipe(io, AUDIENCES.courses, "ride:notification", {
         status: "CANCELLED",
         text: `Le compte ${roleTexte} de ${nom} a été supprimé : ${detail.join(", ")}.`,
       });

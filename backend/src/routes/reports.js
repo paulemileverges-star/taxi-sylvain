@@ -1,6 +1,8 @@
 import { Router } from "express";
+import jwt from "jsonwebtoken";
 import { prisma } from "../lib/prisma.js";
-import { requireAuth, requireRole, requirePermission } from "../middleware/auth.js";
+import { requireAuth, requireRole, requirePermission, sessionEnCours } from "../middleware/auth.js";
+import { aPermission } from "../lib/equipe.js";
 import { generateWeeklyReports } from "../jobs/weeklyReport.js";
 import { previousWeekRange, mondayOf, semaineDe } from "../lib/semaines.js";
 import { filtrePeriode, rapportPeriode, recapsHebdomadaires, totaux, ligneCourse, STATUT_EFFECTUEE, STATUTS_ANNULES } from "../lib/rapports.js";
@@ -11,18 +13,56 @@ import { streamReportPdf, streamReportXlsx } from "../lib/exportReport.js";
 // est effectuée ; les chiffres sont recalculés à chaque lecture.
 const router = Router();
 
-// Accepte le token soit dans l'en-tête Authorization, soit en query (?token=...) — nécessaire
-// pour un lien de téléchargement direct (ex. ouvert depuis l'app Chauffeur via Linking.openURL).
-function authFromHeaderOrQuery(req, res, next) {
-  // Même contrôle que partout ailleurs (compte encore existant, rôle à jour) : le jeton passé dans
-  // l'adresse est simplement recopié dans l'en-tête avant l'appel à requireAuth.
+// Lien de téléchargement direct (ex. ouvert depuis l'app Chauffeur via Linking.openURL).
+// Audit du 7 octobre 2026 (SEC-19) : le lien portait le jeton de session complet, valable 30 jours,
+// qui pouvait rester dans l'historique du navigateur ou des journaux. Désormais l'application demande
+// un « jeton d'export » (POST /export-link) : valable 5 minutes, il n'ouvre QUE l'export, jamais les
+// autres routes (middleware/auth.js le refuse). L'ancien paramètre ?token= reste accepté pour les
+// applications déjà installées (1.4.0 et 1.5.0), le temps qu'elles soient remplacées.
+export const PORTEE_EXPORT = "export-rapport";
+export const DUREE_LIEN_EXPORT = "5m";
+
+async function authFromHeaderOrQuery(req, res, next) {
+  if (!req.headers.authorization && typeof req.query.jeton === "string") {
+    let payload;
+    try {
+      payload = jwt.verify(req.query.jeton, process.env.JWT_SECRET);
+    } catch {
+      return res.status(401).json({ error: "Lien de téléchargement expiré : relancez l'export." });
+    }
+    if (payload?.portee !== PORTEE_EXPORT) return res.status(401).json({ error: "Lien de téléchargement invalide." });
+    const user = await prisma.user.findUnique({ where: { id: String(payload.id) }, select: { id: true, role: true, name: true, permissions: true, sessionVersion: true } });
+    if (!user || !sessionEnCours(payload, user)) return res.status(401).json({ error: "Lien de téléchargement invalide." });
+    req.user = { id: user.id, role: user.role, name: user.name, permissions: user.permissions || [] };
+    return next();
+  }
+  // Ancien format (applications installées avant le 7 octobre 2026) : même contrôle que partout.
   if (!req.headers.authorization && typeof req.query.token === "string") {
     req.headers.authorization = `Bearer ${req.query.token}`;
   }
   return requireAuth(req, res, next);
 }
 
+// Le fichier exporté ne doit rester ni en cache ni transmettre son adresse à une autre page.
+function sansTrace(req, res, next) {
+  res.setHeader("Cache-Control", "no-store");
+  res.setHeader("Referrer-Policy", "no-referrer");
+  next();
+}
+
 router.use((req, res, next) => (req.path === "/export" ? authFromHeaderOrQuery(req, res, next) : requireAuth(req, res, next)));
+
+// Lien d'export de 5 minutes pour le compte connecté (voir plus haut). Mêmes droits que l'export.
+router.post("/export-link", (req, res) => {
+  if (!peutExporter(req.user)) return res.status(403).json({ error: "Accès refusé." });
+  const jeton = jwt.sign({ id: req.user.id, portee: PORTEE_EXPORT, sv: req.user.sessionVersion ?? 0 }, process.env.JWT_SECRET, { expiresIn: DUREE_LIEN_EXPORT });
+  res.json({ jeton, expireDans: 300 });
+});
+
+// Export : chauffeur (le sien), Dispatch et collaborateur autorisé aux rapports.
+function peutExporter(user) {
+  return user?.role === "DRIVER" || aPermission(user, "reports");
+}
 
 /** Période demandée (from, to en ISO), sinon la semaine en cours. Null si une date est illisible. */
 function periode(query, parDefaut = () => semaineDe(new Date())) {
@@ -114,11 +154,8 @@ router.post("/generate", requirePermission("reports"), async (req, res) => {
 
 // Export PDF/Excel — Dispatch (tous les chauffeurs) ou Chauffeur (le sien uniquement), avec le
 // détail course par course. Sans période : la semaine dernière.
-router.get("/export", async (req, res) => {
-  if (req.user.role === "CLIENT") return res.status(403).json({ error: "Accès refusé." });
-  if (req.user.role === "ADMIN" && !req.user.permissions?.includes("reports")) {
-    return res.status(403).json({ error: "Accès refusé : cette fonctionnalité n'est pas autorisée pour votre compte." });
-  }
+router.get("/export", sansTrace, async (req, res) => {
+  if (!peutExporter(req.user)) return res.status(403).json({ error: "Accès refusé : cette fonctionnalité n'est pas autorisée pour votre compte." });
   const format = req.query.format === "xlsx" ? "xlsx" : "pdf";
   const p = periode(req.query, () => previousWeekRange());
   if (!p) return res.status(400).json({ error: "Période invalide." });

@@ -38,11 +38,41 @@ function preparer() {
   configure = true;
 }
 
-/** Un abonnement envoyé par un navigateur est-il complet ? */
+// Services de notification des navigateurs (Chrome et Android, Firefox, Edge, Safari). Le serveur
+// envoie une requête à l'adresse de l'abonnement : sans cette liste, un compte pouvait faire appeler
+// par le serveur n'importe quelle adresse, y compris interne (audit du 7 octobre 2026, SEC-08).
+export const SERVICES_PUSH = [
+  "fcm.googleapis.com",
+  "android.googleapis.com",
+  "updates.push.services.mozilla.com",
+  "push.services.mozilla.com",
+  "notify.windows.com",
+  "push.apple.com",
+];
+
+/** L'adresse d'un abonnement vise-t-elle un service de notification connu, en HTTPS standard ? */
+export function destinationPushAutorisee(endpoint) {
+  if (typeof endpoint !== "string" || endpoint.length > 1000) return false;
+  let url;
+  try {
+    url = new URL(endpoint);
+  } catch {
+    return false;
+  }
+  if (url.protocol !== "https:" || url.username || url.password || (url.port && url.port !== "443")) return false;
+  const hote = url.hostname.toLowerCase();
+  return SERVICES_PUSH.some((s) => hote === s || hote.endsWith(`.${s}`));
+}
+
+// Clés d'un abonnement : texte base64url de longueur attendue (p256dh : clé publique de 65 octets,
+// auth : 16 octets).
+const base64url = (v, min, max) => typeof v === "string" && v.length >= min && v.length <= max && /^[A-Za-z0-9_-]+=*$/.test(v);
+
+/** Un abonnement envoyé par un navigateur est-il complet et vise-t-il un vrai service ? */
 export function abonnementValide(sub) {
   return Boolean(
-    sub && typeof sub.endpoint === "string" && /^https:\/\//.test(sub.endpoint) &&
-    sub.keys && typeof sub.keys.p256dh === "string" && typeof sub.keys.auth === "string"
+    sub && destinationPushAutorisee(sub.endpoint) &&
+    sub.keys && base64url(sub.keys.p256dh, 80, 100) && base64url(sub.keys.auth, 16, 32)
   );
 }
 
@@ -55,9 +85,11 @@ export async function enregistrerAbonnement(userId, sub, userAgent) {
   });
 }
 
-export async function retirerAbonnement(endpoint) {
-  if (typeof endpoint !== "string" || !endpoint) return;
-  await prisma.webPushSubscription.deleteMany({ where: { endpoint } });
+// Seul le compte propriétaire retire son abonnement (audit du 7 octobre 2026, SEC-09 : la suppression
+// ne regardait que l'adresse, un autre compte pouvait couper les notifications d'autrui).
+export async function retirerAbonnement(endpoint, userId) {
+  if (typeof endpoint !== "string" || !endpoint || !userId) return;
+  await prisma.webPushSubscription.deleteMany({ where: { endpoint, userId } });
 }
 
 /**
@@ -65,12 +97,15 @@ export async function retirerAbonnement(endpoint) {
  * Un abonnement révoqué (404, 410) est effacé pour ne plus être tenté.
  */
 export async function envoyerWebPush(userIds, { title, body, data, tag } = {}) {
-  if (!isWebPushConfigured()) return { envoyes: 0 };
+  if (!isWebPushConfigured()) return { envoyes: 0, tentatives: 0 };
   const ids = (userIds || []).filter(Boolean);
-  if (ids.length === 0) return { envoyes: 0 };
+  if (ids.length === 0) return { envoyes: 0, tentatives: 0 };
   preparer();
 
-  const abonnements = await prisma.webPushSubscription.findMany({ where: { userId: { in: ids } } });
+  const abonnements = (await prisma.webPushSubscription.findMany({ where: { userId: { in: ids } } }))
+    // Un abonnement enregistré avant le contrôle des destinations n'est jamais contacté s'il ne vise
+    // pas un service de notification connu.
+    .filter((a) => destinationPushAutorisee(a.endpoint));
   const charge = JSON.stringify({ title: title || "Taxi Sylvain", body: body || "", data: data || {}, tag: tag || null });
   let envoyes = 0;
   await Promise.all(
@@ -87,5 +122,5 @@ export async function envoyerWebPush(userIds, { title, body, data, tag } = {}) {
       }
     })
   );
-  return { envoyes };
+  return { envoyes, tentatives: abonnements.length };
 }

@@ -2,6 +2,7 @@ import { Router } from "express";
 import { prisma } from "../lib/prisma.js";
 import { requireAuth } from "../middleware/auth.js";
 import { coursesANoter, DELAI_NOTATION_JOURS } from "../lib/notation.js";
+import { recalculerMoyenne } from "../lib/moyennes.js";
 
 const router = Router();
 router.use(requireAuth);
@@ -26,8 +27,9 @@ router.get("/pending", async (req, res) => {
 // Seules les deux parties de la course peuvent noter, uniquement l'autre partie, une seule fois,
 // et seulement une fois la course terminée — sinon n'importe qui pourrait manipuler les moyennes.
 router.post("/:rideId", async (req, res) => {
-  const { toUserId, comment } = req.body;
-  const stars = Number(req.body.stars);
+  const { toUserId } = req.body || {};
+  const comment = typeof req.body?.comment === "string" ? req.body.comment.trim().slice(0, 1000) : "";
+  const stars = Number(req.body?.stars);
   if (!toUserId || !Number.isInteger(stars) || stars < 1 || stars > 5) {
     return res.status(400).json({ error: "toUserId et une note entière de 1 à 5 sont requis." });
   }
@@ -44,16 +46,19 @@ router.post("/:rideId", async (req, res) => {
     return res.status(400).json({ error: "Vous ne pouvez noter que l'autre partie de cette course." });
   }
 
-  const already = await prisma.rating.findFirst({ where: { rideId: ride.id, fromUserId: req.user.id } });
-  if (already) return res.status(409).json({ error: "Vous avez déjà noté cette course." });
+  // Une seule note par personne et par course, garantie par la base (contrainte unique) : des
+  // envois simultanés ne créent plus plusieurs notes (audit du 7 octobre 2026, CONC-02).
+  let rating;
+  try {
+    rating = await prisma.rating.create({
+      data: { rideId: ride.id, fromUserId: req.user.id, toUserId, stars, comment: comment || null },
+    });
+  } catch (e) {
+    if (e?.code === "P2002") return res.status(409).json({ error: "Vous avez déjà noté cette course." });
+    throw e;
+  }
 
-  const rating = await prisma.rating.create({
-    data: { rideId: ride.id, fromUserId: req.user.id, toUserId, stars, comment: comment?.trim() || null },
-  });
-
-  const agg = await prisma.rating.aggregate({ where: { toUserId }, _avg: { stars: true } });
-  await prisma.user.update({ where: { id: toUserId }, data: { ratingAvg: agg._avg.stars ?? 5 } });
-
+  await recalculerMoyenne(toUserId);
   res.status(201).json(rating);
 });
 

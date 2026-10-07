@@ -3,7 +3,9 @@
 // unique (Railway) ; à remplacer par un store partagé (Redis) si l'API est un jour répliquée.
 const attempts = new Map();
 
-export function rateLimit({ windowMs, max, keyFn }) {
+const TROP = "Trop de tentatives. Réessayez dans quelques minutes.";
+
+export function rateLimit({ windowMs, max, keyFn, message = TROP }) {
   return (req, res, next) => {
     const now = Date.now();
     const key = keyFn(req);
@@ -17,10 +19,23 @@ export function rateLimit({ windowMs, max, keyFn }) {
     if (current.count > max) {
       const retryAfter = Math.ceil((current.start + windowMs - now) / 1000);
       res.setHeader("Retry-After", String(retryAfter));
-      return res.status(429).json({ error: "Trop de tentatives. Réessayez dans quelques minutes." });
+      return res.status(429).json({ error: message });
     }
     next();
   };
+}
+
+// Quota par compte connecté (audit du 7 octobre 2026, SEC-14) : géocodage, réservations, messages,
+// abonnements aux notifications... Chaque appel peut coûter (Google, courriels, notifications) ou
+// écrire en base : au-delà du budget, réponse 429, sans gêner les autres comptes. À placer après
+// requireAuth ; sans compte connu, l'adresse IP sert de clé.
+export function quotaParCompte(nom, { windowMs, max, message = "Trop de demandes en peu de temps. Patientez un instant puis réessayez." }) {
+  return rateLimit({ windowMs, max, message, keyFn: (req) => `quota|${nom}|${req.user?.id || req.ip}` });
+}
+
+// Pour les tests : repartir de compteurs vides.
+export function viderCompteurs() {
+  attempts.clear();
 }
 
 // Nettoyage périodique pour ne pas accumuler des clés mortes indéfiniment.

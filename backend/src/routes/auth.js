@@ -7,7 +7,8 @@ import { rateLimit } from "../middleware/rateLimit.js";
 import { motifDeRefus, dateLimite, messageDemandeEnvoyee, texteAlerteDispatch, courrielDemandeRecue, courrielAlerteDispatch } from "../lib/accountDeletion.js";
 import { confirmationRequise, demanderCode, verifierCode, messagePourEtat } from "../lib/verification.js";
 import { isMailConfigured, sendMail } from "../lib/mailer.js";
-import { realEmailOrNull } from "../lib/placeholderEmail.js";
+import { realEmailOrNull, isPlaceholderEmail } from "../lib/placeholderEmail.js";
+import { fermerConnexions } from "../lib/motsDePasse.js";
 
 const router = Router();
 
@@ -30,11 +31,19 @@ export function isText(value, { max = 500 } = {}) {
   return typeof value === "string" && value.length > 0 && value.length <= max;
 }
 
+// Audit du 7 octobre 2026 (SEC-04) : la clé du limiteur prenait le courriel en minuscules SANS
+// retirer les espaces, alors que la recherche du compte les retire. « paul@x.ca » et « paul@x.ca »
+// suivi d'une espace visaient le même compte avec deux compteurs : le blocage se contournait. La clé
+// utilise désormais exactement la forme cherchée (normaliserCourriel), et un plafond par adresse IP,
+// toutes adresses de courriel confondues, freine l'essai de variantes à grande échelle.
+export const cleTentatives = (req) => `${req.ip}|${normaliserCourriel(req.body?.email)}`;
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 20,
-  keyFn: (req) => `${req.ip}|${String(req.body?.email || "").toLowerCase()}`,
+  keyFn: cleTentatives,
 });
+const authLimiterIp = rateLimit({ windowMs: 15 * 60 * 1000, max: 100, keyFn: (req) => `auth-ip|${req.ip}` });
+const limiteurConnexion = [authLimiterIp, authLimiter];
 
 // Limiteur dédié à la suppression de compte depuis la page web publique : cette route n'exige pas
 // de jeton, elle est donc une cible de force brute au même titre que la connexion. Le compteur est
@@ -42,8 +51,19 @@ const authLimiter = rateLimit({
 const deleteAccountLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 10,
-  keyFn: (req) => `suppression|${req.ip}|${String(req.body?.email || "").toLowerCase()}`,
+  keyFn: (req) => `suppression|${req.ip}|${normaliserCourriel(req.body?.email)}`,
 });
+const deleteAccountLimiterIp = rateLimit({ windowMs: 15 * 60 * 1000, max: 30, keyFn: (req) => `suppression-ip|${req.ip}` });
+
+// Courriel d'inscription publique : forme plausible, longueur raisonnable, et jamais le domaine
+// technique des comptes créés par le Dispatch sans courriel, qui dispense de la confirmation par code
+// (audit du 7 octobre 2026, SEC-11). Renvoie un message d'erreur, ou null si le courriel convient.
+export function erreurCourrielInscription(email) {
+  const e = normaliserCourriel(email);
+  if (e.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e)) return "Adresse courriel invalide.";
+  if (isPlaceholderEmail(e)) return "Cette adresse courriel ne peut pas être utilisée.";
+  return null;
+}
 
 // Message montré quand un code vient d'être demandé (ou pas), selon le résultat de l'envoi.
 export function messageDemandeDeCode(envoi, email) {
@@ -76,11 +96,13 @@ async function ouvrirSession(user, res, { statutSiCode = 403, statutSiJeton = 20
 
 // Inscription publique — uniquement des comptes CLIENT. Les chauffeurs, admins et le Dispatch
 // sont créés depuis la console par Taxi Sylvain ; le rôle n'est jamais accepté depuis le client.
-router.post("/register", authLimiter, async (req, res) => {
+router.post("/register", limiteurConnexion, async (req, res) => {
   const { name, email, phone, password } = req.body || {};
-  if (!isText(name) || !isText(email) || !isText(phone) || !isText(password)) {
+  if (!isText(name, { max: 120 }) || !isText(email, { max: 254 }) || !isText(phone, { max: 40 }) || !isText(password, { max: 200 })) {
     return res.status(400).json({ error: "Champs manquants." });
   }
+  const erreurCourriel = erreurCourrielInscription(email);
+  if (erreurCourriel) return res.status(400).json({ error: erreurCourriel });
   if (password.length < 6) {
     return res.status(400).json({ error: "Le mot de passe doit contenir au moins 6 caractères." });
   }
@@ -96,7 +118,7 @@ router.post("/register", authLimiter, async (req, res) => {
   return ouvrirSession(user, res, { statutSiCode: 201, statutSiJeton: 201 });
 });
 
-router.post("/login", authLimiter, async (req, res) => {
+router.post("/login", limiteurConnexion, async (req, res) => {
   const { email, password } = req.body || {};
   if (!isText(email) || !isText(password)) return res.status(400).json({ error: "Courriel et mot de passe requis." });
   const user = await chercherParCourriel(prisma, email);
@@ -111,7 +133,7 @@ router.post("/login", authLimiter, async (req, res) => {
 
 // Saisie du code reçu par courriel. Le mot de passe est redemandé : le code seul ne doit jamais
 // suffire à ouvrir un compte, et l'application l'a encore sous la main à ce moment-là.
-router.post("/verify-email", authLimiter, async (req, res) => {
+router.post("/verify-email", limiteurConnexion, async (req, res) => {
   const { email, password, code } = req.body || {};
   if (!isText(email) || !isText(password) || !isText(code, { max: 12 })) {
     return res.status(400).json({ error: "Courriel, mot de passe et code requis." });
@@ -129,7 +151,7 @@ router.post("/verify-email", authLimiter, async (req, res) => {
 
 // Nouveau code (bouton « Renvoyer le code »). Même garde-fou : courriel ET mot de passe, pour que
 // personne ne puisse faire pleuvoir des courriels sur une adresse qui n'est pas la sienne.
-router.post("/resend-code", authLimiter, async (req, res) => {
+router.post("/resend-code", limiteurConnexion, async (req, res) => {
   const { email, password } = req.body || {};
   if (!isText(email) || !isText(password)) return res.status(400).json({ error: "Courriel et mot de passe requis." });
   const user = await chercherParCourriel(prisma, email);
@@ -173,9 +195,13 @@ router.post("/change-password", requireAuth, async (req, res) => {
   const valid = await bcrypt.compare(currentPassword, user.passwordHash);
   if (!valid) return res.status(401).json({ error: "Mot de passe actuel incorrect." });
 
+  // Nouveau mot de passe = nouvelle génération de sessions (audit du 7 octobre 2026, SEC-07) : tous
+  // les jetons déjà distribués (autres téléphones, session volée) cessent de fonctionner et leurs
+  // connexions temps réel sont coupées. Cet appareil reçoit un jeton neuf pour rester connecté.
   const passwordHash = await bcrypt.hash(newPassword, 10);
-  await prisma.user.update({ where: { id: user.id }, data: { passwordHash } });
-  res.json({ ok: true });
+  const misAJour = await prisma.user.update({ where: { id: user.id }, data: { passwordHash, sessionVersion: { increment: 1 } } });
+  fermerConnexions(req.app.get("io"), user.id);
+  res.json({ ok: true, token: signToken(misAJour) });
 });
 
 // Demande de suppression de son propre compte, depuis l'application (exigence Google Play).
@@ -195,7 +221,7 @@ router.post("/delete-account", requireAuth, async (req, res) => {
 // Même demande, mais depuis une page web publique : Google Play exige qu'elle soit possible sans
 // installer l'application. Pas de jeton, donc courriel + mot de passe, limiteur de tentatives, et
 // un message d'échec unique pour ne jamais révéler si un courriel existe chez Taxi Sylvain.
-router.post("/delete-account-web", deleteAccountLimiter, async (req, res) => {
+router.post("/delete-account-web", deleteAccountLimiterIp, deleteAccountLimiter, async (req, res) => {
   const { email, password } = req.body || {};
   if (!isText(email) || !isText(password)) return res.status(400).json({ error: "Courriel et mot de passe requis." });
 
@@ -299,9 +325,10 @@ async function envoyerCourrielsDemande(user, requestedAt, via) {
   }
 }
 
-function signToken(user) {
+// « sv » : génération de sessions du compte au moment de la connexion (voir middleware/auth.js).
+export function signToken(user) {
   return jwt.sign(
-    { id: user.id, role: user.role, name: user.name, permissions: user.permissions || [] },
+    { id: user.id, role: user.role, name: user.name, permissions: user.permissions || [], sv: user.sessionVersion ?? 0 },
     process.env.JWT_SECRET,
     { expiresIn: "30d" }
   );
@@ -312,7 +339,7 @@ function signToken(user) {
 // Le mémo (notes) est réservé au Dispatch : il ne doit jamais partir vers l'application du client.
 export function publicUser(user) {
   // eslint-disable-next-line no-unused-vars
-  const { passwordHash, notes, pushToken, ...rest } = user;
+  const { passwordHash, notes, pushToken, sessionVersion, ...rest } = user;
   return rest;
 }
 

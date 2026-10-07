@@ -22,6 +22,55 @@ const COLONNES_RECAP = [
   { cle: "statutLibelle", titre: "Statut", largeur: 110 },
 ];
 
+// Tableau PDF commun aux récaps et aux listes (audit du 7 octobre 2026, B06). Avant : des colonnes
+// plus larges que la page (prix et notes coupés), la hauteur d'une ligne prise sur la dernière
+// cellule (une adresse longue chevauchait les lignes suivantes), une ligne coupée entre deux pages et
+// des pages sans en-têtes. Désormais :
+//   - les largeurs données sont des proportions, ramenées à la largeur utile de la page ;
+//   - la hauteur d'une ligne est celle de sa cellule la plus haute ;
+//   - une ligne qui ne tient plus passe entière à la page suivante, où les en-têtes sont répétés.
+const MARGE = 40;
+export function largeursAjustees(colonnes, largeurUtile) {
+  const total = colonnes.reduce((s, c) => s + c.largeur, 0) || 1;
+  return colonnes.map((c) => (c.largeur * largeurUtile) / total);
+}
+
+export function tableauPdf(doc, { colonnes, lignes, texte, taille = 9, titreSuite = null }) {
+  const gauche = MARGE;
+  const largeurUtile = doc.page.width - 2 * MARGE;
+  const largeurs = largeursAjustees(colonnes, largeurUtile);
+  const bas = () => doc.page.height - MARGE - 10;
+  const trait = () => doc.moveTo(gauche, doc.y).lineTo(gauche + largeurUtile, doc.y).strokeColor("#cccccc").stroke();
+  const hauteurDe = (valeurs, police) => {
+    doc.font(police).fontSize(taille);
+    return Math.max(...valeurs.map((v, i) => doc.heightOfString(v, { width: largeurs[i] - 4 })));
+  };
+  const ecrire = (valeurs, police, couleur) => {
+    const y = doc.y;
+    const h = hauteurDe(valeurs, police);
+    doc.fillColor(couleur);
+    let x = gauche;
+    valeurs.forEach((v, i) => { doc.text(v, x, y, { width: largeurs[i] - 4, lineBreak: true }); x += largeurs[i]; });
+    doc.x = gauche;
+    doc.y = y + h + 3;
+  };
+  const titres = colonnes.map((c) => c.titre);
+  const entete = () => { ecrire(titres, "Helvetica-Bold", "#555555"); trait(); doc.y += 2; };
+
+  entete();
+  for (const ligne of lignes) {
+    const valeurs = colonnes.map((c) => texte(ligne, c));
+    if (doc.y + hauteurDe(valeurs, "Helvetica") > bas()) {
+      doc.addPage({ margin: MARGE, layout: "landscape" });
+      if (titreSuite) doc.font("Helvetica-Bold").fontSize(11).fillColor("#000").text(titreSuite, gauche).moveDown(0.3);
+      entete();
+    }
+    ecrire(valeurs, "Helvetica", "#000000");
+  }
+  trait();
+  doc.font("Helvetica");
+}
+
 function blocsDuRapport(rapport, avecNonAssignees) {
   const blocs = rapport.chauffeurs.map((b) => ({ titre: b.chauffeur.name, ...b }));
   if (avecNonAssignees && rapport.nonAssignees.courses.length) blocs.push({ titre: "Courses sans chauffeur", ...rapport.nonAssignees });
@@ -42,9 +91,7 @@ export function streamReportPdf(res, { weekStart, weekEnd, rapport, avecNonAssig
   const doc = new PDFDocument({ margin: 40, layout: "landscape" });
   doc.pipe(res);
   const gauche = 40;
-  const droite = gauche + COLONNES_RECAP.reduce((s, c) => s + c.largeur, 0);
   const basDePage = () => doc.page.height - 50;
-  const ligneGrise = () => { doc.moveTo(gauche, doc.y).lineTo(droite, doc.y).strokeColor("#cccccc").stroke(); };
 
   doc.fontSize(18).fillColor("#000").text("Taxi Sylvain — Récapitulatif des courses", gauche);
   doc.moveDown(0.2);
@@ -58,29 +105,14 @@ export function streamReportPdf(res, { weekStart, weekEnd, rapport, avecNonAssig
     if (doc.y > basDePage() - 80) doc.addPage({ margin: 40, layout: "landscape" });
     doc.fontSize(13).fillColor("#000").text(bloc.titre, gauche);
     doc.moveDown(0.3);
-    doc.fontSize(9).fillColor("#555");
-    let x = gauche;
-    const yTitre = doc.y;
-    for (const c of COLONNES_RECAP) { doc.text(c.titre, x, yTitre, { width: c.largeur - 4 }); x += c.largeur; }
+    tableauPdf(doc, {
+      colonnes: COLONNES_RECAP,
+      lignes: bloc.courses,
+      texte: (ligne, c) => texteCellule(ligne, c.cle),
+      titreSuite: `${bloc.titre} (suite)`,
+    });
     doc.moveDown(0.3);
-    ligneGrise();
-    doc.moveDown(0.2);
-    doc.fillColor("#000");
-    for (const ligne of bloc.courses) {
-      if (doc.y > basDePage()) doc.addPage({ margin: 40, layout: "landscape" });
-      const y = doc.y;
-      let hauteur = 0;
-      x = gauche;
-      for (const c of COLONNES_RECAP) {
-        const texte = texteCellule(ligne, c.cle);
-        doc.text(texte, x, y, { width: c.largeur - 4 });
-        hauteur = Math.max(hauteur, doc.heightOfString(texte, { width: c.largeur - 4 }));
-        x += c.largeur;
-      }
-      doc.y = y + hauteur + 3;
-    }
-    ligneGrise();
-    doc.moveDown(0.3);
+    if (doc.y > basDePage() - 30) doc.addPage({ margin: 40, layout: "landscape" });
     doc.fontSize(10).fillColor("#000").text(
       `Effectuées : ${bloc.effectuees.nombre} course${bloc.effectuees.nombre > 1 ? "s" : ""} · total ${fmtMoney(bloc.effectuees.montant)} · redevance à payer ${fmtMoney(bloc.effectuees.redevance)}` +
       (bloc.aEffectuer.nombre ? `   |   À effectuer : ${bloc.aEffectuer.nombre} · ${fmtMoney(bloc.aEffectuer.montant)}` : ""),
@@ -113,27 +145,14 @@ export function streamListPdf(res, { title, filename, columns, rows }) {
   doc.fontSize(11).fillColor("#555").text(`${rows.length} entrée(s) — exporté le ${fmtDate(new Date())}`);
   doc.moveDown(1);
 
-  const startX = 40;
-  let colX = [];
-  let x = startX;
-  for (const col of columns) {
-    colX.push(x);
-    x += col.width;
-  }
-
-  const headerY = doc.y;
-  doc.fontSize(10).fillColor("#000");
-  columns.forEach((col, i) => doc.text(col.label, colX[i], headerY, { width: col.width }));
-  doc.moveDown(0.5);
-  doc.moveTo(startX, doc.y).lineTo(x, doc.y).strokeColor("#ccc").stroke();
-  doc.moveDown(0.3);
-
-  for (const row of rows) {
-    const y = doc.y;
-    columns.forEach((col, i) => doc.text(String(row[col.key] ?? "—"), colX[i], y, { width: col.width }));
-    doc.moveDown(0.6);
-    if (doc.y > 500) doc.addPage({ margin: 40, layout: "landscape" });
-  }
+  // Beaucoup de colonnes (la liste des clients en a dix) : police plus petite pour rester lisible.
+  tableauPdf(doc, {
+    colonnes: columns.map((c) => ({ cle: c.key, titre: c.label, largeur: c.width })),
+    lignes: rows,
+    texte: (row, c) => String(row[c.cle] ?? "") || "—",
+    taille: columns.length > 8 ? 7.5 : 9,
+    titreSuite: `${title} (suite)`,
+  });
 
   doc.end();
 }

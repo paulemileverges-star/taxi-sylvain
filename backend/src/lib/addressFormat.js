@@ -12,7 +12,7 @@
 //
 // Fichier pur : aucun réseau, aucune base de données, entièrement testable.
 
-import { matchZone, normalize } from "./pricing.js";
+import { matchZone, normalize, estVilleDeQuebec } from "./pricing.js";
 
 const PROVINCE_CODES = {
   "québec": "QC", quebec: "QC", ontario: "ON",
@@ -151,8 +151,11 @@ export function cleanAddressText(texte) {
     return true;
   });
 
-  // Province écrite en toutes lettres → code court, et code postal recollé derrière.
-  parts = parts.map((p) => {
+  // Province écrite en toutes lettres → code court, et code postal recollé derrière. Jamais la ville
+  // de Québec (audit du 7 octobre 2026, B08 : « Québec, Capitale-Nationale » devenait « QC,
+  // Capitale-Nationale » et la course perdait le tarif de Québec).
+  parts = parts.map((p, i) => {
+    if (estVilleDeQuebec(parts, i)) return p;
     const code = PROVINCE_CODES[p.toLowerCase()];
     return code || p;
   });

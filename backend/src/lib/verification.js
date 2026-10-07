@@ -16,6 +16,7 @@ import crypto from "crypto";
 import { prisma } from "./prisma.js";
 import { isMailConfigured, sendMail } from "./mailer.js";
 import { realEmailOrNull } from "./placeholderEmail.js";
+import { echapperHtml } from "./html.js";
 
 export const CODE_VALIDITE_MS = 15 * 60 * 1000;
 export const DELAI_RENVOI_MS = 60 * 1000;
@@ -60,14 +61,17 @@ export function renvoiTropTot(entree, now = new Date()) {
 }
 
 export function messageDuCode({ nom, code }) {
-  const prenom = String(nom || "").trim().split(/\s+/)[0] || "";
+  // Le prénom vient de l'inscription : il est échappé dans la version HTML (audit du 7 octobre
+  // 2026, SEC-10 : un nom comme « <b>X</b> » devenait une balise dans le courriel).
+  const prenom = String(nom || "").trim().split(/\s+/)[0].slice(0, 60) || "";
   const bonjour = prenom ? `Bonjour ${prenom},` : "Bonjour,";
+  const bonjourHtml = echapperHtml(bonjour);
   const minutes = Math.round(CODE_VALIDITE_MS / 60000);
   const html = `<!doctype html><html lang="fr"><body style="margin:0;background:#f3f4f6;font-family:Segoe UI,Helvetica,Arial,sans-serif">
 <div style="max-width:560px;margin:0 auto;padding:24px">
   <div style="background:#16233a;color:#f5a623;padding:16px 20px;border-radius:12px 12px 0 0;font-size:18px;font-weight:700">Taxi Sylvain</div>
   <div style="background:#ffffff;padding:20px;border-radius:0 0 12px 12px">
-    <p style="margin:0 0 12px;color:#111827;font-size:15px">${bonjour}</p>
+    <p style="margin:0 0 12px;color:#111827;font-size:15px">${bonjourHtml}</p>
     <p style="margin:0 0 12px;color:#111827;font-size:15px">Voici votre code de confirmation pour l'application Taxi Sylvain :</p>
     <p style="margin:0 0 16px;font-size:32px;letter-spacing:8px;font-weight:700;color:#16233a">${code}</p>
     <p style="margin:0;color:#6b7280;font-size:13px">Ce code est valable ${minutes} minutes. Si vous n'êtes pas à l'origine de cette demande, ignorez ce courriel.</p>

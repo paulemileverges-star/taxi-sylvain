@@ -10,6 +10,7 @@ import { isMailConfigured, parseFrom, sendMail } from "./mailer.js";
 import { buildRideIcs } from "./calendar.js";
 import { realEmailOrNull } from "./placeholderEmail.js";
 import { arretsDe } from "./arrets.js";
+import { echapperHtml } from "./html.js";
 
 const TZ = "America/Toronto";
 const DRIVER_APP_URL = process.env.DRIVER_APP_URL || "https://taxi-sylvain-driver.vercel.app";
@@ -58,12 +59,8 @@ export function rideFields(ride, audience) {
   return fields;
 }
 
-function escapeHtml(value) {
-  return String(value ?? "")
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;");
-}
+// Échappement commun à tous les courriels (lib/html.js), guillemets compris.
+const escapeHtml = echapperHtml;
 
 /** Compose le courriel complet pour un destinataire. Fonction pure : testable sans réseau. */
 export function buildRideEmail({ ride, audience, cancelled = false }) {
