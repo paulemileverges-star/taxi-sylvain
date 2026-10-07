@@ -51,6 +51,22 @@ test("elle ne se déclenche pas si le chauffeur est déjà en route ou en course
   }
 });
 
+// Audit du 7 octobre 2026 (B18) : la règle en vigueur, dans ses quatre combinaisons. Un chauffeur
+// déjà en route n'est pas escaladé même s'il paraît hors ligne (pendant la navigation avec Waze ou
+// Google Maps, l'application passe en arrière-plan et la connexion tombe : ce serait une fausse
+// alerte). Changer cette ligne du tableau demande une décision du propriétaire.
+test("B18 : escalade à 60 minutes, quatre combinaisons en ligne ou hors ligne, en route ou non", () => {
+  const regle = [
+    { enLigne: false, status: "ACCEPTED", attendu: true },
+    { enLigne: true, status: "ACCEPTED", attendu: true },
+    { enLigne: false, status: "EN_ROUTE", attendu: false },
+    { enLigne: true, status: "EN_ROUTE", attendu: false },
+  ];
+  for (const { enLigne, status, attendu } of regle) {
+    assert.equal(escaladeNecessaire({ ride: ride({ status }), enLigne, now: minutesAvant(60) }), attendu, `${enLigne ? "en ligne" : "hors ligne"}, ${status}`);
+  }
+});
+
 test("elle ne se déclenche pas sur une course sans chauffeur : c'est au Dispatch de l'affecter", () => {
   assert.equal(escaladeNecessaire({ ride: ride({ driverId: null }), enLigne: false, now: minutesAvant(60) }), false);
 });

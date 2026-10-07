@@ -1,8 +1,9 @@
 # Passation du projet Taxi Sylvain
 
 Document de reprise pour tout assistant ou développeur qui continue le projet. Il décrit l'état réel au
-**7 octobre 2026** (dernière mise à jour ; historique complet au § 11), la façon de travailler avec le propriétaire, les
-procédures de déploiement, les règles métier à ne pas casser et tout ce qui reste à faire.
+**7 octobre 2026 au soir, après les corrections de l'audit du développeur senior** (historique complet au § 11), la
+façon de travailler avec le propriétaire, les procédures de déploiement, les règles métier à ne pas casser et tout ce
+qui reste à faire. Réponse constat par constat à l'audit : `docs/REPONSE-AUDIT-2026-10-07.md`.
 
 Lire aussi : `AGENTS.md` (règles courtes), `docs/ARCHITECTURE.md` (choix techniques d'origine),
 `backend/.env.example` (variables d'environnement commentées).
@@ -11,6 +12,23 @@ Lire aussi : `AGENTS.md` (règles courtes), `docs/ARCHITECTURE.md` (choix techni
 
 ## 0. Points urgents au 7 octobre 2026
 
+0. **Audit du développeur senior du 7 octobre (67 constats, dont 12 prioritaires)** : corrections faites, testées et
+   **en production depuis le 7 octobre à 12 h 52 (heure du Québec)** : serveur `2026-10-07.audit` avec la migration
+   `20261007120000_audit_7_octobre`, trois sites web au commit `d5db9b6083e4`, textes du site WordPress (WEB-02).
+   Preuves : 343 tests, scénarios de bout en bout du 6 octobre (10 vérifications) et de l'audit (24), contrôle de
+   mise en ligne au vert, intégration continue (`.github/workflows/ci.yml`). Détail et dérogations :
+   `docs/REPONSE-AUDIT-2026-10-07.md`. Changements visibles à connaître :
+   - un collaborateur (rôle `ADMIN`) ne voit plus que les pages de ses permissions ; la Messagerie demande la
+     permission « Messagerie / Groupes » (`groups`) ;
+   - le bouton « Annuler la course » du chauffeur devient « Libérer la course » : la course retourne à Taxi Sylvain
+     au lieu d'être annulée pour le client ;
+   - changer son mot de passe ferme toutes les autres sessions (applications et console) ;
+   - un chauffeur sans aucune note n'affiche plus de moyenne fictive de 5/5 dans la console ;
+   - les corrections des applications (série F) ne sont que sur les versions web tant qu'une version 1.5.1 n'est pas
+     compilée, **avec l'accord explicite du propriétaire**.
+   Restent au propriétaire : variables `SAUVEGARDE_COURRIEL` et `SAUVEGARDE_CLE` (copie chiffrée hors de Railway,
+   § 6), décisions B18 (escalade d'un chauffeur en route hors ligne), WEB-01 (indexation du site), GOV-01 (dossier
+   vie privée), environnement de préproduction (§ 10).
 1. **Clé Google Maps à poser** (point 4 de la vague du 6 octobre) : tant que `GOOGLE_MAPS_API_KEY` n'est pas dans
    les variables du service backend sur Railway, les adresses viennent encore d'OpenStreetMap. Marche à suivre au
    § 6, « Adresses par Google Maps ».
@@ -29,8 +47,11 @@ Lire aussi : `AGENTS.md` (règles courtes), `docs/ARCHITECTURE.md` (choix techni
    depuis le 31 août, montants et redevance identiques dans les deux calculs ; 7 semaines de 3 chauffeurs changent et,
    pour chaque chauffeur, les écarts s'annulent sur des semaines voisines ; aucune course passée oubliée ; les récaps
    reçus suivaient tous l'ancien calcul. Reste au propriétaire : comparer la colonne « nouveau » au tableau de Taxi Sylvain.
-4. **Sauvegardes** : copie sur le PC chaque semaine, `node scripts/recuperer-sauvegarde.mjs` (§ 6).
+4. **Sauvegardes** : copie sur le PC chaque semaine, `node scripts/recuperer-sauvegarde.mjs` (§ 6), en attendant la
+   copie chiffrée automatique (point 0).
 5. Railway : formule **Hobby active depuis le 6 octobre 2026 au soir** (fin de l'essai : plus de risque d'arrêt).
+6. **Disque C du PC presque plein** (0,6 Go libre le 7 octobre au soir) : ne pas installer de copie complète des
+   dépendances ailleurs que dans le dépôt ; libérer de la place avant la prochaine compilation ou mise à jour.
 
 ---
 
@@ -56,18 +77,19 @@ Lire aussi : `AGENTS.md` (règles courtes), `docs/ARCHITECTURE.md` (choix techni
 ## 2. Liens de production
 
 Depuis le 19 septembre, les adresses officielles sont sur le domaine `taxisylvain.ca` (voir § 6 bis). Les
-anciennes adresses en `vercel.app` et `railway.app` continuent de fonctionner. Les versions web publiées et
-les APK installés appellent encore l'API par son adresse `railway.app` : ils passeront à `api.taxisylvain.ca`
-à leur prochaine publication (variables Vercel `VITE_API_URL` et `EXPO_PUBLIC_API_URL` à changer à ce
-moment-là) ou recompilation (déjà prévu dans `eas.json`).
+anciennes adresses en `vercel.app` et `railway.app` continuent de fonctionner. Les trois sites web et les APK
+depuis la 1.4.0 appellent l'API par `api.taxisylvain.ca` (vérifié dans les fichiers servis le 7 octobre 2026 ; le
+script de vérification le contrôle désormais à chaque passage).
 
 | Élément | Adresse officielle | Ancienne adresse, toujours active |
 |---|---|---|
 | Console Dispatch | https://dispatch.taxisylvain.ca | https://taxi-sylvain-dispatch.vercel.app |
 | App Chauffeur, version web | https://chauffeur.taxisylvain.ca | https://taxi-sylvain-driver.vercel.app |
-| App Client, version web | https://client.taxisylvain.ca, https://taxisylvain.ca, https://www.taxisylvain.ca | https://taxi-sylvain-client.vercel.app |
+| App Client, version web | https://client.taxisylvain.ca | https://taxi-sylvain-client.vercel.app |
+| Site vitrine (WordPress, hébergé chez LWS depuis le 21 septembre) | https://taxisylvain.ca, https://www.taxisylvain.ca | |
 | API | https://api.taxisylvain.ca/api | https://backend-production-03f0b.up.railway.app/api |
-| Santé de l'API | https://api.taxisylvain.ca/health | https://backend-production-03f0b.up.railway.app/health |
+| Santé de l'API (le programme répond) | https://api.taxisylvain.ca/health | https://backend-production-03f0b.up.railway.app/health |
+| État de service (base, version, migration, sauvegardes, envois ; aucune donnée personnelle) | https://api.taxisylvain.ca/health/ready | |
 | Téléphone de réservation | 438-499-1120 | |
 
 APK Android : produits par EAS Build, profil `preview`. Derniers APK : **1.4.0 (versionCode 6, Expo SDK 54), compilés le
@@ -93,28 +115,37 @@ anciens, mettre à jour `Liens-de-telechargement.txt`. Liens iPhone définitifs 
 
 ```
 backend/              API Node.js/Express + Socket.io, Prisma + PostgreSQL
-  prisma/schema.prisma      modèle de données (17 migrations, appliquées au démarrage)
+  prisma/schema.prisma      modèle de données (24 migrations au 7 octobre 2026, appliquées au démarrage)
   src/index.js              serveur, routes, tâches planifiées, diagnostics au démarrage
   src/routes/               rides, messages, clients, drivers, admins, pricing, destinations,
                             conversations, schedule, reports, ratings, geocode, suggestions, auth
   src/lib/                  pricing, calendar (.ics), mailer, rideEmails, push (Expo), distance (OSRM),
                             driverLocations, uploads, seedDestinations, seedPricing, twilioProxy...
-  src/jobs/                 rideReminders (chaque minute), weeklyReport (lundi 00 h 05)
-  test/                     tests node --test
+  src/jobs/                 rideReminders (chaque minute), weeklyReport (lundi 04 h 00, relancé chaque heure
+                            le lundi et le mardi tant qu'un envoi a échoué, rattrapage au démarrage)
+  src/version.js            VERSION_SERVEUR, exposée par /health/ready : à changer à chaque mise en production
+  test/                     tests node --test ; test-e2e/ : scénarios de bout en bout sur base jetable
 apps/dispatch-web/    console Dispatch, React + Vite
 apps/driver-app/      app chauffeur, React Native 0.81 / Expo SDK 54 (APK + version web react-native-web)
 apps/client-app/      app client, React Native 0.81 / Expo SDK 54 (APK + version web react-native-web)
-scripts/              verifier-mise-en-ligne.mjs
-docs/                 ARCHITECTURE.md, PASSATION.md (ce document)
+scripts/              verifier-mise-en-ligne.mjs, publier-web.mjs, versions-web.mjs, comparer-rapports.mjs,
+                      recuperer-sauvegarde.mjs
+.github/workflows/    ci.yml (intégration continue), surveillance.yml (production, toutes les heures)
+docs/                 ARCHITECTURE.md, PASSATION.md (ce document), REPONSE-AUDIT-2026-10-07.md
 ```
 
-**Temps réel** : salles Socket.io `dispatch` (Dispatch et Admins), `drivers`, `driver:{id}`, `client:{id}`,
-`ride:{id}`. Le helper `personalRoom(user)` dans `backend/src/lib/rooms.js` donne la salle personnelle.
+**Temps réel** (refait le 7 octobre 2026, audit SEC-02 et SEC-03, `backend/src/lib/equipe.js`) : chaque compte
+rejoint sa salle personnelle `user:{id}` (`personalRoom(user)`, `lib/rooms.js`) ; la salle `dispatch` est réservée au
+compte `DISPATCH` ; un collaborateur `ADMIN` ne rejoint que les salles `equipe:<permission>` de ses permissions, et
+chaque évènement d'équipe est émis vers les seules permissions concernées (`emettreEquipe`, `AUDIENCES`). Retirer
+une permission retire la salle aussitôt (`actualiserSallesEquipe`). Restent `drivers`, `driver:{id}`, `client:{id}`
+et `ride:{id}` (ouverte à l'équipe autorisée aux Courses, au client et au chauffeur de la course seulement).
 
 **Rôles** : `CLIENT`, `DRIVER`, `DISPATCH` (le propriétaire, accès total), `ADMIN` (collaborateur avec
-`permissions` : courses, schedule, drivers, clients, reports, groups). Middleware
-`requirePermission(permission, ...rolesSupplémentaires)`. Le JWT contient `id`, `role`, `name`,
-`permissions`.
+`permissions` : courses, schedule, drivers, clients, reports, groups). Middlewares
+`requirePermission(permission, ...rolesSupplémentaires)` et `requireAnyPermission(...)`. Le JWT contient `id`,
+`role`, `name`, `permissions` et `sv` (génération de session, comparée à `User.sessionVersion` : changer de mot de
+passe l'incrémente et révoque tous les jetons, audit SEC-07).
 
 **Services externes sans compte** : OSRM (distance routière), Nominatim/OpenStreetMap (géocodage,
 suggestions d'adresses), Expo Push.
@@ -155,14 +186,25 @@ Les fichiers `.env`, `.env.local` et `.vercel/` sont ignorés par Git. Aucun sec
 ## 5. Tests et vérification, à faire avant chaque annonce
 
 ```bash
-cd backend && npm test                       # 297 tests au 7 octobre 2026, une trentaine de secondes
+cd backend && npm test                       # 343 tests au 7 octobre 2026 au soir, une trentaine de secondes
+node test-e2e/scenario-2026-10-06.mjs        # depuis backend/ : vague du 6 octobre, 10 vérifications
+node test-e2e/audit-2026-10-07.mjs           # depuis backend/ : défauts de l'audit rejoués, 24 vérifications
 node scripts/verifier-mise-en-ligne.mjs      # à la racine, après chaque déploiement
 ```
+
+- `backend/test/audit-2026-10-07.test.js` et `backend/test-e2e/audit-2026-10-07.mjs` : chaque défaut de l'audit du
+  7 octobre rejoué (permissions sur les routes et le temps réel, notes internes, groupes privés, double acceptation,
+  double note, quotas, sauvegarde sous écritures simultanées, jetons révoqués, exports par lien de 5 minutes...), sur
+  une base PostgreSQL jetable avec de vraies connexions temps réel ; réseau extérieur bloqué.
+- `backend/test/livraisons.test.js` : un canal d'envoi est « en panne » après 3 échecs de suite ; une adresse
+  invalide ou un téléphone désinstallé ne comptent pas.
+- `backend/test/fuseauOrdinateur.test.js`, `connexionTempsReel.test.js` : heure de Montréal quel que soit le fuseau de
+  l'ordinateur ; une seule connexion temps réel par application.
 
 - `backend/test/calendar.test.js` : invitations d'agenda (UID stable, SEQUENCE, annulation, repliement 75 octets).
 - `backend/test/mailer.test.js` : envoi Brevo/Resend avec `fetch` simulé, pannes du fournisseur.
 - `backend/test/rideEmails.test.js` : contenu des courriels, fuseau horaire, jamais de courriel fictif.
-- `backend/test/rules.test.js` : règle d'une heure des messages chauffeur, reconnaissance des municipalités,
+- `backend/test/rules.test.js` : règle des deux heures des messages chauffeur, reconnaissance des municipalités,
   tarifs YUL/YHU/REM.
 - `backend/test/sauvegarde.test.js` : nom et rotation des sauvegardes, ordre de restauration, fichier refusé, et
   **dossier `.sauvegardes/` jamais servi sous `/uploads`** (adresses encodées comprises).
@@ -174,17 +216,30 @@ node scripts/verifier-mise-en-ligne.mjs      # à la racine, après chaque dépl
   `exportReport.test.js`, `navigationLinks.test.js` : arrêts, deux adresses YUL et tarif du P4, fiche chauffeur,
   adresses Google (réponses au format officiel), exports PDF et Excel, liens Waze et Google Maps.
 
-Le script de vérification contrôle que l'API répond et que **chaque lien public sert la même version que la
-production**. Il a été écrit après l'incident du lien figé (§ 8). Code de sortie 0 = tout est à jour.
+Le script de vérification contrôle que **chaque lien public sert la même version que la production** (écrit après
+l'incident du lien figé, § 8) et, depuis l'audit du 7 octobre (OPS-04), que le serveur peut vraiment servir : base
+joignable, version (`backend/src/version.js`) et dernière migration identiques au dépôt, dernière sauvegarde de moins
+de 30 heures, aucun canal d'envoi en panne (courriels, notifications), chaque site au dernier commit de son
+application et appelant `api.taxisylvain.ca`, CORS. L'indisponibilité de `api.taxisylvain.ca` est une erreur, plus
+un simple avertissement. Code de sortie 0 = tout est à jour.
 
-**Scénario de bout en bout** (6 octobre 2026) : `cd backend && node test-e2e/scenario-2026-10-06.mjs` crée une base
-PostgreSQL jetable (PostgreSQL installé sur le poste, `PG_BIN`), lance un vrai serveur sans aucun fournisseur réel et
-rejoue la vague du 6 octobre par l'API : 10 vérifications. Les écrans ont été contrôlés le même jour dans Edge piloté
-(banc hors dépôt, captures dans le dossier du développeur senior) ; il n'y a pas de tests automatiques d'écrans.
+**Scénarios de bout en bout** : chacun crée une base PostgreSQL jetable (PostgreSQL installé sur le poste, `PG_BIN`,
+ou une base vide fournie par `E2E_DATABASE_URL`, que Prisma crée si elle n'existe pas), lance un vrai serveur sans
+aucun fournisseur réel, bloque tout appel réseau vers l'extérieur et rejoue les parcours par l'API et le temps réel.
+Les écrans ont été contrôlés le 6 octobre dans Edge piloté (banc hors dépôt, captures dans le dossier du développeur
+senior) ; il n'y a pas de tests automatiques d'écrans.
 
-**Surveillance automatique** (depuis le 6 octobre 2026) : `.github/workflows/surveillance.yml` rejoue ce script
-toutes les heures sur GitHub, avec une seconde tentative après 3 minutes. Un échec envoie un courriel de GitHub
-au titulaire du dépôt (environ 720 minutes par mois sur les 2 000 gratuites d'un dépôt privé).
+**Intégration continue** (depuis le 7 octobre 2026, audit OPS-05) : `.github/workflows/ci.yml`, à chaque envoi sur
+`master` et à chaque demande de fusion : tests unitaires, les deux scénarios sur un PostgreSQL 17 jetable,
+construction de la console et des deux versions web.
+Aucun secret ni aucune clé de fournisseur. Preuve faite le 7 octobre : une faille d'accès introduite volontairement
+(un collaborateur sans droit voyait tout) fait échouer le scénario de l'audit (« ADMIN sans droit : /rides »).
+
+**Surveillance automatique** (depuis le 6 octobre 2026) : `.github/workflows/surveillance.yml` rejoue le script de
+vérification toutes les heures sur GitHub (historique Git complet, nécessaire au contrôle des versions web), avec
+une seconde tentative après 3 minutes. Un échec envoie un courriel de GitHub au titulaire du dépôt (environ
+720 minutes par mois sur les 2 000 gratuites d'un dépôt privé, plus 6 à 10 minutes par envoi pour l'intégration
+continue).
 
 ---
 
@@ -196,9 +251,15 @@ Les outils `railway`, `vercel` et `eas` sont connectés sur le PC du propriétai
 
 ```bash
 cd backend
-railway up --service backend --detach
+npm test && for f in $(git ls-files 'src/*.js' 'src/**/*.js'); do node --check "$f" || break; done
+railway up --service backend --ci            # construit, puis rend la main ; --detach pour ne pas attendre
 railway logs --service backend               # attendre « Taxi Sylvain API en écoute »
+curl https://api.taxisylvain.ca/health/ready # version et migration attendues, "base":"ok"
 ```
+
+- **À chaque mise en production du serveur, changer `VERSION_SERVEUR`** dans `backend/src/version.js` (par exemple
+  `2026-10-07.audit`) et le commettre : la surveillance compare la version en ligne à celle du dépôt et signale un
+  serveur resté sur une ancienne version.
 
 - Depuis le 23 septembre, la racine du dépôt et `backend/` sont toutes deux liées au bon projet (id `24c08cdf…`,
   service `backend`). Le compte Railway contient un second projet, lui aussi nommé `taxi-sylvain`, vide et en
@@ -236,8 +297,27 @@ node scripts/recuperer-sauvegarde.mjs [--maintenant] [--dossier <chemin>]
 node scripts/restaurer-sauvegarde.mjs <fichier.json.gz> [--appliquer] [--production]
 ```
 
+Depuis l'audit du 7 octobre (SEC-15), la sauvegarde est une **photographie cohérente** (transaction en lecture seule
+`REPEATABLE READ` : une suppression simultanée ne peut plus laisser une course sans son client) et les liens entre
+tables sont vérifiés dans le fichier (`liens`, `verifierRelations`) avant toute restauration.
+
+**Copie chiffrée hors de Railway** (prête, à activer par le propriétaire) : chaque dimanche à 5 h 00 (heure du
+Québec), la dernière sauvegarde est chiffrée (AES-256-GCM) et envoyée en pièce jointe à `SAUVEGARDE_COURRIEL`.
+Activation, deux variables sur le service backend de Railway :
+
+```bash
+node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"   # génère la clé, à garder À PART
+# Railway, service backend, Variables : SAUVEGARDE_COURRIEL = adresse qui reçoit les copies,
+#                                      SAUVEGARDE_CLE = la clé générée ci-dessus
+node backend/scripts/dechiffrer-sauvegarde.mjs "<fichier .chiffre>"           # relire une copie (demande la clé)
+```
+
+Sans la clé, la copie est illisible : la ranger hors du courriel (gestionnaire de mots de passe). Le journal de
+démarrage dit « Copie externe des sauvegardes : active » ou « inactive (… absentes) ».
+
 La sauvegarde est sur le même disque que les photos : elle protège d'une fausse manœuvre ou d'un script raté, pas
-de la perte du disque ou du compte. D'où la copie sur le PC, au moins chaque semaine. Le mode automatique de
+de la perte du disque ou du compte. D'où la copie chiffrée hebdomadaire et, en attendant son activation, la copie
+sur le PC au moins chaque semaine. Le mode automatique de
 Claude Code refuse de la faire (lecture de données de production) : elle est lancée par le propriétaire.
 Restauration éprouvée le 6 octobre sur une base PostgreSQL 17 jetable : 131 lignes, 15 tables, aucune différence
 ligne par ligne ; une base distante est refusée sans `--production`. Le fichier contient des renseignements
@@ -272,32 +352,24 @@ Coût : les gratuités mensuelles de Google (10 000 suggestions, 10 000 détails
 couvrent le volume de Taxi Sylvain. Pour l'aéroport Montréal-Trudeau, aucune requête Google : les deux adresses du
 catalogue (Arrivées, P4) sont proposées directement (`lib/aeroportYul.js`).
 
-### Console Dispatch (Vercel)
+### Sites web (Vercel) : `scripts/publier-web.mjs`
+
+Depuis le 7 octobre 2026 (audit OPS-04), les trois sites se publient par un seul script, à la racine du dépôt :
 
 ```bash
-cd apps/dispatch-web
-vercel --prod --yes
+node scripts/publier-web.mjs dispatch        # console, projet Vercel taxi-sylvain-dispatch
+node scripts/publier-web.mjs chauffeur       # app Chauffeur, projet taxi-sylvain-driver
+node scripts/publier-web.mjs client          # app Client, projet client-app, alias refait (piège ci-dessous)
 ```
 
-Le projet Vercel `taxi-sylvain-dispatch` publie directement sur https://taxi-sylvain-dispatch.vercel.app.
+Le script refuse de publier du code non commité dans le dossier de l'application, vérifie `vercel whoami`, publie
+avec `vercel --prod --yes` en inscrivant dans la construction le dernier commit de l'application
+(`VITE_VERSION_WEB` ou `EXPO_PUBLIC_VERSION_WEB` ; affiché en petit en bas de la console et de l'accueil des
+applications), refait l'alias du client, puis lance `scripts/verifier-mise-en-ligne.mjs`. La surveillance signale
+tout site qui ne sert pas le dernier commit de son application : publier à la main avec `vercel --prod --yes`
+laisse le site sans marque, donc signalé.
 
-### App Chauffeur, version web (Vercel)
-
-```bash
-cd apps/driver-app
-vercel --prod --yes
-```
-
-Projet `taxi-sylvain-driver`, publie directement sur https://taxi-sylvain-driver.vercel.app.
-
-### App Client, version web (Vercel) — PIÈGE
-
-```bash
-cd apps/client-app
-vercel --prod --yes                          # noter l'adresse « Production » affichée
-vercel alias set <adresse-du-nouveau-deploiement> taxi-sylvain-client.vercel.app
-node ../../scripts/verifier-mise-en-ligne.mjs
-```
+### App Client, version web (Vercel) : PIÈGE de l'alias, géré par le script
 
 Le dossier est lié au projet Vercel `client-app`, dont le domaine naturel est
 `client-app-nine-pi.vercel.app`. Le lien donné au propriétaire, `taxi-sylvain-client.vercel.app`, est un
@@ -305,10 +377,11 @@ Le dossier est lié au projet Vercel `client-app`, dont le domaine naturel est
 `vercel alias set`, le propriétaire continue de tester l'ancienne version. Un ancien projet Vercel vide nommé
 `taxi-sylvain-client` existe aussi : ne pas l'utiliser.
 
-**Depuis le 19 septembre, le piège ne touche plus que l'ancienne adresse.** `client.taxisylvain.ca`,
-`taxisylvain.ca` et `www.taxisylvain.ca` sont des domaines du projet `client-app` : ils suivent
-automatiquement chaque mise en production, sans `vercel alias set`. L'alias reste à refaire uniquement pour
-que `taxi-sylvain-client.vercel.app` suive aussi.
+**Depuis le 19 septembre, le piège ne touche plus que l'ancienne adresse.** `client.taxisylvain.ca` est un domaine
+du projet `client-app` : il suit automatiquement chaque mise en production, sans `vercel alias set`. L'alias reste à
+refaire uniquement pour que `taxi-sylvain-client.vercel.app` suive aussi (`publier-web.mjs client` le fait).
+`taxisylvain.ca` et `www.taxisylvain.ca` ne sont plus sur Vercel depuis le 20 septembre : ils servent le site
+vitrine WordPress hébergé chez LWS (la vérification signale tout retour de l'application sur ces adresses).
 
 ### 6 bis. Domaine taxisylvain.ca
 
@@ -321,8 +394,10 @@ que `taxi-sylvain-client.vercel.app` suive aussi.
   l'adresse au bon projet : `vercel domains add <adresse> <projet>`.
 - `api.taxisylvain.ca` : domaine personnalisé du service Railway `backend`, avec un enregistrement `CNAME api`
   vers la cible donnée par Railway et un enregistrement `TXT _railway-verify.api` de vérification.
-- **À venir** : les enregistrements de Brevo pour l'envoi des courriels, dès que le compte existera, et une
-  adresse de contact sur ce domaine pour les pages de confidentialité et le compte Apple d'entreprise.
+- **Fait le 20 et le 21 septembre** : domaine authentifié chez Brevo (DKIM `brevo1` et `brevo2._domainkey`, DMARC)
+  pour l'envoi des courriels ; `contact@taxisylvain.ca` par redirection ImprovMX (MX `mx1` et `mx2.improvmx.com`,
+  SPF `include:spf.improvmx.com include:spf.brevo.com`) ; racine et `www` en A et AAAA vers l'hébergement LWS du
+  site vitrine.
 
 ### APK Android (EAS Build)
 
@@ -349,9 +424,9 @@ eas build --platform android --profile preview
 
 | Où | Variables |
 |---|---|
-| Railway, service backend | `DATABASE_URL`, `JWT_SECRET`, `CORS_ORIGIN`, `PORT` ; optionnelles : `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_PROXY_SERVICE_SID`, `TWILIO_CALLER_NUMBER`, `BREVO_API_KEY` ou `RESEND_API_KEY`, `MAIL_FROM`, `DRIVER_APP_URL`, `CLIENT_APP_URL`, `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT` (notifications Web Push des versions web, déposées le 20 septembre ; la paire de clés est dans `C:\Users\PC\cles-taxi-sylvain\vapid-web-push.json`) ; `ALERTES_COURRIEL` (alertes d'erreurs par courriel, depuis le 6 octobre 2026 : `contact@taxisylvain.ca`) ; `GOOGLE_MAPS_API_KEY` (adresses par Google Maps, § 6, à poser par le propriétaire) ; `SAUVEGARDES_DOSSIER` (essais locaux seulement, jamais en production) |
-| Vercel, dispatch | `VITE_API_URL`, `VITE_SOCKET_URL` |
-| Vercel, driver et client | `EXPO_PUBLIC_API_URL`, `EXPO_PUBLIC_SOCKET_URL` |
+| Railway, service backend | `DATABASE_URL`, `JWT_SECRET`, `CORS_ORIGIN`, `PORT` ; optionnelles : `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_PROXY_SERVICE_SID`, `TWILIO_CALLER_NUMBER`, `BREVO_API_KEY` ou `RESEND_API_KEY`, `MAIL_FROM`, `DRIVER_APP_URL`, `CLIENT_APP_URL`, `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT` (notifications Web Push des versions web, déposées le 20 septembre ; la paire de clés est dans `C:\Users\PC\cles-taxi-sylvain\vapid-web-push.json`) ; `ALERTES_COURRIEL` (alertes d'erreurs par courriel, depuis le 6 octobre 2026 : `contact@taxisylvain.ca`) ; `GOOGLE_MAPS_API_KEY` (adresses par Google Maps, § 6, à poser par le propriétaire) ; `SAUVEGARDE_COURRIEL` et `SAUVEGARDE_CLE` (copie chiffrée hebdomadaire hors de Railway, § 6 ; la clé fait 32 octets en base64 et se garde aussi hors de Railway) ; `SAUVEGARDES_DOSSIER` (essais locaux seulement, jamais en production) |
+| Vercel, dispatch | `VITE_API_URL`, `VITE_SOCKET_URL` ; `VITE_VERSION_WEB` est passée à la construction par `publier-web.mjs`, jamais posée dans Vercel |
+| Vercel, driver et client | `EXPO_PUBLIC_API_URL`, `EXPO_PUBLIC_SOCKET_URL` ; `EXPO_PUBLIC_VERSION_WEB`, même règle |
 | EAS | définies dans `eas.json`, profil `preview` |
 
 `CORS_ORIGIN` liste les sites autorisés à appeler l'API : les adresses `taxisylvain.ca` (racine, `www`,
@@ -383,10 +458,9 @@ sinon l'application s'affiche mais ne peut plus se connecter. Les APK ne sont pa
 - **Nettoyage en attente, à faire par le propriétaire** : service Railway parasite `taxi-sylvain` en échec
   dans le projet, volume Railway détaché `postgres-volume` de 85 Mo, ancien projet Railway créé par erreur
   (id `7892fb08-d489-4abb-92ed-06418c706281`).
-- **Compte Railway encore en période d'essai** (constaté le 6 octobre 2026) : formule Hobby affichée mais aucun
-  abonnement actif (`isTrialing: true`, état `INACTIVE`), crédit restant 4,49 USD, **fin de l'essai le 8 octobre
-  2026**. Sans formule payante, le compte devient inactif et Railway supprime les disques (base, photos, APK)
-  30 jours après la fin du crédit. Consommation réelle : 2,01 USD du 5 septembre au 5 octobre ; la formule Hobby
+- **Compte Railway en période d'essai** (constaté le 6 octobre 2026, **réglé le soir même** : formule Hobby active) :
+  `isTrialing: true`, état `INACTIVE`, fin de l'essai prévue le 8 octobre 2026. Sans formule payante, le compte
+  devient inactif et Railway supprime les disques (base, photos, APK) 30 jours après la fin du crédit. Consommation réelle : 2,01 USD du 5 septembre au 5 octobre ; la formule Hobby
   (5 USD par mois, 5 USD d'usage inclus, disque de 5 Go au lieu de 0,5 Go) couvre ce besoin. Vérifier avec
   `railway api '{ me { workspaces { plan customer { isTrialing trialDaysRemaining state creditBalance } } } }'`.
 - **Disque des photos et des APK : 175 Mo sur 500 Mo** (6 octobre 2026). Les deux APK en prennent environ 135 :
@@ -401,14 +475,26 @@ sinon l'application s'affiche mais ne peut plus se connecter. Les APK ne sont pa
   `com.neomoov.client`, depuis le 1er octobre 2026) : un seul compte pour deux entreprises.
 - **Après un changement de branche, les dépendances des apps ne suivent pas** : `npm ci` dans `apps/driver-app`
   et `apps/client-app` (la branche `expo-audio` a `expo-audio` au lieu d'`expo-av`).
+- **Disque C du PC presque plein** (7 octobre 2026 : 0,6 Go libre après nettoyage des caches de construction) : une
+  copie complète du dépôt avec ses dépendances a rempli le disque. Les caches Metro (`%TEMP%\metro-cache`) et les
+  dossiers `dist/` se recréent seuls et peuvent être effacés.
+- **Vite 8 ne s'installe pas sous Windows** (7 octobre 2026) : sa nouvelle chaîne de compilation (rolldown) manquait
+  de son module natif ; la console reste sur Vite 5, sans alerte de sécurité dans le code livré (les deux alertes
+  restantes touchent le serveur de développement).
+- **Fuseau horaire dans Git Bash** : `TZ=America/Toronto date` y affiche l'heure UTC sans prévenir. Pour l'heure du
+  Québec, passer par Node : `new Date().toLocaleString("fr-CA", { timeZone: "America/Toronto" })`.
+- **Fichiers `.env.local` dans `apps/dispatch-web` et `apps/driver-app`** (celui de l'app chauffeur contient un jeton
+  Vercel) : ne pas les lire ni les commettre ; ils sont ignorés par Git. La vérification contrôle qu'aucun site publié n'appelle
+  `localhost` à la place de `api.taxisylvain.ca`.
 
 ---
 
 ## 9. Règles métier à ne pas casser
 
 - **Étapes d'une course**, imposées par le serveur : `ACCEPTED` puis `EN_ROUTE` puis `STARTED` puis
-  `COMPLETED`. Annulation possible avant la fin ; une annulation par le chauffeur remet la course sans
-  chauffeur, pour réaffectation.
+  `COMPLETED`. Annulation possible avant la fin par l'équipe. Le chauffeur, lui, **libère** la course (bouton
+  « Libérer la course » depuis le 7 octobre 2026, audit B04) : elle redevient `REQUESTED` sans chauffeur, il entre
+  dans `refusedBy`, la session d'appel masqué se ferme ; elle n'est jamais annulée pour le client.
 - **Diffusion** : une course `BROADCAST` est proposée à tous ; le premier qui accepte l'obtient. Un refus est
   mémorisé dans `refusedBy` et la course ne revient plus à ce chauffeur.
 - **Téléphones** : jamais transmis à l'autre partie. Messagerie interne ; appel masqué via Twilio Proxy,
@@ -467,7 +553,40 @@ sinon l'application s'affiche mais ne peut plus se connecter. Les APK ne sont pa
   `/suppression-compte`, mot de passe exigé). Le compte reste utilisable, la demande est annulable, le
   Dispatch la valide (`deleteUserCascade`, courses du client en cours = refus 409) ou la refuse depuis la
   page Suppressions de la console. Réponse promise **sous 30 jours** dans les pages légales. Courriels :
-  accusé de réception, alerte au Dispatch, décision. Règles dans `lib/accountDeletion.js`, testées.
+  accusé de réception, alerte au Dispatch, décision. Règles dans `lib/accountDeletion.js`, testées. Une demande
+  refusée n'envoie plus « compte supprimé » à l'application (audit B21).
+
+**Règles posées par l'audit du 7 octobre 2026** (tests : `test/audit-2026-10-07.test.js`, `test-e2e/audit-2026-10-07.mjs`) :
+
+- **Collaborateurs (`ADMIN`)** : chaque route et chaque évènement temps réel exigent l'une des permissions prévues
+  (`lib/equipe.js`) ; une page de la console n'apparaît qu'avec l'une d'elles (`accesPage`, `App.jsx`). La permission
+  Clients ne fixe aucun tarif (SEC-02, SEC-17, F04).
+- **Messages** : les notes internes Dispatch–chauffeur rattachées à une course ne sont jamais servies au client ni à
+  un chauffeur non affecté ; un groupe privé n'est diffusé qu'à ses membres ; 4 000 caractères au plus, 30 messages
+  par minute et par compte (SEC-01, SEC-03, SEC-14).
+- **Réservation par le client** : il ne choisit ni chauffeur, ni diffusion, ni montant (catalogue ou « à
+  confirmer ») ; un code de destination inconnu est refusé ; 20 réservations par heure ; une même saisie envoyée deux
+  fois ne crée qu'une course (en-tête `Idempotency-Key`) (SEC-05, SEC-06, SEC-14, F05).
+- **Création par la console** : mêmes contrôles qu'une modification (montant et distance positifs ou nuls, date
+  lisible, comptes du bon rôle) (B13).
+- **Acceptation d'une offre** : atomique, un seul gagnant, l'autre chauffeur reçoit 409 (CONC-01).
+- **Notes** : une seule par personne et par course (index unique, 409) ; moyenne recalculée par la base ; aucune
+  note fictive, pas de moyenne sans note (CONC-02, B17).
+- **Sessions** : changer son mot de passe révoque tous les jetons, API et temps réel ; 20 essais de connexion par
+  courriel normalisé (espaces, majuscules) ; exports par un lien de 5 minutes, jamais avec le jeton de session dans
+  l'adresse (SEC-07, SEC-04, SEC-19).
+- **Photos** : acceptées sur leur contenu réel (signature, dimensions), pas sur le type déclaré (SEC-13).
+- **Notifications web** : seuls les services de notification connus des navigateurs sont contactés ; seul le
+  propriétaire d'un abonnement le retire ; 20 abonnements par heure (SEC-08, SEC-09, SEC-14).
+- **Envois** : un rappel ou un récap n'est noté envoyé qu'après réussite, sinon il est retenté (B16).
+- **Adresses OpenStreetMap** : une requête toutes les 1,1 seconde au plus pour tout le serveur, file de 3, cache de
+  24 h, 60 recherches par minute et par compte (OPS-02, SEC-14). **GPS** : une position par seconde au plus par
+  connexion, coordonnées valides seulement (SEC-14).
+- **Comptes créés par la console ou par import** : mot de passe temporaire tiré par `crypto`, réinitialisable par le
+  Dispatch (SEC-12, B05).
+- **Escalade à 60 minutes** (B18, règle en vigueur ; la changer demande une décision du propriétaire) : hors ligne
+  ou pas encore en route = escalade ; déjà en route = pas d'escalade, même hors ligne (navigation Waze). Les quatre
+  cas sont dans `test/rappels.test.js`.
 
 ---
 
@@ -481,7 +600,7 @@ sinon l'application s'affiche mais ne peut plus se connecter. Les APK ne sont pa
 | Nom de domaine | **fait le 19 septembre : `taxisylvain.ca`**, rattaché aux trois sites et à l'API | DNS pour Brevo et courriel pro exigé par Apple, dès l'ouverture de ces comptes |
 | Numéro D-U-N-S | **demande envoyée le 19 septembre**, confirmation attendue de Dun & Bradstreet | comptes d'entreprise Google Play et Apple |
 | Brevo | **fait le 20 septembre** : compte créé, domaine `taxisylvain.ca` authentifié, `BREVO_API_KEY` et `MAIL_FROM` dans Railway, envoi reçu | rien : courriels de course, de rappel, de code de confirmation et de récap hebdomadaire partent. Le bouton de la page Administrateurs sert de contrôle |
-| Firebase | **complet le 20 septembre : clé FCM V1 déposée sur Expo et rattachée aux deux applications, vérifiée auprès de Google.** Projet `taxi-sylvain` créé le 19 septembre, fichiers rangés : `google-services.json` et `GoogleService-Info.plist` dans chaque app (exclus de Git), clé de compte de service dans `C:\Users\PC\cles-taxi-sylvain` | reste : déposer les fichiers dans les variables EAS (`GOOGLE_SERVICES_JSON`, `GOOGLE_SERVICE_INFO_PLIST`, relayées par `app.config.js`) une fois `eas login` fait, et la clé FCM V1 sur expo.dev pour chaque projet, puis recompiler avec accord |
+| Firebase | **complet le 20 septembre : clé FCM V1 déposée sur Expo et rattachée aux deux applications, vérifiée auprès de Google.** Projet `taxi-sylvain` créé le 19 septembre, fichiers rangés : `google-services.json` et `GoogleService-Info.plist` dans chaque app (exclus de Git), clé de compte de service dans `C:\Users\PC\cles-taxi-sylvain` | rien : les fichiers sont dans les variables EAS (`GOOGLE_SERVICES_JSON`, `GOOGLE_SERVICE_INFO_PLIST`, relayées par `app.config.js`, voir la ligne Expo) et la clé FCM V1 est sur expo.dev pour les deux projets, depuis le 20 septembre |
 | Expo | **APK 1.3.0 compilés le 20 septembre à 17 h** avec l'accord écrit du propriétaire (16 h 50), via le jeton `EXPO_TOKEN` du dossier des clés (`eas-cli` n'était plus connecté ; le jeton suffit en le passant dans l'environnement). Les fichiers Firebase arrivent par les variables EAS secrètes `GOOGLE_SERVICES_JSON` et `GOOGLE_SERVICE_INFO_PLIST` (présentes pour les deux projets, environnement `preview`) | à chaque nouvelle recompilation : accord du propriétaire, monter `version` et `versionCode` dans les deux `app.json`, `npx eas-cli build --platform android --profile preview --non-interactive --no-wait`, puis ranger les APK et les liens dans le dossier OneDrive |
 | Apple Developer | **inscription faite le 19 septembre**. Identifiants (non secrets) : Team ID `DNB64CQYH6`, clé App Store Connect Key ID `2D3MR539UF`, Issuer ID `cf6fb73d-076c-4bb1-819e-b8179ebb5461`. Le fichier de la clé (`AuthKey_2D3MR539UF.p8`, secret) est dans `C:\Users\PC\cles-taxi-sylvain`, jamais dans le dépôt | **Compilations iPhone 1.3.1 (build 5) faites le 23 septembre** sur EAS : chauffeur `2255af9f`, client `952f7e2a`, profils App Store avec `aps-environment` (vérifié dans le fichier). Clé APNs `7853YS72UB` créée par Christopher le 23 septembre (fichier `AuthKey_7853YS72UB.p8` dans `C:UsersPCcles-taxi-sylvain`, jamais dans le dépôt), déposée chez Expo et associée aux deux applications par `07-Outils/expo-cle-push.mjs`. Fiches App Store Connect créées par Christopher le 23 septembre (« Taxi Sylvain Chauffeur » `6815332363`, « Taxi Sylvain » `6815332894`, `ascAppId` dans les deux `eas.json`). Les envois des compilations Expo SDK 51 ont été refusés par Apple (ITMS-90725 : SDK iOS 17.5, alors que Xcode 26 / SDK iOS 26 sont exigés depuis le 28 avril 2026). **Mise à niveau Expo SDK 54 faite le 23 septembre** (branche `sdk-54` fusionnée), compilations 1.4.0 (build 6) sur Xcode 26 : chauffeur `c6742ddd-d9e6-4868-839a-19a00cebcaec`, client `cf31d70e-6eeb-4203-a725-1f30ad0221df`, **toutes deux acceptées par App Store Connect**. TestFlight : groupe interne « Team (Expo) » (Christopher testeur, installation immédiate), groupe externe « Chauffeurs et clients » avec lien public chauffeur `https://testflight.apple.com/join/Fd6W5dCv` et client `https://testflight.apple.com/join/YecvTgPW`. Reste : saisir dans App Store Connect les informations de contact et le compte de démonstration pour l'examen bêta, puis `apple-testflight.mjs --soumettre` (1 à 3 jours d'examen avant que le lien public fonctionne). **6 octobre 2026 : les deux compilations ont expiré le 2 octobre** (§ 8) : nouvelle compilation iOS nécessaire avant tout essai sur iPhone |
 | Google Play | compte d'entreprise, 25 USD | fiches des applications |
@@ -496,36 +615,59 @@ sinon l'application s'affiche mais ne peut plus se connecter. Les APK ne sont pa
 1. **Suppression de compte** : **depuis le 20 septembre au soir, c'est une demande validée par le Dispatch** (voir § 9, règle « Suppression de compte »). La décision du 19 septembre (suppression automatique du chauffeur) est remplacée. La validation d'un chauffeur reste sans vérification de redevance ; ses courses non terminées repartent chez le Dispatch. Le client, lui, ne peut pas être validé tant qu'une course est acceptée ou en cours.
 2. **Politique de confidentialité et conditions d'utilisation** : **publiées le 19 septembre**, **mises à jour le 20 septembre** (demande de suppression sous 30 jours, adresse postale `2060, rue Saint-Georges, Longueuil (Québec) J4K 2C8`, raison sociale « Taxi Sylvain »). Reste : courriel sur taxisylvain.ca quand il existera ; relecture par un juriste.
 3. **Préparation des magasins** : voir `docs/CONFORMITE-MAGASINS.md`, qui contient les réponses prêtes au formulaire « Sécurité des données », la justification de localisation en arrière-plan, le scénario de la vidéo Google, la marche à suivre pour le compte de démonstration Apple et les textes de fiche. Profil de compilation `production` (`.aab` pour Google Play, build iOS) **ajouté le 19 septembre** dans les deux `eas.json`, avec les identifiants Apple de `submit.production.ios` ; la localisation en arrière-plan sur iPhone est activée dans `apps/driver-app/app.json` (`isIosBackgroundLocationEnabled`). Aucun build lancé : il faut l'accord du propriétaire.
-4. **Tests de bout en bout** : les parcours serveur sont joués par les scénarios du dossier de passation (`05-Verifications`, dont `scenario-vague-20-sept.cjs` : code de confirmation, Web Push, ordre de l'accueil, notation à rattraper, 32 vérifications). Reste : les écrans eux-mêmes, à la main, et sur un vrai téléphone.
-5. **Environnement de test séparé** : deuxième service et deuxième base sur Railway, données fictives. **À faire
-   juste après le passage à Hobby** (6 octobre 2026) : environnement Railway `essai` (copie des services, base
-   vierge), estimé à 1 à 2 USD d'usage par mois, compris dans les 5 USD de Hobby à la consommation actuelle.
+4. **Tests de bout en bout** : les parcours serveur sont joués par les deux scénarios du dépôt (`backend/test-e2e/`,
+   rejoués à chaque envoi par l'intégration continue) et par ceux du dossier de passation (`05-Verifications`, dont
+   `scenario-vague-20-sept.cjs`, 32 vérifications). Reste : les écrans eux-mêmes, à la main, et sur un vrai téléphone
+   (Android et iPhone), que l'audit du 7 octobre n'a pas pu faire non plus.
+5. **Environnement de préproduction** (audit OPS-05, non fait) : deuxième environnement Railway `essai` (copie des
+   services, base vierge, fournisseurs neutralisés : aucune clé Brevo, Twilio ni VAPID) et trois déploiements Vercel
+   de préproduction, estimé à 1 à 2 USD d'usage par mois, compris dans les 5 USD de Hobby à la consommation actuelle.
+   À créer avec l'accord du propriétaire ; l'intégration continue couvre en attendant les essais automatiques.
 6. **Alerte d'erreurs** : **fait côté serveur le 6 octobre 2026**, sans compte supplémentaire (courriel par Brevo,
    § 6), avec une surveillance horaire par GitHub (§ 5). Reste possible : Sentry gratuit pour les erreurs des trois
    interfaces (compte à créer par le propriétaire).
 7. **Sauvegardes de la base** : **fait le 6 octobre 2026** (§ 6) ; celles de Railway sont réservées à la formule Pro.
    Reste au propriétaire : `node scripts/recuperer-sauvegarde.mjs` chaque semaine (copie hors de Railway).
 8. **Registre des demandes** : tenir à jour la section 11 à chaque nouvelle vague.
-9. **Distribuer et tester la version 1.5.0** (compilée le 7 octobre 2026 ; avant, 1.4.0 du 23 septembre) : envoyer les liens aux chauffeurs et clients, puis dérouler sur un vrai téléphone les sections 5.6 à 5.9 du plan de vérification (notification écran verrouillé, GPS avec Waze ouvert, code de confirmation, sélecteur de date).
+9. **Version 1.5.1 des applications** (audit OPS-03) : les corrections de l'audit dans les applications (série F :
+   connexion temps réel unique, sessions dans le coffre du téléphone, heure de Montréal, offre acceptable depuis une
+   notification, écran de notation qui se quitte, version affichée...) ne sont que sur les versions web. Avec
+   l'accord explicite du propriétaire : monter `version`, `versionCode` et `buildNumber`, compiler (§ 6), puis dérouler
+   sur de vrais téléphones les sections 5.6 à 5.9 du plan de vérification (notification écran verrouillé, GPS avec
+   Waze ouvert, code de confirmation, sélecteur de date), la mise à niveau depuis 1.4.0 sans perte de session et les
+   arrêts ; noter l'empreinte SHA-256 de chaque APK avant de le servir par les liens définitifs.
 10. **Remise en forme des adresses déjà enregistrées** : **fait le 20 septembre à 17 h 30** avec l'accord du propriétaire. Script `backend/scripts/reformater-adresses.mjs` (simulation par défaut, refuse une base distante sans `--production`, ne touche jamais une adresse dont la municipalité reconnue changerait). Lancé dans le conteneur Railway : simulation lue (10 adresses à réécrire, 0 refusée), puis application (10 réécrites, 8 fiches clients avec espaces en trop, 2 courses allégées de « Canada » et de la province en toutes lettres), puis contre-simulation (0 à réécrire, 68 propres). À relancer seulement si des adresses anciennes réapparaissent (import).
 11. **Courriels à chaque étape de la course** (en route, démarrée, terminée) : non demandés, non faits ; seuls confirmation, annulation, rappels, code et récap partent.
 12. **expo-audio** : **fusionné le 7 octobre 2026 dans la version 1.5.0** (remplace `expo-av`, retiré à partir d'Expo
     SDK 55 ; `expo-asset` aligné sur SDK 54 ; permissions micro et services au premier plan bloquées dans
     `app.json`). À tester sur téléphone : son en mode silencieux, son d'une course diffusée, permissions de l'APK
-    (`aapt dump permissions`). Les versions web publiées le 6 octobre au soir utilisent encore `expo-av` : la
-    prochaine publication web embarquera `expo-audio`, vérifier alors les sons dans le navigateur.
+    (`aapt dump permissions`). Les versions web publiées le 7 octobre 2026 embarquent `expo-audio` : les sons sont
+    à vérifier dans un navigateur (nouvelle course, message, rappel).
 13. **Point de guidage de YHU** : non vérifié (l'ancien point était le centre des pistes ; le nouveau terminal a ouvert
     en juin 2026). Le Dispatch le vérifie dans la page Tarifs en choisissant l'adresse exacte dans la liste.
 14. **Courses jamais terminées** : `scripts/comparer-rapports.mjs` les liste par semaine (heure passée de plus de
     12 h au moment de la copie ; les courses à venir ne sont pas signalées). À vérifier avec le chauffeur, puis
     « Effectuée » si la course a eu lieu, « Annulée » sinon, pour que les rapports correspondent au tableau de
     Taxi Sylvain.
+15. **Dépendances** (audit F24 et OPS-01) : serveur et console sans aucune alerte dans le code livré au 7 octobre
+    2026. Restent 2 alertes dans le serveur de développement de Vite 5 (passage à Vite 6 ou plus à prévoir quand sa
+    chaîne de compilation s'installera sous Windows, § 8) et 37 (chauffeur) et 38 (client) alertes, aucune critique,
+    dans l'outillage de construction d'Expo SDK 54 (braces, image-size, node-forge, postcss, source-map-js,
+    sprintf-js, uuid), pas dans le code exécuté chez les utilisateurs ; npm ne propose que des changements majeurs :
+    à régler avec le passage à Expo SDK 55 (compilation et nouvelle soumission aux magasins).
+16. **Décisions du propriétaire issues de l'audit** : B18 (escalade d'un chauffeur en route qui paraît hors ligne,
+    § 9) ; WEB-01 (lever le « ne pas indexer » du site vitrine après relecture de ses sept pages) ; GOV-01 (dossier vie
+    privée : évaluation des facteurs relatifs à la vie privée, registre des incidents, durées de conservation,
+    contrats des fournisseurs, avec un juriste) ; préproduction (point 5).
+17. **Catalogue des fonctions** (audit B19) : un catalogue complet, fonction par fonction (objectif, fonctionnement,
+    emplacement dans le code, tests), relié au cahier des charges, reste à écrire. Ce document en est la source datée
+    la plus à jour.
 
 ---
 
 ## 11. Historique des demandes et état
 
-Registre tenu à jour à chaque série de demandes (dernière entrée : 6 octobre 2026). « Web » signifie livré sur les versions web mais absent des APK du 13 septembre.
+Registre tenu à jour à chaque série de demandes (dernière entrée : 7 octobre 2026, audit du développeur senior). « Web » signifie livré sur les versions web mais absent des APK du 13 septembre.
 
 ### Cahier des charges initial (8 septembre)
 
@@ -615,6 +757,7 @@ Registre tenu à jour à chaque série de demandes (dernière entrée : 6 octobr
 | 6 oct. | « Reprise du projet », puis « Vas-y » : exploitation (sauvegardes, alertes, environnement de test), vérification de Railway et de TestFlight, expo-audio, passation | **Fait et vérifié** : sauvegarde quotidienne de la base et restauration éprouvée, alertes d'erreurs par courriel, surveillance horaire GitHub (§ 5, § 6) ; déployé (Railway `35cf2a69`), 256 tests verts, 14 contrôles de mise en ligne verts, première sauvegarde en production (79 Ko), dossier des sauvegardes inaccessible depuis Internet (404 sur cinq adresses, encodées comprises). **Constats** (§ 8) : essai Railway qui se termine le 8 octobre, compilations TestFlight expirées le 2 octobre, disque à 175 Mo sur 500. expo-audio prêt sur une branche (§ 10, point 12). **Non fait** : environnement de test (attend la formule Hobby) ; copie de la sauvegarde sur le PC (refusée au mode automatique de Claude Code, à lancer par le propriétaire) |
 | 6 oct. (soir) | Treize demandes du propriétaire : 1 fiche chauffeur modifiable (véhicule, couleur, nom) ; 2 arrêts (client, ami du client, puis YUL) ; 3 récap hebdomadaire faux certaines semaines (captures du compte du chauffeur Christopher et tableau de Sylvain, semaine du 21 au 27 septembre juste : 11 courses, 1 305 $, 130,50 $) ; 4 adresses réelles de Google Maps ; 5 contact du client à 2 h ; 6 départ à 3 h ; 7 YUL : Arrivées et P4 seulement ; 8 rapports du Dispatch faux et sans navigation entre semaines ; 9 notification de récap reçue quatre fois ; 10 heure sur 24 h partout ; 11 Google Maps mène à une autre adresse ; 12 récap le lundi à 04 h 00 ; 13 rapport complet et dossier unique pour un développeur senior | **Fait et vérifié** (commits `f8f5cd5`, `1aab585`, `241c0fa`, `c088514`) : 1 `PATCH /drivers/:id` et fenêtre « Modifier » ; 2 `Ride.stops` partout ; 3, 8, 9, 12 règle unique `lib/rapports.js` (date de la course, recalcul à chaque lecture), page Rapports refaite, exports au format du tableau, dates des exports corrigées (le dimanche s'affichait lundi), récap à 04 h 00 notifié une fois, recalcul manuel silencieux. Causes trouvées : courses comptées à la date de « Terminer » (une course du dimanche 22 h 30 terminée après minuit passait à la semaine suivante), récap figé jamais mis à jour, chaque clic « Générer » renvoyait la notification ; 4 Google Maps prêt, actif dès la clé posée (§ 6) ; 5, 6 `lib/fenetres.js` ; 7 catalogue YUL et P4, vérifié en production ; 10 `heure()` partout ; 11 l'ancien point de YUL était le centre des pistes et Google Maps recevait un point d'OpenStreetMap au lieu de l'adresse écrite. 297 tests, scénario de bout en bout (10 vérifications), écrans contrôlés dans Edge (captures), serveur et trois sites publiés (14 contrôles verts). Version 1.5.0 compilée (accord du propriétaire, avec expo-audio). **Non fait** : comparaison sur les vraies données (copie de la base refusée au mode automatique : `scripts/comparer-rapports.mjs` à lancer par le propriétaire), clé Google Maps (propriétaire) |
 | 7 oct. | Contrôle des récaps : le propriétaire lance `scripts/comparer-rapports.mjs` sur la copie du 6 octobre | **Défaut du script corrigé et vérifié** : la première version classait aussi les courses à venir (13, 14, 15 et 31 octobre) parmi les « jamais terminées, à corriger » ; désormais seules les courses dont l'heure était passée de plus de 12 h au moment de la copie sont signalées, « à vérifier avec le chauffeur », et un bilan d'un écran termine la sortie (`--bilan` pour lui seul). Vérifié sur une sauvegarde fictive (course à venir, en cours, oubliée, terminée en retard, annulée, non attribuée, écart au début de la période). Constat sur la partie visible de la sortie : deux courses des 18 et 19 septembre terminées le 22 passent de la semaine du 21 à celle du 14, même total sur les deux semaines. Bilan complet lancé ensuite par le propriétaire : 63 courses effectuées depuis le 31 août, totaux identiques dans les deux calculs, 7 semaines de 3 chauffeurs à revoir (écarts compensés pour chaque chauffeur), aucune course passée oubliée, 25 à venir. Les 8 commits des 6 et 7 octobre ont ensuite été envoyés sur GitHub (« pousse ») ; l'envoi n'a déclenché aucun déploiement (vérifié sur les trois projets Vercel, toujours à `f8f5cd5`). |
+| 7 oct. | Audit d'un développeur senior (59 pages, 67 constats : 12 P1, 51 P2, 4 P3 ; « je déconseille de valider la livraison en l'état ») : « prends en connaissance et fais le nécessaire pour apporter les corrections, modifications et renforcement au projet » | **Fait, vérifié et en production le 7 octobre à 12 h 52, heure du Québec** (serveur `2026-10-07.audit`, migration `20261007120000_audit_7_octobre` ; trois sites au commit `d5db9b6083e4` publiés par `scripts/publier-web.mjs` ; textes du site WordPress corrigés). Les 12 P1 corrigés : notes internes, permissions sur les routes et le temps réel, groupes privés, limite de connexion contournable, client qui s'affectait un chauffeur ou fixait un tarif, sauvegarde incohérente et sans copie hors volume, double acceptation, connexions temps réel multiples, notifications perdues après une conversation, heure de réservation selon le fuseau de l'appareil, pages inutilisables pour un collaborateur. Les P2 et P3 corrigés ou documentés un par un dans `docs/REPONSE-AUDIT-2026-10-07.md`. Preuves : 343 tests ; scénarios de bout en bout du 6 octobre (10) et de l'audit (24), aussi à l'heure UTC et en mode intégration continue ; sondes de l'auditeur rejouées (aucune ne réussit plus) ; faille volontaire détectée par le scénario ; vérification de mise en ligne entièrement au vert ; sites chargés dans Edge. Commits `cb9925d`, `6349283`, `fe43f96`, `4576b34`, `d5db9b6`, `0b60911`, `9741dc3` et suivants. **Non fait** (décisions ou accords du propriétaire) : version 1.5.1 des applications, variables de la copie chiffrée, préproduction, B18, WEB-01, GOV-01 ; essais sur de vrais téléphones |
 
 ---
 
@@ -625,6 +768,7 @@ Registre tenu à jour à chaque série de demandes (dernière entrée : 6 octobr
 | Railway | API, base Postgres, photos | projet `taxi-sylvain`, service `backend` |
 | Vercel | trois sites web | équipe `taxi-sylvain` ; projets `taxi-sylvain-dispatch`, `taxi-sylvain-driver`, `client-app` |
 | Expo / EAS | compilation des APK | équipe `taxisylvains-team` |
+| GitHub | code, intégration continue, surveillance horaire | dépôt privé `paulemileverges-star/taxi-sylvain`, branche `master` ; Actions : `ci.yml`, `surveillance.yml` |
 | OpenStreetMap, OSRM | adresses, cartes, distances | sans compte |
 
 Un jeton d'accès Expo nommé « Claudeagent (robot) » a été créé pour les compilations. Si le propriétaire
