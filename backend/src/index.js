@@ -44,6 +44,7 @@ import { alertesStatusLine, signalerErreur } from "./lib/alertes.js";
 import { prisma } from "./lib/prisma.js";
 import { previousWeekRange } from "./lib/semaines.js";
 import { VERSION_SERVEUR } from "./version.js";
+import { etatLivraisons } from "./lib/livraisons.js";
 
 const DEMARRE_LE = new Date().toISOString();
 const app = express();
@@ -74,13 +75,13 @@ console.log(`Version du serveur : ${VERSION_SERVEUR}`);
 app.use("/uploads", fichiersPublics(uploadsDir));
 
 // /health : le programme répond (vivant). /health/ready : il peut vraiment servir — la base répond,
-// avec la version du code, la dernière migration appliquée et l'âge de la dernière sauvegarde, pour
-// la surveillance (audit du 7 octobre 2026, OPS-04 : /health restait vert base en panne). Aucune
-// donnée personnelle.
+// avec la version du code, la dernière migration appliquée, l'âge de la dernière sauvegarde et l'état
+// des envois (courriels, notifications) sur 24 heures, pour la surveillance (audit du 7 octobre
+// 2026, OPS-04 : /health restait vert base en panne). Aucune donnée personnelle.
 app.get("/health", (req, res) => res.json({ ok: true }));
 app.get("/health/ready", async (req, res) => {
   res.setHeader("Cache-Control", "no-store");
-  const etat = { version: VERSION_SERVEUR, demarreLe: DEMARRE_LE, sauvegardes: etatSauvegardes() };
+  const etat = { version: VERSION_SERVEUR, demarreLe: DEMARRE_LE, sauvegardes: etatSauvegardes(), livraisons: etatLivraisons() };
   try {
     const [ligne] = await Promise.race([
       prisma.$queryRawUnsafe('SELECT migration_name FROM "_prisma_migrations" WHERE finished_at IS NOT NULL AND rolled_back_at IS NULL ORDER BY migration_name DESC LIMIT 1'),

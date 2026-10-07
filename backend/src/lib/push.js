@@ -1,7 +1,12 @@
 import { prisma } from "./prisma.js";
 import { envoyerWebPush } from "./webPush.js";
+import { noterEnvoi } from "./livraisons.js";
 
 const EXPO_PUSH_URL = "https://exp.host/--/api/v2/push/send";
+// Refus d'Expo qui touchent TOUS les appareils (clé Firebase ou Apple absente ou fausse), par
+// opposition à un téléphone qui a désinstallé l'application : seuls ceux-là signalent une panne du
+// canal à la surveillance (audit du 7 octobre 2026, OPS-04).
+const REFUS_DU_CANAL = ["InvalidCredentials", "MismatchSenderId"];
 
 // Notifications "push" (Expo) — atteignent le chauffeur ou le client même quand l'app est
 // fermée ou l'écran verrouillé, contrairement aux sons/évènements Socket.io qui ne marchent
@@ -12,7 +17,7 @@ const EXPO_PUSH_URL = "https://exp.host/--/api/v2/push/send";
 // passent par Web Push (voir webPush.js). Chaque envoi part donc par les deux voies.
 // Renvoie { tentatives, acceptes } : combien de messages Expo a acceptés (audit du 7 octobre 2026,
 // B16 : sans ce compte, un rappel perdu dans une panne était tout de même noté « envoyé »).
-async function sendExpoPush(messages) {
+export async function sendExpoPush(messages) {
   if (messages.length === 0) return { tentatives: 0, acceptes: 0 };
   try {
     const res = await fetch(EXPO_PUSH_URL, {
@@ -23,6 +28,11 @@ async function sendExpoPush(messages) {
       // chaque minute : les rappels suivants ne partaient plus du tout.
       signal: AbortSignal.timeout(10000),
     });
+    if (!res.ok) {
+      noterEnvoi("notification", false);
+      console.error(`Service de notifications en erreur : code ${res.status}`);
+      return { tentatives: messages.length, acceptes: 0 };
+    }
     // Expo répond « ok » même quand chaque message échoue : c'est dans le détail que se lit
     // l'absence de clé Firebase, qui empêche toute notification d'arriver sur Android.
     const reponse = await res.json().catch(() => null);
@@ -30,8 +40,12 @@ async function sendExpoPush(messages) {
     let acceptes = 0;
     for (let i = 0; i < items.length; i += 1) {
       const item = items[i];
-      if (item?.status === "ok") acceptes += 1;
+      if (item?.status === "ok") {
+        acceptes += 1;
+        noterEnvoi("notification", true);
+      }
       if (item?.status !== "error") continue;
+      if (REFUS_DU_CANAL.includes(item.details?.error)) noterEnvoi("notification", false);
       console.error("Notification refusée :", item.message, item.details?.error || "");
       // L'appareil a désinstallé l'app ou révoqué le jeton : on l'oublie pour ne plus le
       // solliciter (sinon Expo finit par bloquer les envois du compte).
@@ -41,6 +55,7 @@ async function sendExpoPush(messages) {
     }
     return { tentatives: messages.length, acceptes };
   } catch (err) {
+    noterEnvoi("notification", false);
     console.error("Erreur d'envoi de notification push:", err.message);
     return { tentatives: messages.length, acceptes: 0 };
   }

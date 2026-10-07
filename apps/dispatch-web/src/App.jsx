@@ -21,6 +21,7 @@ import Pricing from "./pages/Pricing.jsx";
 import ChangePasswordModal from "./components/ChangePasswordModal.jsx";
 import logo from "./assets/logo.png";
 import { statusClass } from "./lib/status.js";
+import { VERSION_WEB } from "./lib/version.js";
 
 // Chaque page n'apparaît qu'avec l'une des permissions que le serveur exige pour elle (audit du
 // 7 octobre 2026, F04) : avant, Recherche, Carte et Messagerie s'affichaient à tous les comptes et
@@ -214,6 +215,7 @@ export default function App() {
           <div style={{ fontSize: 13, color: "var(--muted)", marginBottom: 8 }}>{user.name}</div>
           <button className="btn outline" style={{ width: "100%", marginBottom: 8 }} onClick={() => setShowChangePassword(true)}>Changer le mot de passe</button>
           <button className="btn outline" style={{ width: "100%" }} onClick={logout}>Se déconnecter</button>
+          <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 8, textAlign: "center" }}>Version {VERSION_WEB}</div>
         </div>
       </div>
       <div className="content">

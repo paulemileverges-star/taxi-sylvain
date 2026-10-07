@@ -8,7 +8,18 @@
 // Dans les deux cas, MAIL_FROM doit utiliser un domaine vérifié chez le fournisseur,
 // par exemple : MAIL_FROM="Taxi Sylvain <reservations@votre-domaine.ca>"
 
+import { noterEnvoi } from "./livraisons.js";
+
 const TIMEOUT_MS = 10000;
+
+// Réponses du fournisseur qui disent que le CANAL est en panne (clé refusée, quota, service en
+// erreur), par opposition à un refus propre à un message (adresse invalide) : seules les premières
+// alimentent la surveillance des envois (audit du 7 octobre 2026, OPS-04).
+export function panneDuFournisseur(resultat) {
+  if (resultat?.ok) return false;
+  const code = resultat?.status;
+  return !code || code >= 500 || code === 401 || code === 403 || code === 429;
+}
 
 export function mailProvider() {
   if (process.env.BREVO_API_KEY) return "brevo";
@@ -47,7 +58,7 @@ async function post(url, headers, body) {
     });
     if (!res.ok) {
       const detail = await res.text().catch(() => "");
-      return { ok: false, error: `${res.status} ${detail.slice(0, 300)}` };
+      return { ok: false, status: res.status, error: `${res.status} ${detail.slice(0, 300)}` };
     }
     return { ok: true };
   } catch (err) {
@@ -103,6 +114,7 @@ export async function sendMail({ to, toName, subject, html, text, calendar, piec
     result = await post("https://api.resend.com/emails", { Authorization: `Bearer ${process.env.RESEND_API_KEY}` }, body);
   }
 
+  if (result.ok || panneDuFournisseur(result)) noterEnvoi("courriel", result.ok);
   if (!result.ok) console.error(`Courriel non envoyé à ${to} : ${result.error}`);
   return result;
 }

@@ -1,13 +1,15 @@
 # Surveillance de la production, toutes les heures, sans compte supplémentaire.
 #
-# Rejoue scripts/verifier-mise-en-ligne.mjs (API, pages légales, site, trois applications web à
-# jour et autorisées par le serveur). En cas d'échec, une seconde tentative 3 minutes plus tard
-# évite les fausses alertes ; si elle échoue aussi, l'exécution est marquée en échec et GitHub
-# envoie un courriel au titulaire du dépôt (réglage par défaut : Settings > Notifications >
+# Rejoue scripts/verifier-mise-en-ligne.mjs : serveur prêt à servir (base joignable, version et
+# dernière migration du dépôt, sauvegarde de moins de 30 heures, aucun canal d'envoi en panne),
+# pages légales, site vitrine, trois applications web qui servent le dernier commit de leur
+# application et sont autorisées par le serveur. En cas d'échec, une seconde tentative 3 minutes
+# plus tard évite les fausses alertes ; si elle échoue aussi, l'exécution est marquée en échec et
+# GitHub envoie un courriel au titulaire du dépôt (réglage par défaut : Settings > Notifications >
 # Actions, « Failed workflows only »).
 #
 # Coût : environ 1 minute par heure, soit 720 minutes par mois sur les 2 000 gratuites d'un dépôt
-# privé GitHub Free. Ajouté le 6 octobre 2026.
+# privé GitHub Free. Ajouté le 6 octobre 2026 ; contrôles renforcés le 7 octobre 2026 (audit, OPS-04).
 name: Surveillance de la production
 
 on:
@@ -21,11 +23,15 @@ permissions:
 jobs:
   verifier:
     runs-on: ubuntu-latest
-    timeout-minutes: 8
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
+        with:
+          # Tout l'historique : la version attendue de chaque site est le dernier commit qui a
+          # changé son application (scripts/versions-web.mjs).
+          fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
       - name: Vérifier la production (seconde tentative après 3 minutes)
         run: node scripts/verifier-mise-en-ligne.mjs || (sleep 180 && node scripts/verifier-mise-en-ligne.mjs)

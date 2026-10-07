@@ -6,6 +6,7 @@ import { showAlert } from "../lib/alert";
 import { getSocket } from "../lib/socket";
 import SwipeButton from "../components/SwipeButton";
 import { heure, jour } from "../lib/dates";
+import { versionAffichee } from "../lib/version";
 
 const STATUS_LABEL = {
   REQUESTED: "Course proposée", BROADCAST: "Course diffusée — premier arrivé, premier servi", ACCEPTED: "Acceptée",
@@ -190,6 +191,7 @@ export default function HomeScreen({ user, onOpenRide, onOpenEarnings, onOpenMes
           );
         }}
         ListEmptyComponent={<Text style={{ color: "#8b99b5" }}>Aucune course pour le moment.</Text>}
+        ListFooterComponent={<Text style={styles.version}>Version {versionAffichee()}</Text>}
       />
     </View>
   );
@@ -205,6 +207,7 @@ const styles = StyleSheet.create({
   badge: { backgroundColor: "#e85d4c", borderRadius: 999, minWidth: 18, height: 18, paddingHorizontal: 5, alignItems: "center", justifyContent: "center" },
   badgeText: { color: "#fff", fontSize: 11, fontWeight: "700" },
   logoutLink: { color: "#e85d4c", fontWeight: "600" },
+  version: { color: "#5d6b86", fontSize: 11, textAlign: "center", marginTop: 16, marginBottom: 8 },
   fieldRow: { flexDirection: "row", justifyContent: "space-between", marginBottom: 4 },
   fieldLabel: { color: "#8b99b5", fontSize: 12 },
   fieldValue: { color: "#edeff3", fontSize: 13, fontWeight: "600", flexShrink: 1, textAlign: "right" },

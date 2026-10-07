@@ -11,6 +11,7 @@
 // l'action qui déclenche la notification.
 import webpush from "web-push";
 import { prisma } from "./prisma.js";
+import { noterEnvoi } from "./livraisons.js";
 
 let configure = false;
 
@@ -113,10 +114,13 @@ export async function envoyerWebPush(userIds, { title, body, data, tag } = {}) {
       try {
         await webpush.sendNotification({ endpoint: a.endpoint, keys: { p256dh: a.p256dh, auth: a.auth } }, charge, { TTL: 60 * 60 });
         envoyes += 1;
+        noterEnvoi("notificationWeb", true);
       } catch (err) {
         if (err?.statusCode === 404 || err?.statusCode === 410) {
+          // Abonnement révoqué par le navigateur : rien à dire de l'état du canal.
           await prisma.webPushSubscription.deleteMany({ where: { id: a.id } }).catch(() => null);
         } else {
+          noterEnvoi("notificationWeb", false);
           console.error("Notification web non envoyée :", err?.statusCode || "", err?.message || err);
         }
       }

@@ -6,6 +6,7 @@ import { playSound } from "../lib/sound";
 import { showAlert } from "../lib/alert";
 import AddressInput from "../components/AddressInput";
 import { heure, heureMontrealVersIso } from "../lib/dates";
+import { versionAffichee } from "../lib/version";
 
 // Clé tirée au hasard pour une réservation : le serveur ne crée qu'une course par clé (F05).
 const nouvelleCle = () => `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}-${Math.random().toString(36).slice(2)}`;
@@ -257,6 +258,7 @@ export default function BookScreen({ user, onBooked, onOpenGroups, onOpenChangeP
       <TouchableOpacity style={styles.outlineBtn} onPress={() => Linking.openURL(`tel:${TAXI_SYLVAIN_PHONE}`)}>
         <Text style={{ color: "#edeff3" }}>Appeler Taxi Sylvain — (438) 499-1120</Text>
       </TouchableOpacity>
+      <Text style={styles.version}>Version {versionAffichee()}</Text>
     </ScrollView>
   );
 }
@@ -265,6 +267,7 @@ const styles = StyleSheet.create({
   headerRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 12 },
   title: { color: "#edeff3", fontSize: 22, fontWeight: "700" },
   logoutLink: { color: "#e85d4c", fontWeight: "600" },
+  version: { color: "#5d6b86", fontSize: 11, textAlign: "center", marginTop: 16, marginBottom: 8 },
   link: { color: "#f5a623" },
   dangerLink: { color: "#e85d4c" },
   linkRow: { flexDirection: "row", alignItems: "center", gap: 4 },
