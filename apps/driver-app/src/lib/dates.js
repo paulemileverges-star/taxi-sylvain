@@ -39,3 +39,26 @@ export function jour(valeur) {
   const p = parties(date);
   return `${p.y}-${p.m}-${p.d}`;
 }
+
+// Décalage (minutes) entre l'heure de Montréal et le temps universel à cet instant.
+function decalageMontreal(instant) {
+  const p = parties(instant);
+  return (Date.UTC(Number(p.y), Number(p.m) - 1, Number(p.d), Number(p.h), Number(p.mi)) - Math.floor(instant.getTime() / 60000) * 60000) / 60000;
+}
+
+/**
+ * Date (« AAAA-MM-JJ ») et heure (« HH:MM ») choisies dans l'application, lues comme heure DE
+ * MONTRÉAL, été comme hiver, quel que soit le réglage du téléphone (audit du 7 octobre 2026, F03 :
+ * un voyageur dont le téléphone était à l'heure de Paris réservait six heures trop tôt). Instant ISO,
+ * ou null si la saisie est illisible.
+ */
+export function heureMontrealVersIso(date, temps) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(date || ""));
+  const t = /^(\d{2}):(\d{2})$/.exec(String(temps || ""));
+  if (!m || !t) return null;
+  const naif = Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3]), Number(t[1]), Number(t[2]));
+  if (Number.isNaN(naif)) return null;
+  let r = new Date(naif - decalageMontreal(new Date(naif)) * 60000);
+  r = new Date(naif - decalageMontreal(r) * 60000);
+  return r.toISOString();
+}

@@ -2,18 +2,31 @@ import React, { useEffect, useState } from "react";
 import { View, Text, FlatList, TouchableOpacity, StyleSheet, Linking } from "react-native";
 import { api, reportDownloadUrl } from "../lib/api";
 import { jour } from "../lib/dates";
+import { showAlert } from "../lib/alert";
 
 // Dates à l'heure de Montréal, quel que soit le réglage du téléphone (6 octobre 2026).
 const fmtDate = jour;
 
 export default function ReportsScreen({ onBack }) {
   const [reports, setReports] = useState([]);
+  const [erreur, setErreur] = useState("");
+  const [charge, setCharge] = useState(false);
 
-  useEffect(() => { api.myReports().then(setReports); }, []);
+  // Une panne ne s'affiche plus comme « aucun récap » (audit du 7 octobre 2026, F08).
+  const charger = () => {
+    setErreur("");
+    api.myReports().then((r) => { setReports(r); setCharge(true); }).catch((e) => setErreur(e.message || "Rapports indisponibles."));
+  };
+  useEffect(() => { charger(); }, []);
 
+  // Lien d'export de 5 minutes demandé au serveur (SEC-19), puis ouvert dans le navigateur.
   const download = async (report, format) => {
-    const url = await reportDownloadUrl(format, report.weekStart, report.weekEnd);
-    Linking.openURL(url);
+    try {
+      const url = await reportDownloadUrl(format, report.weekStart, report.weekEnd);
+      await Linking.openURL(url);
+    } catch (e) {
+      showAlert("Téléchargement impossible", e.message || "Réessayez dans un instant.");
+    }
   };
 
   return (
@@ -22,6 +35,11 @@ export default function ReportsScreen({ onBack }) {
         <TouchableOpacity onPress={onBack}><Text style={styles.link}>← Retour</Text></TouchableOpacity>
         <Text style={styles.title}>Mes rapports</Text>
       </View>
+      {erreur ? (
+        <TouchableOpacity onPress={charger} accessibilityRole="button">
+          <Text style={{ color: "#e85d4c", marginBottom: 10 }}>{erreur} Touchez pour réessayer.</Text>
+        </TouchableOpacity>
+      ) : null}
       <FlatList
         data={reports}
         keyExtractor={(r) => r.id}
@@ -43,7 +61,7 @@ export default function ReportsScreen({ onBack }) {
             </View>
           </View>
         )}
-        ListEmptyComponent={<Text style={{ color: "#8b99b5" }}>Aucun récap disponible pour le moment.</Text>}
+        ListEmptyComponent={charge ? <Text style={{ color: "#8b99b5" }}>Aucun récap disponible pour le moment.</Text> : null}
       />
     </View>
   );

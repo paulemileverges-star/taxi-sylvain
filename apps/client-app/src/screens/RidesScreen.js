@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import { heure } from "../lib/dates";
 import { View, Text, TouchableOpacity, StyleSheet, FlatList, ActivityIndicator } from "react-native";
 import { api } from "../lib/api";
+import { getSocket } from "../lib/socket";
 import { showAlert } from "../lib/alert";
 import { DriverAvatar, CarPhoto } from "../components/DriverPhotos";
 import { withDayHeaders } from "../lib/rideDays";
@@ -35,6 +36,23 @@ export default function RidesScreen({ onOpenRide, onBack }) {
   };
 
   useEffect(() => { load(); }, [tab, page]);
+
+  // La liste suit ses courses en direct : chauffeur confirmé, montant validé, course terminée ou
+  // retirée (audit du 7 octobre 2026, F17 : elle ne changeait qu'en changeant d'onglet ou de page).
+  useEffect(() => {
+    let sock;
+    let annule = false;
+    const recharger = () => load();
+    getSocket().then((s) => {
+      if (annule) return;
+      sock = s;
+      s.on("ride:client-update", recharger);
+    });
+    return () => {
+      annule = true;
+      sock?.off("ride:client-update", recharger);
+    };
+  }, [tab, page]);
 
   const changeTab = (next) => { setTab(next); setPage(1); };
   const totalPages = Math.max(1, Math.ceil(data.total / data.pageSize));

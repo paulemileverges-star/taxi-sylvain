@@ -5,8 +5,16 @@ import { api } from "../lib/api";
 import { playSound } from "../lib/sound";
 import { showAlert } from "../lib/alert";
 import AddressInput from "../components/AddressInput";
+import { heure, heureMontrealVersIso } from "../lib/dates";
+
+// Clé tirée au hasard pour une réservation : le serveur ne crée qu'une course par clé (F05).
+const nouvelleCle = () => `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}-${Math.random().toString(36).slice(2)}`;
 
 const TAXI_SYLVAIN_PHONE = "+14384991120";
+// Pages légales, accessibles aussi une fois connecté (audit du 7 octobre 2026, F19 : elles n'étaient
+// proposées qu'à l'inscription).
+const CONFIDENTIALITE = "https://api.taxisylvain.ca/confidentialite";
+const CONDITIONS = "https://api.taxisylvain.ca/conditions";
 
 const deuxChiffres = (n) => String(n).padStart(2, "0");
 const dateLocale = (d) => `${d.getFullYear()}-${deuxChiffres(d.getMonth() + 1)}-${deuxChiffres(d.getDate())}`;
@@ -94,6 +102,7 @@ export default function BookScreen({ user, onBooked, onOpenGroups, onOpenChangeP
   const [time, setTime] = useState("");
   const [quote, setQuote] = useState(null);
   const [submitting, setSubmitting] = useState(false);
+  const [cleReservation, setCleReservation] = useState(nouvelleCle);
 
   useEffect(() => { api.destinations().then(setDestinations).catch(() => setDestinations([])); }, []);
 
@@ -115,10 +124,13 @@ export default function BookScreen({ user, onBooked, onOpenGroups, onOpenChangeP
   const chooseHome = () => { setUseHome(true); setPickup({ address: homeAddress, lat: null, lng: null }); };
   const chooseOther = () => { setUseHome(false); setPickup({ address: "", lat: null, lng: null }); };
 
+  // Audit du 7 octobre 2026 (F03) : la date et l'heure choisies sont celles de MONTRÉAL, quel que
+  // soit le fuseau du téléphone (un voyageur encore à Paris réservait six heures trop tôt). Une date
+  // seule ne vaut plus minuit : l'heure est exigée, ou rien du tout (« dès que possible »).
   const scheduledFor = () => {
     if (!date && !time) return undefined;
-    const d = new Date(`${date}T${time || "00:00"}`);
-    return Number.isNaN(d.getTime()) ? null : d.toISOString();
+    if (!date || !time) return null;
+    return heureMontrealVersIso(date, time);
   };
 
   const book = async () => {
@@ -129,9 +141,10 @@ export default function BookScreen({ user, onBooked, onOpenGroups, onOpenChangeP
     }
     const when = scheduledFor();
     if (when === null) {
-      showAlert("Date invalide", Platform.OS === "web" ? "Indiquez la date au format AAAA-MM-JJ et l'heure au format HH:MM." : "Choisissez la date et l'heure de la course, ou effacez-les pour partir dès que possible.");
+      showAlert("Date et heure à compléter", "Choisissez la date ET l'heure de la course (heure de Montréal), ou effacez-les pour partir dès que possible.");
       return;
     }
+    if (submitting) return;
     setSubmitting(true);
     try {
       const ride = await api.bookRide({
@@ -149,11 +162,12 @@ export default function BookScreen({ user, onBooked, onOpenGroups, onOpenChangeP
         destPlaceId: destinationCode ? undefined : dest.placeId ?? undefined,
         flightNumber: flightNumber || undefined,
         scheduledFor: when,
-      });
+      }, cleReservation);
       playSound("action");
       const message = ride.fare > 0
         ? `Votre course est validée au tarif de ${ride.fare.toFixed(2)} $. Taxi Sylvain vous confirmera votre chauffeur.`
         : "Votre demande est en attente de validation par Taxi Sylvain : vous recevrez le montant et la confirmation dès qu'ils seront fixés.";
+      setCleReservation(nouvelleCle());
       showAlert(ride.fare > 0 ? "Course validée" : "Demande envoyée", message, [{ text: "OK", onPress: () => onBooked(ride.id) }]);
     } catch (e) {
       showAlert("Erreur", e.message);
@@ -181,6 +195,8 @@ export default function BookScreen({ user, onBooked, onOpenGroups, onOpenChangeP
         <TouchableOpacity onPress={onOpenNotifications}><Text style={styles.link}>Notifications</Text></TouchableOpacity>
         {/* Apple et Google exigent que la suppression du compte soit accessible depuis l'app. */}
         <TouchableOpacity onPress={onOpenDeleteAccount}><Text style={styles.dangerLink}>Supprimer mon compte</Text></TouchableOpacity>
+        <TouchableOpacity onPress={() => Linking.openURL(CONFIDENTIALITE)} accessibilityRole="link"><Text style={styles.link}>Confidentialité</Text></TouchableOpacity>
+        <TouchableOpacity onPress={() => Linking.openURL(CONDITIONS)} accessibilityRole="link"><Text style={styles.link}>Conditions</Text></TouchableOpacity>
       </View>
 
       <Text style={styles.subtitle}>Où allez-vous ?</Text>
@@ -229,7 +245,8 @@ export default function BookScreen({ user, onBooked, onOpenGroups, onOpenChangeP
         <AddressInput placeholder="Adresse de destination" value={dest.address} onChange={setDest} />
       )}
 
-      <Text style={styles.label}>Date et heure de la course (vide = dès que possible)</Text>
+      <Text style={styles.label}>Date et heure de la course, heure de Montréal (vide = dès que possible)</Text>
+      <Text style={styles.aideHeure}>Il est actuellement {heure(new Date())} à Montréal.</Text>
       <DateTimeFields date={date} time={time} onDate={setDate} onTime={setTime} />
 
       <TextInput style={styles.input} placeholder="Numéro de vol (optionnel)" placeholderTextColor="#8b99b5" value={flightNumber} onChangeText={setFlightNumber} />
@@ -256,6 +273,7 @@ const styles = StyleSheet.create({
   badgeText: { color: "#fff", fontSize: 11, fontWeight: "700" },
   subtitle: { color: "#edeff3", fontSize: 18, fontWeight: "700", marginBottom: 12 },
   label: { color: "#8b99b5", fontSize: 12, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 6, marginTop: 4 },
+  aideHeure: { color: "#8b99b5", fontSize: 12, marginBottom: 6 },
   chips: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginBottom: 8 },
   chip: { borderWidth: 1, borderColor: "#28395a", borderRadius: 999, paddingVertical: 8, paddingHorizontal: 14 },
   chipActive: { backgroundColor: "#f5a623", borderColor: "#f5a623" },

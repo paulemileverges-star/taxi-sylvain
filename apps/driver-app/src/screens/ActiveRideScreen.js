@@ -45,13 +45,25 @@ function Field({ label, value }) {
 export default function ActiveRideScreen({ rideId, onCompleted, onCancelled, onOpenChat, onOpenMessages, onBack, unreadRide = 0, onRideState }) {
   const [ride, setRide] = useState(null);
   const [maintenant, setMaintenant] = useState(Date.now());
+  // Course inaccessible (prise par un autre chauffeur, retirée, réattribuée) ou panne : l'écran le
+  // dit au lieu d'afficher « Chargement… » sans fin (audit du 7 octobre 2026, F08 et F21).
+  const [indisponible, setIndisponible] = useState("");
+  const [enAction, setEnAction] = useState(false);
 
+  // Seule cette course est lue (F20 : toute la liste était chargée pour en trouver une).
   const load = async () => {
-    const rides = await api.myRides();
-    setRide(rides.find((r) => r.id === rideId));
+    try {
+      const r = await api.ride(rideId);
+      setRide(r);
+      setIndisponible("");
+    } catch (e) {
+      setIndisponible(e.status === 403 || e.status === 404
+        ? "Cette course ne vous est plus proposée : elle a été prise par un autre chauffeur, réattribuée ou retirée par Taxi Sylvain."
+        : `Course indisponible pour le moment : ${e.message}`);
+    }
   };
 
-  useEffect(() => { load(); }, [rideId]);
+  useEffect(() => { setRide(null); load(); }, [rideId]);
   // Les délais s'ouvrent tout seuls, sans recharger l'écran.
   useEffect(() => {
     const t = setInterval(() => setMaintenant(Date.now()), 30000);
@@ -61,10 +73,48 @@ export default function ActiveRideScreen({ rideId, onCompleted, onCancelled, onO
   // Une correction du Dispatch (adresse, arrêts, heure, montant) se voit sans fermer l’écran.
   useEffect(() => {
     let sock;
+    let annule = false;
     const surMiseAJour = (r) => { if (r?.id === rideId) load(); };
-    getSocket().then((s) => { sock = s; s.on("ride:updated", surMiseAJour); });
-    return () => sock?.off("ride:updated", surMiseAJour);
+    const surRetrait = (r) => { if (r?.id === rideId) setIndisponible("Cette course a été retirée par Taxi Sylvain."); };
+    getSocket().then((s) => {
+      if (annule) return;
+      sock = s;
+      s.on("ride:updated", surMiseAJour);
+      s.on("ride:taken", surMiseAJour);
+      s.on("ride:deleted", surRetrait);
+    });
+    return () => {
+      annule = true;
+      sock?.off("ride:updated", surMiseAJour);
+      sock?.off("ride:taken", surMiseAJour);
+      sock?.off("ride:deleted", surRetrait);
+    };
   }, [rideId]);
+
+  // Offre ouverte depuis une notification ou la liste : on peut la prendre ici (F21).
+  const accepter = async () => {
+    if (enAction) return;
+    setEnAction(true);
+    try {
+      await api.acceptRide(rideId);
+      playSound("action");
+      await load();
+    } catch (e) {
+      showAlert("Course déjà prise", e.message);
+      load();
+    } finally {
+      setEnAction(false);
+    }
+  };
+  const refuser = async () => {
+    try {
+      await api.refuseRide(rideId);
+      playSound("action");
+    } catch (e) {
+      showAlert("Refus non enregistré", e.message);
+    }
+    onBack?.();
+  };
 
   // Le suivi GPS est piloté au niveau de l'application (App.js) et non ici : il doit continuer
   // quand le chauffeur revient à l'accueil, ouvre la messagerie ou bascule dans Waze.
@@ -100,18 +150,25 @@ export default function ActiveRideScreen({ rideId, onCompleted, onCancelled, onO
 
   const cancelRide = async () => {
     if (!ride) return;
+    // Audit du 7 octobre 2026 (B04) : la course n'est pas annulée pour le client ; elle revient à
+    // Taxi Sylvain, qui la confie à un autre chauffeur.
     showAlert(
-      "Annuler la course",
-      "Confirmez-vous l'annulation ? La course redeviendra disponible pour être réaffectée par Taxi Sylvain.",
+      "Libérer la course",
+      "Confirmez-vous ? La course retourne à Taxi Sylvain, qui la confiera à un autre chauffeur. Elle ne vous sera plus proposée.",
       [
         { text: "Non", style: "cancel" },
         {
-          text: "Oui, annuler",
+          text: "Oui, libérer",
           style: "destructive",
           onPress: async () => {
-            await api.cancelRide(ride.id);
-            playSound("action");
-            onCancelled();
+            try {
+              await api.cancelRide(ride.id);
+              playSound("action");
+              onCancelled();
+            } catch (e) {
+              showAlert("Action impossible", e.message);
+              load();
+            }
           },
         },
       ]
@@ -132,7 +189,40 @@ export default function ActiveRideScreen({ rideId, onCompleted, onCancelled, onO
     }
   };
 
+  if (indisponible) {
+    return (
+      <View style={{ flex: 1, padding: 16 }}>
+        {onBack && <TouchableOpacity onPress={onBack} accessibilityRole="button"><Text style={styles.link}>← Retour</Text></TouchableOpacity>}
+        <Text style={{ color: "#edeff3", marginTop: 16 }} accessibilityLiveRegion="polite">{indisponible}</Text>
+        <TouchableOpacity style={[styles.outlineBtn, { marginTop: 16, flex: 0 }]} onPress={load} accessibilityRole="button"><Text style={styles.outlineBtnText}>Réessayer</Text></TouchableOpacity>
+      </View>
+    );
+  }
   if (!ride) return <View style={{ flex: 1, padding: 16 }}><Text style={{ color: "#8b99b5" }}>Chargement…</Text></View>;
+
+  // Offre ouverte (diffusée, pas encore prise) : accepter ou refuser, rien d'autre (F21).
+  if (ride.status === "BROADCAST" && !ride.driverId) {
+    return (
+      <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 16 }}>
+        <View style={styles.headerRow}>
+          {onBack && <TouchableOpacity onPress={onBack} accessibilityRole="button"><Text style={styles.link}>← Retour</Text></TouchableOpacity>}
+          <Text style={styles.title} accessibilityRole="header">Course proposée</Text>
+        </View>
+        <View style={styles.card}>
+          <Field label="Date de la course" value={jour(ride.scheduledFor || ride.createdAt)} />
+          <Field label="Heure de la course" value={heure(ride.scheduledFor || ride.createdAt)} />
+          <Field label="Adresse de départ" value={ride.pickupAddress} />
+          {(Array.isArray(ride.stops) ? ride.stops : []).map((a, i) => <Field key={i} label={`Arrêt ${i + 1}`} value={a.address} />)}
+          <Field label="Destination" value={ride.destAddress} />
+          <Field label="Montant prévu de la course" value={ride.fare > 0 ? `${ride.fare} $` : "À confirmer par Taxi Sylvain"} />
+        </View>
+        <SwipeButton label={enAction ? "Acceptation…" : "Accepter cette course"} onConfirm={accepter} disabled={enAction} />
+        <TouchableOpacity style={styles.cancelBtn} onPress={refuser} accessibilityRole="button">
+          <Text style={styles.cancelBtnText}>Refuser</Text>
+        </TouchableOpacity>
+      </ScrollView>
+    );
+  }
 
   const arrets = Array.isArray(ride.stops) ? ride.stops.filter((a) => a && a.address) : [];
   const etapes = etapesDeNavigation(ride);
@@ -202,8 +292,8 @@ export default function ActiveRideScreen({ rideId, onCompleted, onCancelled, onO
       )}
       <SwipeButton label={libelleGlisser} onConfirm={advance} disabled={!LABEL[ride.status] || verrouille} />
       {ride.status !== "STARTED" && (
-        <TouchableOpacity style={styles.cancelBtn} onPress={cancelRide}>
-          <Text style={styles.cancelBtnText}>Annuler la course</Text>
+        <TouchableOpacity style={styles.cancelBtn} onPress={cancelRide} accessibilityRole="button">
+          <Text style={styles.cancelBtnText}>Libérer la course</Text>
         </TouchableOpacity>
       )}
     </ScrollView>

@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView, Linking } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { ecrireJeton } from "../lib/session";
 import { api } from "../lib/api";
 
 // Ouverture de compte par le client lui-même. Jusqu'au 20 septembre 2026, un nouveau client devait
@@ -43,7 +44,7 @@ export default function RegisterScreen({ onRegistered, onBack, onVerification })
       const data = await api.register(name.trim(), email.trim(), phone.trim(), password);
       // Compte créé, code envoyé par courriel : aucune session tant qu’il n’est pas saisi.
       if (data.verificationRequired) return onVerification?.({ email: data.email || email.trim(), password, message: data.error });
-      await AsyncStorage.setItem("ts_token", data.token);
+      await ecrireJeton(data.token);
       await AsyncStorage.setItem("ts_user", JSON.stringify(data.user));
       onRegistered(data.user);
     } catch (e) {

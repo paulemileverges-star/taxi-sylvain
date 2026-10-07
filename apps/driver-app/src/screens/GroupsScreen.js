@@ -10,38 +10,77 @@ function conversationTitle(conv, meId) {
   return others.map((p) => p.name).join(", ") || "Groupe";
 }
 
+// Audit du 7 octobre 2026 :
+//   - F02 : en quittant un groupe, « off("message:group") » sans fonction retirait AUSSI l'écouteur
+//     global de l'application (son, badge) : plus aucune alerte de groupe ensuite. Seul l'écouteur de
+//     cet écran est retiré désormais ;
+//   - F23 : messages vidés au changement de groupe, réponse tardive d'un autre groupe ignorée, un
+//     brouillon par groupe ;
+//   - F08 : une panne s'affiche au lieu d'une liste vide, un envoi raté le dit.
 export default function GroupsScreen({ user, onBack, unread = {}, onRead }) {
   const [conversations, setConversations] = useState([]);
   const [active, setActive] = useState(null);
   const [messages, setMessages] = useState([]);
-  const [draft, setDraft] = useState("");
+  const [brouillons, setBrouillons] = useState({});
+  const [erreur, setErreur] = useState("");
+  const [envoi, setEnvoi] = useState(false);
   const scrollRef = useRef(null);
+  const groupeDemande = useRef(null);
+
+  const charger = () => {
+    setErreur("");
+    api.listConversations().then(setConversations).catch((e) => setErreur(e.message || "Groupes indisponibles."));
+  };
+  useEffect(() => { charger(); }, []);
 
   useEffect(() => {
-    api.listConversations().then(setConversations);
-  }, []);
-
-  useEffect(() => {
-    if (!active) return;
-    const markRead = () => api.markThreadRead(`group:${active.id}`).then(() => onRead?.()).catch(() => null);
-    api.conversationMessages(active.id).then(setMessages).then(markRead);
+    if (!active) return undefined;
+    const id = active.id;
+    groupeDemande.current = id;
+    setMessages([]);
+    const markRead = () => api.markThreadRead(`group:${id}`).then(() => onRead?.()).catch(() => null);
+    api.conversationMessages(id)
+      .then((liste) => {
+        if (groupeDemande.current !== id) return;
+        setMessages(liste);
+        markRead();
+      })
+      .catch((e) => { if (groupeDemande.current === id) setErreur(e.message || "Messages indisponibles."); });
     let sock;
+    let annule = false;
+    const surMessage = ({ conversationId, message }) => {
+      if (conversationId !== id) return;
+      setMessages((prev) => (prev.some((x) => x.id === message.id) ? prev : [...prev, message]));
+      if (message.sender.id !== user.id) markRead();
+    };
     getSocket().then((s) => {
+      if (annule) return;
       sock = s;
-      s.on("message:group", ({ conversationId, message }) => {
-        if (conversationId !== active.id) return;
-        setMessages((prev) => (prev.some((x) => x.id === message.id) ? prev : [...prev, message]));
-        if (message.sender.id !== user.id) markRead();
-      });
+      s.on("message:group", surMessage);
     });
-    return () => sock?.off("message:group");
+    return () => {
+      annule = true;
+      sock?.off("message:group", surMessage);
+    };
   }, [active?.id]);
 
+  const draft = (active && brouillons[active.id]) || "";
+  const setDraft = (texte) => active && setBrouillons((b) => ({ ...b, [active.id]: texte }));
+
   const send = async () => {
-    if (!draft.trim() || !active) return;
-    await api.sendConversationMessage(active.id, draft);
-    setDraft("");
-    playSound("action");
+    const groupe = active?.id;
+    const texte = (brouillons[groupe] || "").trim();
+    if (!texte || !groupe || envoi) return;
+    setEnvoi(true);
+    try {
+      await api.sendConversationMessage(groupe, texte);
+      setBrouillons((b) => ({ ...b, [groupe]: "" }));
+      playSound("action");
+    } catch (e) {
+      setErreur(e.message || "Message non envoyé.");
+    } finally {
+      setEnvoi(false);
+    }
   };
 
   if (active) {
@@ -51,6 +90,7 @@ export default function GroupsScreen({ user, onBack, unread = {}, onRead }) {
           <TouchableOpacity onPress={() => setActive(null)}><Text style={styles.link}>← Retour</Text></TouchableOpacity>
           <Text style={styles.title}>{conversationTitle(active, user.id)}</Text>
         </View>
+        {erreur ? <Text style={styles.erreur} accessibilityLiveRegion="polite">{erreur}</Text> : null}
         <ScrollView ref={scrollRef} style={{ flex: 1, paddingHorizontal: 16 }} onContentSizeChange={() => scrollRef.current?.scrollToEnd({ animated: true })}>
           {messages.map((m) => (
             <View key={m.id} style={{ alignSelf: m.sender.id === user.id ? "flex-end" : "flex-start", maxWidth: "80%", marginBottom: 8 }}>
@@ -70,8 +110,8 @@ export default function GroupsScreen({ user, onBack, unread = {}, onRead }) {
             onChangeText={setDraft}
             onSubmitEditing={send}
           />
-          <TouchableOpacity style={styles.sendBtn} onPress={send}>
-            <Text style={{ color: "#1a1200", fontWeight: "700" }}>Envoyer</Text>
+          <TouchableOpacity style={[styles.sendBtn, envoi && { opacity: 0.6 }]} onPress={send} disabled={envoi} accessibilityRole="button" accessibilityLabel="Envoyer au groupe">
+            <Text style={{ color: "#1a1200", fontWeight: "700" }}>{envoi ? "Envoi…" : "Envoyer"}</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -84,6 +124,9 @@ export default function GroupsScreen({ user, onBack, unread = {}, onRead }) {
         <TouchableOpacity onPress={onBack}><Text style={styles.link}>← Retour</Text></TouchableOpacity>
         <Text style={styles.title}>Groupes</Text>
       </View>
+      {erreur ? (
+        <TouchableOpacity onPress={charger}><Text style={styles.erreur}>{erreur} Touchez pour réessayer.</Text></TouchableOpacity>
+      ) : null}
       <FlatList
         data={conversations}
         keyExtractor={(c) => c.id}
@@ -96,7 +139,7 @@ export default function GroupsScreen({ user, onBack, unread = {}, onRead }) {
             <Text style={styles.groupSub}>{item.participants.length} participant(s){unread[item.id] ? ` · ${unread[item.id]} nouveau${unread[item.id] > 1 ? "x" : ""} message${unread[item.id] > 1 ? "s" : ""}` : ""}</Text>
           </TouchableOpacity>
         )}
-        ListEmptyComponent={<Text style={{ color: "#8b99b5" }}>Aucun groupe pour le moment.</Text>}
+        ListEmptyComponent={erreur ? null : <Text style={{ color: "#8b99b5" }}>Aucun groupe pour le moment.</Text>}
       />
     </View>
   );
@@ -121,4 +164,5 @@ const styles = StyleSheet.create({
   inputRow: { flexDirection: "row", padding: 12, gap: 8, borderTopWidth: 1, borderTopColor: "#28395a" },
   input: { flex: 1, backgroundColor: "#1d2c46", color: "#edeff3", borderRadius: 20, paddingHorizontal: 16, paddingVertical: 10 },
   sendBtn: { backgroundColor: "#f5a623", borderRadius: 20, paddingHorizontal: 16, justifyContent: "center" },
+  erreur: { color: "#e85d4c", fontSize: 13, paddingHorizontal: 16, marginBottom: 8 },
 });

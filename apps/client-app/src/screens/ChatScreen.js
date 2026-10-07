@@ -3,6 +3,7 @@ import { View, Text, TextInput, TouchableOpacity, ScrollView, StyleSheet } from 
 import { api } from "../lib/api";
 import { getSocket, watchRide } from "../lib/socket";
 import { playSound } from "../lib/sound";
+import { showAlert } from "../lib/alert";
 
 export default function ChatScreen({ rideId, onBack, onRead }) {
   const [messages, setMessages] = useState([]);
@@ -11,25 +12,37 @@ export default function ChatScreen({ rideId, onBack, onRead }) {
 
   useEffect(() => {
     const markRead = () => api.markThreadRead(`ride:${rideId}`).then(() => onRead?.()).catch(() => null);
-    api.rideMessages(rideId).then(setMessages).then(markRead);
+    setMessages([]);
+    api.rideMessages(rideId).then(setMessages).then(markRead).catch((e) => showAlert("Messages indisponibles", e.message));
     let sock;
+    let annule = false;
+    // Écouteur nommé, retiré seul (audit du 7 octobre 2026, F02).
+    const surMessage = (m) => {
+      if (m.rideId !== rideId) return;
+      setMessages((prev) => (prev.some((x) => x.id === m.id) ? prev : [...prev, m]));
+      if (m.sender.role !== "CLIENT") markRead();
+    };
     getSocket().then((s) => {
+      if (annule) return;
       sock = s;
       watchRide(rideId);
-      s.on("message:new", (m) => {
-        if (m.rideId !== rideId) return;
-        setMessages((prev) => (prev.some((x) => x.id === m.id) ? prev : [...prev, m]));
-        if (m.sender.role !== "CLIENT") markRead();
-      });
+      s.on("message:new", surMessage);
     });
-    return () => sock?.off("message:new");
+    return () => {
+      annule = true;
+      sock?.off("message:new", surMessage);
+    };
   }, [rideId]);
 
   const send = async () => {
     if (!draft.trim()) return;
-    await api.sendMessage(rideId, draft);
-    setDraft("");
-    playSound("action");
+    try {
+      await api.sendMessage(rideId, draft.trim());
+      setDraft("");
+      playSound("action");
+    } catch (e) {
+      showAlert("Message non envoyé", e.message);
+    }
   };
 
   return (

@@ -1,5 +1,5 @@
-import React, { useEffect, useState } from "react";
-import { StatusBar, View, Text } from "react-native";
+import React, { useEffect, useRef, useState } from "react";
+import { StatusBar, View, Text, BackHandler, Platform } from "react-native";
 // Zones sûres : la SafeAreaView de React Native est dépréciée (React Native 0.81) et ne gère pas
 // Android, où l'affichage bord à bord est imposé depuis Android 16 : on passe par la bibliothèque dédiée.
 import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
@@ -26,9 +26,38 @@ import { registerForPushNotifications, clearPushToken } from "./src/lib/pushNoti
 import { requestWebNotificationPermission, notifyWeb, registerWebPush, unregisterWebPush } from "./src/lib/webNotify";
 import { startTrackingLocation, stopTrackingLocation } from "./src/lib/locationTracker";
 import { showAlert } from "./src/lib/alert";
-import { api } from "./src/lib/api";
+import { api, quandSessionExpiree } from "./src/lib/api";
 
 const TRACKED_STATUSES = ["EN_ROUTE", "STARTED"];
+
+// Profil gardé sur l'appareil, lu prudemment : un stockage abîmé ne doit pas bloquer l'ouverture
+// (audit du 7 octobre 2026, F14).
+function profilLu(raw) {
+  try {
+    const u = raw ? JSON.parse(raw) : null;
+    return u && typeof u === "object" && u.id ? u : null;
+  } catch {
+    return null;
+  }
+}
+
+// Écran à ouvrir pour une notification touchée (téléphone ou navigateur). Audit du 7 octobre 2026 :
+// une offre diffusée ouvrait l'écran d'une course déjà acceptée, sans bouton pour la prendre (F21) ;
+// elle mène maintenant à l'accueil, où se trouvent les offres. Un message de course ouvre la
+// discussion de cette course (F17).
+export function ecranPourNotification(data) {
+  const type = data?.type;
+  if (type === "ride:broadcast") return { screen: "home" };
+  if ((type === "ride:assigned" || type === "ride:reminder" || type === "ride:reminder:urgent" || type === "ride:status") && data.rideId) return { screen: "active", rideId: data.rideId };
+  if (type === "message:ride" && data.rideId) return { screen: "rideChat", rideId: data.rideId };
+  if (type === "message:direct") return { screen: "messages" };
+  if (type === "message:group") return { screen: "groups" };
+  if (type === "report:ready") return { screen: "reports" };
+  return null;
+}
+
+// Écran « parent » pour le bouton retour d'Android (F14) : sans lui, retour fermait l'application.
+const PARENT = { rideChat: "active", rating: "home" };
 
 const EMPTY_UNREAD = { direct: { total: 0, byDriver: {} }, groups: { total: 0, byConversation: {} }, rides: { total: 0, byRide: {} }, total: 0 };
 
@@ -65,9 +94,9 @@ export default function App() {
 
   useEffect(() => {
     (async () => {
-      const raw = await AsyncStorage.getItem("ts_user");
-      if (!raw) return;
-      setUser(JSON.parse(raw));
+      const lu = profilLu(await AsyncStorage.getItem("ts_user"));
+      if (!lu) return;
+      setUser(lu);
       // Le compte existe-t-il encore ? S'il a été supprimé par Taxi Sylvain, on ferme la session
       // au lieu de laisser l'application échouer sur chaque écran.
       try {
@@ -105,15 +134,17 @@ export default function App() {
   useEffect(() => {
     if (!user) return undefined;
     let sock;
-    getSocket().then((s) => {
-      sock = s;
+    let annule = false;
+    // Écouteurs nommés, retirés un par un : « off(évènement) » sans fonction retirait aussi ceux des
+    // écrans (audit du 7 octobre 2026, F02).
+    const ecouteurs = {
       // Reçoit les diffusions de courses de dernière minute et les affectations directes
-      s.on("ride:broadcast", () => playSound("alert"));
-      s.on("ride:assigned", (ride) => { playSound("alert"); setActiveRideId(ride.id); setScreen("active"); });
-      s.on("report:ready", () => { setNewReport(true); playSound("notify"); });
+      "ride:broadcast": () => playSound("alert"),
+      "ride:assigned": (ride) => { playSound("alert"); setActiveRideId(ride.id); setScreen("active"); },
+      "report:ready": () => { setNewReport(true); playSound("notify"); },
       // Rappel de course envoyé par le serveur : son immédiat, et alerte visible quand c'est
       // le rappel d'urgence d'une heure avant. Le son « alert » est volontairement le plus fort.
-      s.on("ride:reminder", ({ texte, urgent }) => {
+      "ride:reminder": ({ texte, urgent }) => {
         playSound(urgent ? "alert" : "notify");
         if (urgent) {
           showAlert("Rappel urgent", texte);
@@ -121,30 +152,35 @@ export default function App() {
         } else {
           notifyWeb("Course à venir", texte);
         }
-      });
+      },
       // Son + badge + notification navigateur pour tout message reçu, quel que soit l'écran ouvert
-      s.on("message:group", ({ message }) => {
+      "message:group": ({ message }) => {
         if (message.sender.id === user.id) return;
         playSound("notify"); notifyWeb(`${message.sender.name} (groupe)`, message.text); refreshUnread();
-      });
-      s.on("message:direct", (m) => {
+      },
+      "message:direct": (m) => {
         if (m.driverId !== user.id || m.sender.id === user.id) return;
         playSound("notify"); notifyWeb("Message de Taxi Sylvain", m.text); refreshUnread();
-      });
-      s.on("message:ride", (m) => {
+      },
+      "message:ride": (m) => {
         if (m.sender.id === user.id) return;
         playSound("notify"); notifyWeb(`Message de ${m.sender.name}`, m.text); refreshUnread();
-      });
+      },
       // Décision de Taxi Sylvain sur une demande de suppression de compte (validée : le compte
       // n'existe plus, on ferme la session ; refusée : le compte reste actif, avec la raison).
-      s.on("account:deletion-decided", ({ approved, raison }) => {
+      "account:deletion-decided": ({ approved, raison }) => {
         if (approved) {
           showAlert("Compte supprimé", "Taxi Sylvain a validé la suppression de votre compte.", [{ text: "OK", onPress: () => logout({ server: false }) }]);
         } else {
           showAlert("Demande de suppression refusée", raison ? `Taxi Sylvain n'a pas accepté votre demande : ${raison}` : "Taxi Sylvain n'a pas accepté votre demande. Votre compte reste actif.");
           rafraichirProfil();
         }
-      });
+      },
+    };
+    getSocket().then((s) => {
+      if (annule) return; // écran quitté avant la fin de la connexion
+      sock = s;
+      for (const [evenement, f] of Object.entries(ecouteurs)) s.on(evenement, f);
     });
     registerForPushNotifications();
     // Version web : abonnement aux notifications du serveur, si la permission a été accordée.
@@ -152,16 +188,29 @@ export default function App() {
     refreshUnread();
     proposerNotation();
     return () => {
-      sock?.off("ride:broadcast");
-      sock?.off("ride:assigned");
-      sock?.off("report:ready");
-      sock?.off("ride:reminder");
-      sock?.off("message:group");
-      sock?.off("message:direct");
-      sock?.off("message:ride");
-      sock?.off("account:deletion-decided");
+      annule = true;
+      for (const [evenement, f] of Object.entries(ecouteurs)) sock?.off(evenement, f);
     };
   }, [user]);
+
+  // Session expirée ou révoquée ailleurs (mot de passe changé) : retour à l'écran de connexion (F08).
+  useEffect(() => {
+    quandSessionExpiree(() => logout({ server: false }));
+  }, []);
+
+  // Bouton retour d'Android : revient à l'écran précédent au lieu de fermer l'application (F14).
+  const ecranRef = useRef(screen);
+  ecranRef.current = screen;
+  useEffect(() => {
+    if (Platform.OS !== "android") return undefined;
+    const sub = BackHandler.addEventListener("hardwareBackPress", () => {
+      const actuel = ecranRef.current;
+      if (actuel === "home") return false;
+      setScreen(PARENT[actuel] || "home");
+      return true;
+    });
+    return () => sub.remove();
+  }, []);
 
   // Suivi GPS piloté ici (et non dans l'écran de course) pour qu'il continue quand le chauffeur
   // revient à l'accueil, ouvre la messagerie ou bascule dans Waze.
@@ -191,24 +240,36 @@ export default function App() {
       .catch(() => null);
   }, [user?.id]);
 
-  // Permet de rouvrir directement la bonne course quand on tape sur une notification
-  // reçue app fermée ou en arrière-plan.
+  // Permet de rouvrir directement le bon écran quand on tape sur une notification reçue app fermée
+  // ou en arrière-plan, y compris celle qui a LANCÉ l'application (démarrage à froid, F17), et sur
+  // la version web (clic transmis par le service worker).
   useEffect(() => {
-    const sub = Notifications.addNotificationResponseReceivedListener((response) => {
-      const data = response.notification.request.content.data;
-      if ((data?.type === "ride:assigned" || data?.type === "ride:broadcast" || data?.type === "ride:reminder" || data?.type === "ride:reminder:urgent") && data.rideId) {
-        setActiveRideId(data.rideId);
-        setScreen("active");
-      } else if (data?.type === "message:direct") {
-        setScreen("messages");
-      } else if (data?.type === "message:group") {
-        setScreen("groups");
-      } else if (data?.type === "report:ready") {
-        setNewReport(false);
-        setScreen("reports");
-      }
-    });
-    return () => sub.remove();
+    const ouvrir = (data) => {
+      const cible = ecranPourNotification(data);
+      if (!cible) return;
+      if (cible.rideId) setActiveRideId(cible.rideId);
+      if (cible.screen === "reports") setNewReport(false);
+      setScreen(cible.screen);
+    };
+    const sub = Notifications.addNotificationResponseReceivedListener((response) => ouvrir(response.notification.request.content.data));
+    Notifications.getLastNotificationResponseAsync?.()
+      .then((response) => { if (response) ouvrir(response.notification.request.content.data); })
+      .catch(() => null);
+    const surMessageWeb = (e) => { if (e.data?.type === "notification-clic") ouvrir(e.data.data); };
+    if (Platform.OS === "web") {
+      globalThis.navigator?.serviceWorker?.addEventListener("message", surMessageWeb);
+      try {
+        const brut = new URLSearchParams(globalThis.location?.search || "").get("notification");
+        if (brut) {
+          ouvrir(JSON.parse(brut));
+          globalThis.history?.replaceState(null, "", globalThis.location.pathname);
+        }
+      } catch { /* adresse illisible */ }
+    }
+    return () => {
+      sub.remove();
+      if (Platform.OS === "web") globalThis.navigator?.serviceWorker?.removeEventListener("message", surMessageWeb);
+    };
   }, []);
 
   // server: false après une suppression de compte : le compte n'existe plus, il n'y a rien à

@@ -1,5 +1,5 @@
-import React, { useEffect, useState } from "react";
-import { StatusBar, View, Text } from "react-native";
+import React, { useEffect, useRef, useState } from "react";
+import { StatusBar, View, Text, BackHandler, Platform } from "react-native";
 // Zones sûres : la SafeAreaView de React Native est dépréciée (React Native 0.81) et ne gère pas
 // Android, où l'affichage bord à bord est imposé depuis Android 16 : on passe par la bibliothèque dédiée.
 import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
@@ -17,7 +17,7 @@ import DeleteAccountScreen from "./src/screens/DeleteAccountScreen";
 import NotificationSettingsScreen from "./src/screens/NotificationSettingsScreen";
 import RidesScreen from "./src/screens/RidesScreen";
 import { getSocket, resetSocket, watchRide, unwatchRide } from "./src/lib/socket";
-import { api, logout as clearSession } from "./src/lib/api";
+import { api, logout as clearSession, quandSessionExpiree } from "./src/lib/api";
 import { playSound } from "./src/lib/sound";
 import { showAlert } from "./src/lib/alert";
 import * as Notifications from "expo-notifications";
@@ -25,6 +25,31 @@ import { registerForPushNotifications, clearPushToken } from "./src/lib/pushNoti
 import { requestWebNotificationPermission, notifyWeb, registerWebPush, unregisterWebPush } from "./src/lib/webNotify";
 
 const EMPTY_UNREAD = { direct: { total: 0, byDriver: {} }, groups: { total: 0, byConversation: {} }, rides: { total: 0, byRide: {} }, total: 0 };
+
+// Profil gardé sur l'appareil, lu prudemment : un stockage abîmé ne doit pas bloquer l'ouverture
+// (audit du 7 octobre 2026, F14).
+function profilLu(raw) {
+  try {
+    const u = raw ? JSON.parse(raw) : null;
+    return u && typeof u === "object" && u.id ? u : null;
+  } catch {
+    return null;
+  }
+}
+
+// Écran à ouvrir pour une notification touchée (téléphone ou navigateur). Audit du 7 octobre 2026
+// (F17) : un message de course n'ouvrait rien ; il ouvre maintenant la discussion de la course.
+export function ecranPourNotification(data) {
+  const type = data?.type;
+  if (type === "ride:status" && data.rideId) return { screen: data.status === "COMPLETED" ? "rate" : "tracking", rideId: data.rideId };
+  if ((type === "ride:reminder" || type === "ride:reminder:urgent") && data.rideId) return { screen: "tracking", rideId: data.rideId };
+  if (type === "message:ride" && data.rideId) return { screen: "chat", rideId: data.rideId };
+  if (type === "message:group") return { screen: "groups" };
+  return null;
+}
+
+// Écran « parent » pour le bouton retour d'Android (F14) : sans lui, retour fermait l'application.
+const PARENT = { chat: "tracking" };
 
 export default function App() {
   const [user, setUser] = useState(null);
@@ -55,9 +80,9 @@ export default function App() {
 
   useEffect(() => {
     (async () => {
-      const raw = await AsyncStorage.getItem("ts_user");
-      if (!raw) return;
-      setUser(JSON.parse(raw));
+      const lu = profilLu(await AsyncStorage.getItem("ts_user"));
+      if (!lu) return;
+      setUser(lu);
       // Profil rafraîchi (adresse de domicile modifiée par le Dispatch, etc.)
       try {
         const fresh = await api.me();
@@ -80,14 +105,18 @@ export default function App() {
   useEffect(() => {
     if (!activeRideId) return undefined;
     let sock;
+    let annule = false;
     watchRide(activeRideId);
+    // Écouteur nommé, retiré seul (audit du 7 octobre 2026, F02).
+    const surStatut = (ride) => {
+      if (ride?.id === activeRideId && ride.status === "COMPLETED") setScreen("rate");
+    };
     getSocket().then((s) => {
+      if (annule) return;
       sock = s;
-      s.on("ride:status", (ride) => {
-        if (ride?.id === activeRideId && ride.status === "COMPLETED") setScreen("rate");
-      });
+      s.on("ride:status", surStatut);
     });
-    return () => { sock?.off("ride:status"); unwatchRide(activeRideId); };
+    return () => { annule = true; sock?.off("ride:status", surStatut); unwatchRide(activeRideId); };
   }, [activeRideId]);
 
   // Course terminée pendant que l'application était fermée : la notation est proposée à l'ouverture.
@@ -111,39 +140,46 @@ export default function App() {
   useEffect(() => {
     if (!user) return undefined;
     let sock;
-    getSocket().then((s) => {
-      sock = s;
+    let annule = false;
+    // Écouteurs nommés, retirés un par un : « off(évènement) » sans fonction retirait aussi ceux des
+    // écrans (audit du 7 octobre 2026, F02).
+    const ecouteurs = {
       // Son + badge + notification navigateur pour tout message reçu, quel que soit l'écran ouvert
-      s.on("message:group", ({ message }) => {
+      "message:group": ({ message }) => {
         if (message.sender.id === user.id) return;
         playSound("notify"); notifyWeb(`${message.sender.name} (groupe)`, message.text); refreshUnread();
-      });
+      },
       // Rappel de course envoyé par le serveur : son et notification du navigateur.
-      s.on("ride:reminder", ({ texte }) => {
+      "ride:reminder": ({ texte }) => {
         playSound("notify");
         notifyWeb("Course à venir — Taxi Sylvain", texte);
-      });
-      s.on("message:ride", (m) => {
+      },
+      "message:ride": (m) => {
         if (m.sender.id === user.id) return;
         playSound("notify"); notifyWeb(`Message de ${m.sender.name}`, m.text); refreshUnread();
-      });
+      },
       // Toute nouvelle sur une de mes courses (chauffeur confirmé, en route, terminée, montant
       // fixé) : son et notification même depuis l'accueil ; la fin de course ouvre la notation.
-      s.on("ride:client-update", ({ rideId, status, title, body }) => {
+      "ride:client-update": ({ rideId, status, title, body }) => {
         playSound(status === "COMPLETED" ? "action" : "notify");
         notifyWeb(title || "Taxi Sylvain", body || "");
         if (status === "COMPLETED" && rideId) { setActiveRideId(rideId); setScreen("rate"); }
-      });
+      },
       // Décision de Taxi Sylvain sur une demande de suppression de compte (validée : le compte
       // n'existe plus, on ferme la session ; refusée : le compte reste actif, avec la raison).
-      s.on("account:deletion-decided", ({ approved, raison }) => {
+      "account:deletion-decided": ({ approved, raison }) => {
         if (approved) {
           showAlert("Compte supprimé", "Taxi Sylvain a validé la suppression de votre compte. Merci d'avoir voyagé avec nous.", [{ text: "OK", onPress: () => logout({ server: false }) }]);
         } else {
           showAlert("Demande de suppression refusée", raison ? `Taxi Sylvain n'a pas accepté votre demande : ${raison}` : "Taxi Sylvain n'a pas accepté votre demande. Votre compte reste actif.");
           rafraichirProfil();
         }
-      });
+      },
+    };
+    getSocket().then((s) => {
+      if (annule) return; // écran quitté avant la fin de la connexion
+      sock = s;
+      for (const [evenement, f] of Object.entries(ecouteurs)) s.on(evenement, f);
     });
     registerForPushNotifications();
     // Version web : abonnement aux notifications du serveur, si la permission a été accordée.
@@ -151,30 +187,59 @@ export default function App() {
     refreshUnread();
     proposerNotation();
     return () => {
-      sock?.off("message:group");
-      sock?.off("ride:reminder");
-      sock?.off("message:ride");
-      sock?.off("ride:client-update");
-      sock?.off("account:deletion-decided");
+      annule = true;
+      for (const [evenement, f] of Object.entries(ecouteurs)) sock?.off(evenement, f);
     };
   }, [user]);
 
-  // Permet de rouvrir directement le bon écran quand on tape sur une notification reçue
-  // app fermée ou en arrière-plan.
+  // Session expirée ou révoquée ailleurs (mot de passe changé) : retour à l'écran de connexion (F08).
   useEffect(() => {
-    const sub = Notifications.addNotificationResponseReceivedListener((response) => {
-      const data = response.notification.request.content.data;
-      if (data?.type === "ride:status" && data.rideId) {
-        setActiveRideId(data.rideId);
-        setScreen(data.status === "COMPLETED" ? "rate" : "tracking");
-      } else if (data?.type === "ride:reminder" && data.rideId) {
-        setActiveRideId(data.rideId);
-        setScreen("tracking");
-      } else if (data?.type === "message:group") {
-        setScreen("groups");
-      }
+    quandSessionExpiree(() => logout({ server: false }));
+  }, []);
+
+  // Bouton retour d'Android : revient à l'écran précédent au lieu de fermer l'application (F14).
+  const ecranRef = useRef(screen);
+  ecranRef.current = screen;
+  useEffect(() => {
+    if (Platform.OS !== "android") return undefined;
+    const sub = BackHandler.addEventListener("hardwareBackPress", () => {
+      const actuel = ecranRef.current;
+      if (actuel === "book") return false;
+      setScreen(PARENT[actuel] || "book");
+      return true;
     });
     return () => sub.remove();
+  }, []);
+
+  // Permet de rouvrir directement le bon écran quand on tape sur une notification reçue app fermée
+  // ou en arrière-plan, y compris celle qui a LANCÉ l'application (démarrage à froid, F17), et sur
+  // la version web (clic transmis par le service worker).
+  useEffect(() => {
+    const ouvrir = (data) => {
+      const cible = ecranPourNotification(data);
+      if (!cible) return;
+      if (cible.rideId) setActiveRideId(cible.rideId);
+      setScreen(cible.screen);
+    };
+    const sub = Notifications.addNotificationResponseReceivedListener((response) => ouvrir(response.notification.request.content.data));
+    Notifications.getLastNotificationResponseAsync?.()
+      .then((response) => { if (response) ouvrir(response.notification.request.content.data); })
+      .catch(() => null);
+    const surMessageWeb = (e) => { if (e.data?.type === "notification-clic") ouvrir(e.data.data); };
+    if (Platform.OS === "web") {
+      globalThis.navigator?.serviceWorker?.addEventListener("message", surMessageWeb);
+      try {
+        const brut = new URLSearchParams(globalThis.location?.search || "").get("notification");
+        if (brut) {
+          ouvrir(JSON.parse(brut));
+          globalThis.history?.replaceState(null, "", globalThis.location.pathname);
+        }
+      } catch { /* adresse illisible */ }
+    }
+    return () => {
+      sub.remove();
+      if (Platform.OS === "web") globalThis.navigator?.serviceWorker?.removeEventListener("message", surMessageWeb);
+    };
   }, []);
 
   // server: false après une suppression de compte : le compte n'existe plus, il n'y a rien à

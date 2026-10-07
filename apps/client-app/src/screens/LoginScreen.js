@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, Image } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { ecrireJeton } from "../lib/session";
 import { api } from "../lib/api";
 import { requestWebNotificationPermission } from "../lib/webNotify";
 
@@ -15,7 +16,7 @@ export default function LoginScreen({ onLogin, onCreerCompte, onVerification }) 
     requestWebNotificationPermission();
     try {
       const data = await api.login(email, password);
-      await AsyncStorage.setItem("ts_token", data.token);
+      await ecrireJeton(data.token);
       await AsyncStorage.setItem("ts_user", JSON.stringify(data.user));
       onLogin(data.user);
     } catch (e) {

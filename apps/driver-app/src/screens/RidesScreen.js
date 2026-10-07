@@ -3,6 +3,7 @@ import { View, Text, TouchableOpacity, StyleSheet, FlatList, ActivityIndicator }
 import { api } from "../lib/api";
 import { playSound } from "../lib/sound";
 import { showAlert } from "../lib/alert";
+import { getSocket } from "../lib/socket";
 import SwipeButton from "../components/SwipeButton";
 import { withDayHeaders } from "../lib/rideDays";
 import { heure } from "../lib/dates";
@@ -37,6 +38,24 @@ export default function RidesScreen({ onOpenRide, onBack }) {
 
   useEffect(() => { load(); }, [tab, page]);
 
+  // La liste suit les courses en direct (audit du 7 octobre 2026, F17 : elle ne changeait qu'en
+  // changeant d'onglet ou de page).
+  useEffect(() => {
+    let sock;
+    let annule = false;
+    const evenements = ["ride:broadcast", "ride:taken", "ride:assigned", "ride:updated", "ride:deleted"];
+    const recharger = () => load();
+    getSocket().then((s) => {
+      if (annule) return;
+      sock = s;
+      for (const e of evenements) s.on(e, recharger);
+    });
+    return () => {
+      annule = true;
+      for (const e of evenements) sock?.off(e, recharger);
+    };
+  }, [tab, page]);
+
   const changeTab = (next) => { setTab(next); setPage(1); };
 
   const accept = async (id) => {
@@ -51,8 +70,12 @@ export default function RidesScreen({ onOpenRide, onBack }) {
   };
 
   const refuse = async (id) => {
-    await api.refuseRide(id);
-    playSound("action");
+    try {
+      await api.refuseRide(id);
+      playSound("action");
+    } catch (e) {
+      showAlert("Refus non enregistré", e.message);
+    }
     load();
   };
 

@@ -26,6 +26,20 @@ export default function SwipeButton({ label, onConfirm, color = "#f5a623", textC
     disabledRef.current = disabled;
   });
 
+  // Confirmation commune au geste et au lecteur d'écran.
+  const confirmerRef = useRef(null);
+  confirmerRef.current = () => {
+    if (disabledRef.current || busyRef.current) return;
+    busyRef.current = true;
+    Animated.timing(pan, { toValue: maxSwipeRef.current, duration: 120, useNativeDriver: false }).start(async () => {
+      try {
+        await onConfirmRef.current?.();
+      } finally {
+        setTimeout(() => { pan.setValue(0); busyRef.current = false; }, 350);
+      }
+    });
+  };
+
   const panResponder = useRef(
     PanResponder.create({
       onStartShouldSetPanResponder: () => !disabledRef.current && !busyRef.current,
@@ -39,14 +53,7 @@ export default function SwipeButton({ label, onConfirm, color = "#f5a623", textC
       },
       onPanResponderRelease: (evt, gesture) => {
         if (gesture.dx >= maxSwipeRef.current * CONFIRM_THRESHOLD) {
-          busyRef.current = true;
-          Animated.timing(pan, { toValue: maxSwipeRef.current, duration: 120, useNativeDriver: false }).start(async () => {
-            try {
-              await onConfirmRef.current?.();
-            } finally {
-              setTimeout(() => { pan.setValue(0); busyRef.current = false; }, 350);
-            }
-          });
+          confirmerRef.current();
         } else {
           Animated.spring(pan, { toValue: 0, useNativeDriver: false }).start();
         }
@@ -73,6 +80,15 @@ export default function SwipeButton({ label, onConfirm, color = "#f5a623", textC
     <View
       onLayout={onLayout}
       style={[styles.track, { backgroundColor: disabled ? "#28395a" : `${color}26`, borderColor: disabled ? "#28395a" : color }]}
+      // Audit du 7 octobre 2026 (F20) : le geste seul rendait l'acceptation, le départ et la fin de
+      // course impossibles avec un lecteur d'écran. Une action d'accessibilité fait la même chose.
+      accessible
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      accessibilityHint={disabled ? undefined : "Glissez vers la droite, ou touchez deux fois avec le lecteur d'écran, pour confirmer."}
+      accessibilityState={{ disabled: Boolean(disabled) }}
+      accessibilityActions={[{ name: "activate", label }]}
+      onAccessibilityAction={(e) => { if (e.nativeEvent.actionName === "activate") confirmerRef.current(); }}
     >
       <Animated.Text style={[styles.label, { color: disabled ? "#8b99b5" : color, opacity: labelOpacity }]} numberOfLines={2}>
         {/* Bouton verrouillé (ex. « Disponible à 19:38 (3 h avant) ») : on n'invite pas à glisser. */}

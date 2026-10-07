@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { View, Text, TextInput, TouchableOpacity, StyleSheet } from "react-native";
 import { api } from "../lib/api";
+import { ecrireJeton } from "../lib/session";
 import { playSound } from "../lib/sound";
 import { showAlert } from "../lib/alert";
 
@@ -15,9 +16,12 @@ export default function ChangePasswordScreen({ onBack }) {
       return;
     }
     try {
-      await api.changePassword(currentPassword, newPassword);
+      // Le serveur ferme toutes les autres sessions et renvoie un jeton neuf pour cet appareil
+      // (audit du 7 octobre 2026, SEC-07) ; la connexion temps réel se reconnecte avec lui.
+      const r = await api.changePassword(currentPassword, newPassword);
+      if (r?.token) await ecrireJeton(r.token);
       playSound("action");
-      showAlert("Succès", "Mot de passe mis à jour.", [{ text: "OK", onPress: onBack }]);
+      showAlert("Succès", "Mot de passe mis à jour. Vos autres appareils devront se reconnecter.", [{ text: "OK", onPress: onBack }]);
     } catch (e) {
       showAlert("Erreur", e.message);
     }

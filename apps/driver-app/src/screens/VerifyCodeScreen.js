@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, Linking } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { ecrireJeton } from "../lib/session";
 import { api } from "../lib/api";
 
 // Saisie du code à six chiffres reçu par courriel. Demande du propriétaire du 20 septembre 2026 :
@@ -32,7 +33,7 @@ export default function VerifyCodeScreen({ email, password, message, onVerified,
     setEnvoi(true);
     try {
       const data = await api.verifyEmail(email, password, propre);
-      await AsyncStorage.setItem("ts_token", data.token);
+      await ecrireJeton(data.token);
       await AsyncStorage.setItem("ts_user", JSON.stringify(data.user));
       onVerified(data.user);
     } catch (e) {

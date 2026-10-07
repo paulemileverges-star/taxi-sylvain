@@ -33,3 +33,12 @@ test("B10 : une course immédiate (sans heure prévue) apparaît le jour de sa c
   const immediate = { id: "immediate", scheduledFor: null, createdAt: "2026-10-07T18:00:00.000Z" }; // mercredi
   assert.deepEqual(scheduleItemsForDay({ rides: [immediate], entries: [], weekStart: semaine, dayIndex: 2 }).map((i) => i.ride.id), ["immediate"]);
 });
+
+test("F03 (application Client) : date et heure choisies depuis Paris = heure de Montréal", { skip: !PARIS && "fuseau de Paris indisponible" }, async () => {
+  const { heureMontrealVersIso: client, heure } = await import("../../apps/client-app/src/lib/dates.js");
+  assert.equal(client("2026-10-10", "10:00"), "2026-10-10T14:00:00.000Z");
+  assert.equal(client("2026-12-10", "10:00"), "2026-12-10T15:00:00.000Z");
+  assert.equal(heure(client("2026-10-10", "10:00")), "10:00", "réaffichée à l'heure de Montréal");
+  assert.equal(client("2026-10-10", ""), null, "l'heure est exigée avec la date");
+  assert.equal(client("", "10:00"), null);
+});

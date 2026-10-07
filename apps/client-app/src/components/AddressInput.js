@@ -1,4 +1,4 @@
-import React, { useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { View, TextInput, Text, TouchableOpacity, StyleSheet, ActivityIndicator } from "react-native";
 import { api } from "../lib/api";
 
@@ -8,45 +8,74 @@ import { api } from "../lib/api";
 // seules les Arrivées et le stationnement P4 sont proposés. Saisie différée de 350 ms.
 const nouvelleSession = () => `${Date.now()}-${Math.random().toString(36).slice(2)}`;
 
+// Fournisseur d'adresses du serveur, demandé une seule fois pour toute l'application.
+let fournisseur = null;
+const fournisseurAdresses = () => {
+  fournisseur = fournisseur || api.geocodeProvider().then((r) => r?.fournisseur || "openstreetmap").catch(() => "openstreetmap");
+  return fournisseur;
+};
+
+// Audit du 7 octobre 2026 :
+//   - F15 : une réponse lente pour une ANCIENNE frappe remplaçait les suggestions récentes, et le
+//     détail d'une adresse choisie pouvait écraser un texte retapé entre-temps. Chaque recherche porte
+//     un numéro ; seule la dernière s'affiche ;
+//   - OPS-02 : sans clé Google, le serveur public OpenStreetMap n'autorise pas une recherche à chaque
+//     frappe : 1 seconde de pause et 5 caractères au moins.
 export default function AddressInput({ placeholder, value, onChange }) {
   const [suggestions, setSuggestions] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [rythme, setRythme] = useState({ delai: 350, minimum: 3 });
   const debounceRef = useRef(null);
+  const derniere = useRef(0);
   const sessionRef = useRef(nouvelleSession());
+
+  useEffect(() => {
+    fournisseurAdresses().then((f) => { if (f !== "google") setRythme({ delai: 1000, minimum: 5 }); });
+    return () => {
+      clearTimeout(debounceRef.current);
+      derniere.current += 1; // toute réponse encore attendue sera ignorée
+    };
+  }, []);
 
   const handleChange = (text) => {
     onChange({ address: text, lat: null, lng: null, confidence: null, placeId: null });
     clearTimeout(debounceRef.current);
-    if (text.trim().length < 3) {
+    const numero = ++derniere.current;
+    if (text.trim().length < rythme.minimum) {
       setSuggestions([]);
+      setLoading(false);
       return;
     }
     debounceRef.current = setTimeout(async () => {
       setLoading(true);
       try {
         const results = await api.geocodeSearch(text, sessionRef.current);
+        if (numero !== derniere.current) return; // une frappe plus récente a pris le relais
         const catalogue = results.filter((r) => r.catalogue);
         setSuggestions(catalogue.length ? catalogue : results);
       } catch {
-        setSuggestions([]);
+        if (numero === derniere.current) setSuggestions([]);
       } finally {
-        setLoading(false);
+        if (numero === derniere.current) setLoading(false);
       }
-    }, 350);
+    }, rythme.delai);
   };
 
   const select = async (s) => {
     setSuggestions([]);
+    const numero = ++derniere.current;
     if (s.placeId && typeof s.lat !== "number") {
+      onChange({ address: s.label, lat: null, lng: null, confidence: null, placeId: null });
       setLoading(true);
       try {
         const d = await api.geocodePlace(s.placeId, sessionRef.current, { q: value, nom: s.nomLieu || "" });
+        // Texte retapé entre-temps : le détail de l'ancienne adresse ne l'écrase pas.
+        if (numero !== derniere.current) return;
         onChange({ address: d.label, lat: d.lat, lng: d.lng, confidence: d.confidence || null, placeId: d.placeId || s.placeId });
       } catch {
         // Sans le détail, on garde le texte : le serveur le vérifie à la réservation.
-        onChange({ address: s.label, lat: null, lng: null, confidence: null, placeId: null });
       } finally {
-        setLoading(false);
+        if (numero === derniere.current) setLoading(false);
         sessionRef.current = nouvelleSession();
       }
       return;

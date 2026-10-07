@@ -12,18 +12,26 @@ export default function RideChatScreen({ rideId, onBack, onRead }) {
 
   useEffect(() => {
     const markRead = () => api.markThreadRead(`ride:${rideId}`).then(() => onRead?.()).catch(() => null);
-    api.rideMessages(rideId).then(setMessages).then(markRead);
+    setMessages([]);
+    api.rideMessages(rideId).then(setMessages).then(markRead).catch((e) => showAlert("Messages indisponibles", e.message));
     let sock;
+    let annule = false;
+    // Écouteur nommé, retiré seul (audit du 7 octobre 2026, F02).
+    const surMessage = (m) => {
+      if (m.rideId !== rideId) return;
+      setMessages((prev) => (prev.some((x) => x.id === m.id) ? prev : [...prev, m]));
+      if (m.sender.role !== "DRIVER") markRead();
+    };
     getSocket().then((s) => {
+      if (annule) return;
       sock = s;
       watchRide(rideId);
-      s.on("message:new", (m) => {
-        if (m.rideId !== rideId) return;
-        setMessages((prev) => (prev.some((x) => x.id === m.id) ? prev : [...prev, m]));
-        if (m.sender.role !== "DRIVER") markRead();
-      });
+      s.on("message:new", surMessage);
     });
-    return () => sock?.off("message:new");
+    return () => {
+      annule = true;
+      sock?.off("message:new", surMessage);
+    };
   }, [rideId]);
 
   const send = async () => {

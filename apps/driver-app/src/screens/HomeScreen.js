@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from "react";
-import { View, Text, FlatList, TouchableOpacity, StyleSheet, RefreshControl } from "react-native";
+import { View, Text, FlatList, TouchableOpacity, StyleSheet, RefreshControl, Linking } from "react-native";
 import { api } from "../lib/api";
 import { playSound } from "../lib/sound";
 import { showAlert } from "../lib/alert";
@@ -12,6 +12,11 @@ const STATUS_LABEL = {
   EN_ROUTE: "En route vers le client", STARTED: "En route vers la destination",
   COMPLETED: "Terminée", CANCELLED: "Annulée", REFUSED: "Refusée",
 };
+
+// Pages légales, accessibles depuis l'application connectée (audit du 7 octobre 2026, F19 : elles
+// n'étaient accessibles nulle part dans l'application chauffeur).
+const CONFIDENTIALITE = "https://api.taxisylvain.ca/confidentialite";
+const CONDITIONS = "https://api.taxisylvain.ca/conditions";
 
 // Heure toujours sur 24 heures, à l'heure de Montréal (lib/dates.js, 6 octobre 2026).
 const fmtDate = jour;
@@ -66,8 +71,10 @@ export default function HomeScreen({ user, onOpenRide, onOpenEarnings, onOpenMes
       s.on("ride:assigned", refresh);
       s.on("ride:updated", refresh);
       s.on("ride:status", refresh);
+      s.on("ride:deleted", refresh);
     });
     return () => {
+      sock?.off("ride:deleted", refresh);
       sock?.off("ride:broadcast", refresh);
       sock?.off("ride:taken", refresh);
       sock?.off("ride:assigned", refresh);
@@ -88,8 +95,12 @@ export default function HomeScreen({ user, onOpenRide, onOpenEarnings, onOpenMes
   };
 
   const refuse = async (id) => {
-    await api.refuseRide(id);
-    playSound("action");
+    try {
+      await api.refuseRide(id);
+      playSound("action");
+    } catch (e) {
+      showAlert("Refus non enregistré", e.message);
+    }
     load();
   };
 
@@ -118,6 +129,8 @@ export default function HomeScreen({ user, onOpenRide, onOpenEarnings, onOpenMes
           <TouchableOpacity onPress={onOpenEarnings}><Text style={styles.link}>Mes revenus</Text></TouchableOpacity>
           {/* Apple et Google exigent que la suppression du compte soit accessible depuis l'app. */}
           <TouchableOpacity onPress={onOpenDeleteAccount}><Text style={styles.dangerLink}>Supprimer mon compte</Text></TouchableOpacity>
+          <TouchableOpacity onPress={() => Linking.openURL(CONFIDENTIALITE)} accessibilityRole="link"><Text style={styles.link}>Confidentialité</Text></TouchableOpacity>
+          <TouchableOpacity onPress={() => Linking.openURL(CONDITIONS)} accessibilityRole="link"><Text style={styles.link}>Conditions</Text></TouchableOpacity>
         </View>
       </View>
       <FlatList

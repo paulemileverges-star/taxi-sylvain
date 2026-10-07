@@ -13,25 +13,44 @@ export default function MessagesScreen({ user, onBack, rideContext, onRead }) {
   // du menu se met à jour via onRead).
   const markRead = () => api.markThreadRead(`direct:${user.id}`).then(() => onRead?.()).catch(() => null);
 
+  const [erreur, setErreur] = useState("");
+  const [envoi, setEnvoi] = useState(false);
+
+  // Audit du 7 octobre 2026 (F02) : « off("message:direct") » sans fonction retirait aussi l'écouteur
+  // global de l'application (son, badge). Seul l'écouteur de cet écran est retiré désormais.
   useEffect(() => {
-    api.dispatchMessages(user.id).then(setMessages).then(markRead);
+    api.dispatchMessages(user.id).then(setMessages).then(markRead).catch((e) => setErreur(e.message || "Messages indisponibles."));
     let sock;
+    let annule = false;
+    const surMessage = (m) => {
+      if (m.driverId !== user.id) return;
+      setMessages((prev) => (prev.some((x) => x.id === m.id) ? prev : [...prev, m]));
+      if (m.sender.role !== "DRIVER") markRead();
+    };
     getSocket().then((s) => {
+      if (annule) return;
       sock = s;
-      s.on("message:direct", (m) => {
-        if (m.driverId !== user.id) return;
-        setMessages((prev) => (prev.some((x) => x.id === m.id) ? prev : [...prev, m]));
-        if (m.sender.role !== "DRIVER") markRead();
-      });
+      s.on("message:direct", surMessage);
     });
-    return () => sock?.off("message:direct");
+    return () => {
+      annule = true;
+      sock?.off("message:direct", surMessage);
+    };
   }, [user.id]);
 
   const send = async () => {
-    if (!draft.trim()) return;
-    await api.sendDispatchMessage(user.id, draft, rideContext?.id);
-    setDraft("");
-    playSound("action");
+    if (!draft.trim() || envoi) return;
+    setEnvoi(true);
+    setErreur("");
+    try {
+      await api.sendDispatchMessage(user.id, draft.trim(), rideContext?.id);
+      setDraft("");
+      playSound("action");
+    } catch (e) {
+      setErreur(e.message || "Message non envoyé.");
+    } finally {
+      setEnvoi(false);
+    }
   };
 
   return (
@@ -40,6 +59,7 @@ export default function MessagesScreen({ user, onBack, rideContext, onRead }) {
         <TouchableOpacity onPress={onBack}><Text style={styles.link}>← Retour</Text></TouchableOpacity>
         <Text style={styles.title}>Messagerie — Centrale</Text>
       </View>
+      {erreur ? <Text style={{ color: "#e85d4c", paddingHorizontal: 16, marginBottom: 6 }} accessibilityLiveRegion="polite">{erreur}</Text> : null}
       {rideContext && (
         <View style={styles.rideBanner}>
           <Text style={styles.rideBannerText}>Au sujet de la course : {rideContext.pickupAddress} → {rideContext.destAddress}</Text>
