@@ -13,7 +13,7 @@
 // répondre, le serveur doit tourner sur la version et la dernière migration du dépôt, la dernière
 // sauvegarde doit avoir moins de 30 heures, aucun canal d'envoi (courriels, notifications) ne doit
 // être en panne, et chaque site web doit servir le dernier commit de son application (marque posée
-// par scripts/publier-web.mjs). Sinon la vérification échoue.
+// par scripts/publier-web.mjs) et appeler api.taxisylvain.ca. Sinon la vérification échoue.
 
 import fs from "node:fs";
 import path from "node:path";
@@ -103,7 +103,7 @@ async function corsAccepte(origine) {
 
 const problemes = [];
 const productions = new Map(); // adresse de production -> chemin du fichier servi, lu une seule fois
-const marques = new Map(); // adresse de production et commit -> le fichier servi porte-t-il ce commit ?
+const fichiers = new Map(); // adresse de production -> texte du fichier de code servi, lu une seule fois
 
 async function verifierApi() {
   const { status, error } = await fetchText(`${API}/health`);
@@ -181,15 +181,14 @@ async function fichierDeProduction(adresse) {
   return productions.get(adresse)?.split("/").pop() || null;
 }
 
-// Le fichier de code en ligne porte-t-il ce commit ? Il y est inscrit par scripts/publier-web.mjs.
-async function porteLeCommit(adresseProduction, commit) {
-  const cle = `${adresseProduction} ${commit}`;
-  if (!marques.has(cle)) {
+// Texte du fichier de code en ligne : on y cherche le commit inscrit par scripts/publier-web.mjs et
+// l'adresse du serveur que l'application appelle.
+async function fichierServi(adresseProduction) {
+  if (!fichiers.has(adresseProduction)) {
     const chemin = productions.get(adresseProduction);
-    const { text } = chemin ? await fetchText(`${adresseProduction}${chemin}`, 60000) : { text: "" };
-    marques.set(cle, text.includes(commit));
+    fichiers.set(adresseProduction, chemin ? (await fetchText(`${adresseProduction}${chemin}`, 60000)).text : "");
   }
-  return marques.get(cle);
+  return fichiers.get(adresseProduction);
 }
 
 async function verifierSite(site) {
@@ -230,6 +229,16 @@ async function verifierSite(site) {
     return;
   }
 
+  // L'application appelle-t-elle le serveur de production ? Un fichier .env.local du PC de
+  // publication qui viserait le serveur local donnerait un site qui s'affiche, mais sans données.
+  const code = await fichierServi(site.adresseProduction);
+  if (!code.includes("api.taxisylvain.ca") || code.includes("localhost:4000")) {
+    console.log(`${KO} ${site.nom} : le site n'appelle pas le serveur de production (api.taxisylvain.ca).`);
+    console.log(`       correction    : republier sans réglage local qui vise localhost (node scripts/publier-web.mjs ${site.cle})`);
+    problemes.push(`${site.nom} : le site n'appelle pas api.taxisylvain.ca.`);
+    return;
+  }
+
   // Le site sert-il le dernier commit de son application ? (sans tout l'historique Git, le calcul
   // est impossible : signalé une seule fois plus bas)
   const commit = HISTORIQUE ? commitWeb(site.cle) : null;
@@ -238,14 +247,14 @@ async function verifierSite(site) {
     problemes.push(`${site.nom} : contrôle de version impossible.`);
     return;
   }
-  if (commit && !(await porteLeCommit(site.adresseProduction, commit))) {
+  if (commit && !code.includes(commit)) {
     console.log(`${KO} ${site.nom} : en ligne, mais sans le dernier commit de l'application (${commit}).`);
     console.log(`       correction    : node scripts/publier-web.mjs ${site.cle} (ou envoyer les commits sur GitHub si la publication est plus récente)`);
     problemes.push(`${site.nom} : le site ne sert pas le dernier commit de l'application.`);
     return;
   }
 
-  console.log(`${OK} ${site.nom} : ${site.adressePublique.replace("https://", "")} à jour (${fichierPublic}${commit ? `, commit ${commit}` : ""}) et autorisé par le serveur.`);
+  console.log(`${OK} ${site.nom} : ${site.adressePublique.replace("https://", "")} à jour (${fichierPublic}${commit ? `, commit ${commit}` : ""}), appelle api.taxisylvain.ca et autorisé par le serveur.`);
 }
 
 // Le site vitrine doit répondre, et ne doit pas servir l'application client.
