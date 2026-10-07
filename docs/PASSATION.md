@@ -21,8 +21,11 @@ Lire aussi : `AGENTS.md` (règles courtes), `docs/ARCHITECTURE.md` (choix techni
    4 janvier 2027), disponibles pour le groupe interne « Team (Expo) », rattachées au groupe externe ; l'examen bêta
    attend les informations de contact et le compte de démonstration (titulaire du compte).
 3. **Rapports** : la règle de calcul a changé le 6 octobre (date de la course). `node scripts/comparer-rapports.mjs`
-   sur une copie de la base montre, semaine par semaine, l'ancien et le nouveau calcul et les courses jamais
-   terminées, à corriger dans la console avant de comparer avec le tableau de Taxi Sylvain.
+   sur une copie de la base montre, semaine par semaine, le récap reçu, l'ancien et le nouveau calcul, puis un bilan
+   d'un écran (`--bilan` pour lui seul). Sont signalées « jamais terminées » les seules courses dont l'heure était
+   passée de plus de 12 h au moment de la copie : à vérifier avec le chauffeur, puis « Effectuée » si la course a eu
+   lieu, « Annulée » sinon. Les courses à venir sont seulement comptées. Premier passage du propriétaire le 7 octobre
+   (copie du 6) : la version d'alors signalait aussi les courses à venir ; défaut corrigé le jour même, passage à refaire.
 4. **Sauvegardes** : copie sur le PC chaque semaine, `node scripts/recuperer-sauvegarde.mjs` (§ 6).
 5. Railway : formule **Hobby active depuis le 6 octobre 2026 au soir** (fin de l'essai : plus de risque d'arrêt).
 
@@ -510,8 +513,10 @@ sinon l'application s'affiche mais ne peut plus se connecter. Les APK ne sont pa
     prochaine publication web embarquera `expo-audio`, vérifier alors les sons dans le navigateur.
 13. **Point de guidage de YHU** : non vérifié (l'ancien point était le centre des pistes ; le nouveau terminal a ouvert
     en juin 2026). Le Dispatch le vérifie dans la page Tarifs en choisissant l'adresse exacte dans la liste.
-14. **Courses jamais terminées** : `scripts/comparer-rapports.mjs` les liste par semaine ; à passer « Effectuée »
-    dans la console pour que les rapports correspondent au tableau de Taxi Sylvain.
+14. **Courses jamais terminées** : `scripts/comparer-rapports.mjs` les liste par semaine (heure passée de plus de
+    12 h au moment de la copie ; les courses à venir ne sont pas signalées). À vérifier avec le chauffeur, puis
+    « Effectuée » si la course a eu lieu, « Annulée » sinon, pour que les rapports correspondent au tableau de
+    Taxi Sylvain.
 
 ---
 
@@ -606,6 +611,7 @@ Registre tenu à jour à chaque série de demandes (dernière entrée : 6 octobr
 | 21 sept. | Site vitrine WordPress sur `taxisylvain.ca` et `www` | **Fait et vérifié en ligne** : WordPress 7.1.1 installé à la main chez LWS (base partagée avec nskgroup.org, préfixe `ts_`), sept pages publiées, non indexé jusqu'à validation du propriétaire. Outil de publication et compte rendu dans le Jarvis : `livrables/sites-web/taxisylvain-site-wordpress/`. Ne dépend pas de ce dépôt |
 | 6 oct. | « Reprise du projet », puis « Vas-y » : exploitation (sauvegardes, alertes, environnement de test), vérification de Railway et de TestFlight, expo-audio, passation | **Fait et vérifié** : sauvegarde quotidienne de la base et restauration éprouvée, alertes d'erreurs par courriel, surveillance horaire GitHub (§ 5, § 6) ; déployé (Railway `35cf2a69`), 256 tests verts, 14 contrôles de mise en ligne verts, première sauvegarde en production (79 Ko), dossier des sauvegardes inaccessible depuis Internet (404 sur cinq adresses, encodées comprises). **Constats** (§ 8) : essai Railway qui se termine le 8 octobre, compilations TestFlight expirées le 2 octobre, disque à 175 Mo sur 500. expo-audio prêt sur une branche (§ 10, point 12). **Non fait** : environnement de test (attend la formule Hobby) ; copie de la sauvegarde sur le PC (refusée au mode automatique de Claude Code, à lancer par le propriétaire) |
 | 6 oct. (soir) | Treize demandes du propriétaire : 1 fiche chauffeur modifiable (véhicule, couleur, nom) ; 2 arrêts (client, ami du client, puis YUL) ; 3 récap hebdomadaire faux certaines semaines (captures du compte du chauffeur Christopher et tableau de Sylvain, semaine du 21 au 27 septembre juste : 11 courses, 1 305 $, 130,50 $) ; 4 adresses réelles de Google Maps ; 5 contact du client à 2 h ; 6 départ à 3 h ; 7 YUL : Arrivées et P4 seulement ; 8 rapports du Dispatch faux et sans navigation entre semaines ; 9 notification de récap reçue quatre fois ; 10 heure sur 24 h partout ; 11 Google Maps mène à une autre adresse ; 12 récap le lundi à 04 h 00 ; 13 rapport complet et dossier unique pour un développeur senior | **Fait et vérifié** (commits `f8f5cd5`, `1aab585`, `241c0fa`, `c088514`) : 1 `PATCH /drivers/:id` et fenêtre « Modifier » ; 2 `Ride.stops` partout ; 3, 8, 9, 12 règle unique `lib/rapports.js` (date de la course, recalcul à chaque lecture), page Rapports refaite, exports au format du tableau, dates des exports corrigées (le dimanche s'affichait lundi), récap à 04 h 00 notifié une fois, recalcul manuel silencieux. Causes trouvées : courses comptées à la date de « Terminer » (une course du dimanche 22 h 30 terminée après minuit passait à la semaine suivante), récap figé jamais mis à jour, chaque clic « Générer » renvoyait la notification ; 4 Google Maps prêt, actif dès la clé posée (§ 6) ; 5, 6 `lib/fenetres.js` ; 7 catalogue YUL et P4, vérifié en production ; 10 `heure()` partout ; 11 l'ancien point de YUL était le centre des pistes et Google Maps recevait un point d'OpenStreetMap au lieu de l'adresse écrite. 297 tests, scénario de bout en bout (10 vérifications), écrans contrôlés dans Edge (captures), serveur et trois sites publiés (14 contrôles verts). Version 1.5.0 compilée (accord du propriétaire, avec expo-audio). **Non fait** : comparaison sur les vraies données (copie de la base refusée au mode automatique : `scripts/comparer-rapports.mjs` à lancer par le propriétaire), clé Google Maps (propriétaire) |
+| 7 oct. | Contrôle des récaps : le propriétaire lance `scripts/comparer-rapports.mjs` sur la copie du 6 octobre | **Défaut du script corrigé et vérifié** : la première version classait aussi les courses à venir (13, 14, 15 et 31 octobre) parmi les « jamais terminées, à corriger » ; désormais seules les courses dont l'heure était passée de plus de 12 h au moment de la copie sont signalées, « à vérifier avec le chauffeur », et un bilan d'un écran termine la sortie (`--bilan` pour lui seul). Vérifié sur une sauvegarde fictive (course à venir, en cours, oubliée, terminée en retard, annulée, non attribuée, écart au début de la période). Constat sur la partie visible de la sortie : deux courses des 18 et 19 septembre terminées le 22 passent de la semaine du 21 à celle du 14, même total sur les deux semaines. Bilan complet à relancer par le propriétaire. |
 
 ---
 
