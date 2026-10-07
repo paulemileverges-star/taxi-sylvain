@@ -6,29 +6,35 @@
 //
 // Ce fichier est du JavaScript PUR : aucun React, aucun JSX, aucune variable de compilation.
 // Il est importé tel quel par les tests du serveur (backend/test/scheduleOrder.test.js).
+//
+// Audit du 7 octobre 2026 (F11) : les jours suivaient le calendrier de L'ORDINATEUR. Depuis un
+// ordinateur réglé sur Paris, une course du samedi 23 h 30 (heure du Québec) tombait dans la colonne
+// du dimanche tout en affichant 23:30. Les jours et les semaines suivent désormais le calendrier du
+// Québec, comme les Rapports (lib/semaines.js), quel que soit le réglage de l'ordinateur.
+import { lundiDe, minuitQuebec, jourCivil } from "./semaines.js";
 
-/** Lundi 00 h 00 de la semaine qui contient cette date. */
+/** Lundi 00 h 00 (Québec) de la semaine qui contient cette date. */
 export function startOfWeek(d) {
-  const date = new Date(d);
-  const day = date.getDay() || 7;
-  date.setHours(0, 0, 0, 0);
-  date.setDate(date.getDate() - day + 1);
-  return date;
+  return lundiDe(d);
 }
 
 // Arithmétique de CALENDRIER, et non d'horloge : « + 7 jours » n'est pas « + 7 × 86 400 000 ms ».
 // Aux changements d'heure (8 mars et 1er novembre au Québec), la journée dure 23 h ou 25 h, et
 // l'ancien calcul décalait toute la grille d'un jour, voire faisait disparaître une course.
 export function addDays(date, n) {
-  const d = new Date(date);
-  d.setDate(d.getDate() + n);
-  d.setHours(0, 0, 0, 0);
-  return d;
+  const [y, m, j] = jourCivil(date).split("-").map(Number);
+  return minuitQuebec(y, m, j + n);
 }
 
-/** Même jour du calendrier (et non même intervalle de 24 h). */
+/** Même jour du calendrier du Québec (et non même intervalle de 24 h). */
 export function sameCivilDay(a, b) {
-  return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
+  return jourCivil(a) === jourCivil(b);
+}
+
+/** « 21/9 » : jour et mois du Québec, pour l'en-tête d'une colonne. */
+export function jourMois(date) {
+  const [, m, j] = jourCivil(date).split("-").map(Number);
+  return `${j}/${m}`;
 }
 
 // Heure qui fait foi : le créneau a son heure de début ; la course a son heure de prise en charge,

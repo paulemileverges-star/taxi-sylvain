@@ -45,7 +45,11 @@ export default function Drivers() {
   const [erreurFiche, setErreurFiche] = useState("");
   const fileInputRef = useRef(null);
 
-  const load = () => api.listDrivers().then(setDrivers);
+  // Une panne ne s'affiche plus comme une liste vide (audit du 7 octobre 2026, F08).
+  const [erreurListe, setErreurListe] = useState("");
+  const load = () => api.listDrivers()
+    .then((liste) => { setDrivers(liste); setErreurListe(""); })
+    .catch((e) => setErreurListe(`Impossible de charger les chauffeurs : ${e.message}`));
   useEffect(() => { load(); }, []);
 
   useEffect(() => {
@@ -89,9 +93,26 @@ export default function Drivers() {
 
   const remove = async (driver) => {
     if (!window.confirm(`Supprimer le compte de ${driver.name} ? Cette action est définitive.`)) return;
-    await api.deleteDriver(driver.id);
-    playSound("action");
+    try {
+      await api.deleteDriver(driver.id);
+      playSound("action");
+    } catch (e) {
+      alert(`Suppression impossible : ${e.message}`);
+    }
     load();
+  };
+
+  // Nouveau mot de passe temporaire (chauffeur qui a perdu le sien, ou compte importé) : montré une
+  // seule fois, et ses sessions ouvertes sont fermées (audit du 7 octobre 2026, B05).
+  const reinitialiser = async (driver) => {
+    if (!window.confirm(`Donner un nouveau mot de passe temporaire à ${driver.name} ? Ses sessions ouvertes seront fermées.`)) return;
+    try {
+      const r = await api.resetDriverPassword(driver.id);
+      playSound("action");
+      setCredentials(r.tempPassword);
+    } catch (e) {
+      alert(`Réinitialisation impossible : ${e.message}`);
+    }
   };
 
   // Porte de secours : le chauffeur n’a pas reçu son code de confirmation (courriel mal saisi,
@@ -182,6 +203,12 @@ export default function Drivers() {
           <button className="btn" onClick={() => setShowAdd(true)}>Nouveau chauffeur</button>
         </div>
       </div>
+      {erreurListe && (
+        <div className="card" role="alert" style={{ color: "#e85d4c", display: "flex", gap: 12, alignItems: "center" }}>
+          <span style={{ flex: 1 }}>{erreurListe}</span>
+          <button className="btn outline" onClick={load}>Réessayer</button>
+        </div>
+      )}
       {drivers.map((d) => (
         <div key={d.id} className="card row">
           <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
@@ -200,8 +227,10 @@ export default function Drivers() {
             )}
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <span className="chip">★ {d.ratingAvg?.toFixed(1) ?? "5.0"}</span>
+            {/* Pas de note fictive : sans avis réel, la fiche le dit (audit du 7 octobre 2026, B17). */}
+            <span className="chip">{d.ratingAvg != null ? `★ ${d.ratingAvg.toFixed(1)}` : "Aucune note"}</span>
             <button className="btn" onClick={() => ouvrirFiche(d)}>Modifier</button>
+            <button className="btn outline" title="Donner un nouveau mot de passe temporaire (ferme ses sessions ouvertes)" onClick={() => reinitialiser(d)}>Mot de passe</button>
             <button className="btn outline" onClick={() => photoInputs.current[d.id]?.click()}>Photo chauffeur</button>
             <input
               type="file" accept="image/*" style={{ display: "none" }}
@@ -269,10 +298,26 @@ export default function Drivers() {
             <div className="row"><h3>Résultat de l'import</h3><button onClick={() => setImportResult(null)}>✕</button></div>
             <div className="field-row"><span className="field-label">Chauffeurs créés :</span><span>{importResult.createdCount}</span></div>
             <div className="field-row"><span className="field-label">Lignes ignorées :</span><span>{importResult.skippedCount}</span></div>
+            {/* Mots de passe temporaires des comptes créés, montrés ici une seule fois (B05). */}
+            {importResult.created?.length > 0 && (
+              <>
+                <div style={{ marginTop: 10, fontSize: 12, color: "var(--amber)" }}>
+                  Mots de passe temporaires, montrés une seule fois : copiez-les maintenant pour les transmettre.
+                </div>
+                <div style={{ marginTop: 6, maxHeight: 200, overflowY: "auto", fontSize: 12 }}>
+                  {importResult.created.map((c) => (
+                    <div key={c.id} className="field-row"><span className="field-label">{c.name} · {c.email}</span><span style={{ fontFamily: "monospace" }}>{c.tempPassword}</span></div>
+                  ))}
+                </div>
+                <button className="btn outline" style={{ marginTop: 8, width: "100%" }} onClick={() => navigator.clipboard?.writeText(importResult.created.map((c) => `${c.name}\t${c.email}\t${c.tempPassword}`).join("\n"))}>
+                  Copier la liste (nom, courriel, mot de passe)
+                </button>
+              </>
+            )}
             {importResult.skipped?.length > 0 && (
               <div style={{ marginTop: 10, maxHeight: 200, overflowY: "auto", fontSize: 12, color: "var(--muted)" }}>
                 {importResult.skipped.map((s, i) => (
-                  <div key={i} style={{ marginBottom: 4 }}>{s.row?.nom || s.row?.name || "(ligne sans nom)"} — {s.reason}</div>
+                  <div key={i} style={{ marginBottom: 4 }}>{s.row?._ligne ? `Ligne ${s.row._ligne} : ` : ""}{s.row?.nom || s.row?.name || "(ligne sans nom)"} — {s.reason}</div>
                 ))}
               </div>
             )}

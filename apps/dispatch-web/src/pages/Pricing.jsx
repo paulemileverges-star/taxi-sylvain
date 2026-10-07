@@ -99,7 +99,10 @@ export default function Pricing() {
     load();
   };
 
-  const visible = zones.filter((z) => z.name.toLowerCase().normalize("NFD").includes(filter.toLowerCase().normalize("NFD")));
+  // Recherche insensible aux accents ET aux majuscules : « levis » trouve « Lévis » (audit du
+  // 7 octobre 2026, F20 : normalize("NFD") seul gardait les accents décomposés).
+  const sansAccents = (t) => String(t || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
+  const visible = zones.filter((z) => sansAccents(z.name).includes(sansAccents(filter)));
 
   return (
     <div>

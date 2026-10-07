@@ -1,14 +1,15 @@
 import React, { useState } from "react";
 import { api } from "../lib/api.js";
 import RideEditModal from "../components/RideEditModal.jsx";
+import { STATUS_LABEL, statusClass } from "../lib/status.js";
+import { jourHeure } from "../lib/heure.js";
 
 const ROLE_LABEL = { DISPATCH: "Dispatch", ADMIN: "Admin", DRIVER: "Chauffeur", CLIENT: "Client" };
 
-function fmtDate(d) {
-  return new Date(d).toLocaleDateString("fr-CA");
-}
-
-export default function Search() {
+// Audit du 7 octobre 2026 (F20) : statuts en anglais et date de SAISIE à l'heure de l'ordinateur ;
+// désormais les libellés et la date de la course (heure de Montréal) des autres pages.
+export default function Search({ user }) {
+  const peutModifierCourses = user?.role === "DISPATCH" || Boolean(user?.permissions?.includes("courses"));
   const [q, setQ] = useState("");
   const [results, setResults] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -39,6 +40,7 @@ export default function Search() {
       <form onSubmit={run} className="row" style={{ gap: 8, alignItems: "flex-start" }}>
         <input
           className="input"
+          aria-label="Rechercher"
           style={{ marginTop: 0, flex: 1 }}
           placeholder="Nom, courriel, adresse de départ ou de destination…"
           value={q}
@@ -68,13 +70,13 @@ export default function Search() {
           {results.rides.map((r) => (
             <div key={r.id} className="card">
               <div className="row" style={{ marginBottom: 6 }}>
-                <span className="chip">{r.status}</span>
-                <span style={{ color: "#f5a623", fontWeight: 700 }}>{r.fare?.toFixed(2)} $</span>
+                <span className={`chip status-chip ${statusClass(r.status)}`}>{STATUS_LABEL[r.status] || r.status}</span>
+                <span style={{ color: "#f5a623", fontWeight: 700 }}>{r.fare > 0 ? `${r.fare.toFixed(2)} $` : "Montant à confirmer"}</span>
               </div>
-              <div className="field-row"><span className="field-label">Date :</span><span>{fmtDate(r.createdAt)}</span></div>
+              <div className="field-row"><span className="field-label">Date de la course :</span><span>{jourHeure(r.scheduledFor || r.createdAt)}</span></div>
               <div className="field-row"><span className="field-label">Départ :</span><span>{r.pickupAddress}</span></div>
               <div className="field-row"><span className="field-label">Destination :</span><span>{r.destAddress}</span></div>
-              <button className="btn outline" style={{ marginTop: 8 }} onClick={() => setOpenRideId(r.id)}>Ouvrir la course</button>
+              {peutModifierCourses && <button className="btn outline" style={{ marginTop: 8 }} onClick={() => setOpenRideId(r.id)}>Ouvrir la course</button>}
             </div>
           ))}
         </>

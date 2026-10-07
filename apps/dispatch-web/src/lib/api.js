@@ -1,19 +1,52 @@
 const BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:4000/api";
 
 function getToken() {
-  return localStorage.getItem("ts_token");
+  try {
+    return localStorage.getItem("ts_token");
+  } catch {
+    return null;
+  }
 }
 
-async function request(path, { method = "GET", body } = {}) {
-  const res = await fetch(`${BASE_URL}${path}`, {
-    method,
-    headers: {
-      "Content-Type": "application/json",
-      ...(getToken() ? { Authorization: `Bearer ${getToken()}` } : {}),
-    },
-    body: body ? JSON.stringify(body) : undefined,
-  });
+// Session expirée ou révoquée (mot de passe changé ailleurs, compte supprimé) : l'application revient
+// à l'écran de connexion au lieu d'afficher des pages vides (audit du 7 octobre 2026, F08).
+let surSessionExpiree = null;
+export function quandSessionExpiree(fn) {
+  surSessionExpiree = fn;
+}
+
+// Délai maximal d'une requête : un serveur muet ne doit pas laisser un écran « Chargement… » sans fin.
+const DELAI_MS = 20000;
+
+// Clé tirée au hasard pour une saisie (création de course) : le serveur ne crée qu'une course par clé.
+export function nouvelleCle() {
+  try {
+    if (globalThis.crypto?.randomUUID) return globalThis.crypto.randomUUID();
+  } catch { /* repli ci-dessous */ }
+  return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}-${Math.random().toString(36).slice(2)}`;
+}
+
+async function request(path, { method = "GET", body, entetes = {} } = {}) {
+  const avaitJeton = Boolean(getToken());
+  let res;
+  try {
+    res = await fetch(`${BASE_URL}${path}`, {
+      method,
+      headers: {
+        "Content-Type": "application/json",
+        ...(getToken() ? { Authorization: `Bearer ${getToken()}` } : {}),
+        ...entetes,
+      },
+      body: body ? JSON.stringify(body) : undefined,
+      signal: AbortSignal.timeout ? AbortSignal.timeout(DELAI_MS) : undefined,
+    });
+  } catch (e) {
+    const err = new Error(e?.name === "TimeoutError" ? "Le serveur ne répond pas. Vérifiez la connexion et réessayez." : "Connexion au serveur impossible. Vérifiez la connexion et réessayez.");
+    err.status = 0;
+    throw err;
+  }
   const data = await res.json().catch(() => ({}));
+  if (res.status === 401 && avaitJeton && !path.startsWith("/auth/login") && surSessionExpiree) surSessionExpiree();
   if (!res.ok) {
     const err = new Error(data.error || "Erreur réseau");
     err.status = res.status;
@@ -35,7 +68,10 @@ async function downloadFile(path, filename) {
   const res = await fetch(`${BASE_URL}${path}`, {
     headers: { ...(getToken() ? { Authorization: `Bearer ${getToken()}` } : {}) },
   });
-  if (!res.ok) throw new Error("Échec du téléchargement.");
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data.error || "Échec du téléchargement.");
+  }
   const blob = await res.blob();
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
@@ -72,16 +108,25 @@ export const api = {
   webPushUnsubscribe: (endpoint) => request("/push/web/subscribe", { method: "DELETE", body: { endpoint } }),
   changePassword: (currentPassword, newPassword) => request("/auth/change-password", { method: "POST", body: { currentPassword, newPassword } }),
   listRides: () => request("/rides"),
+  // Fournisseur d'adresses du serveur (google ou openstreetmap) : règle le rythme de la recherche.
+  geocodeProvider: () => request("/geocode/fournisseur"),
   geocodeSearch: (q, session) => request(`/geocode/search?q=${encodeURIComponent(q)}${session ? `&session=${encodeURIComponent(session)}` : ""}`),
   // Détail d'une suggestion Google choisie : adresse complète et point exact (6 octobre 2026).
   geocodePlace: (placeId, session, { q = "", nom = "" } = {}) =>
     request(`/geocode/place/${encodeURIComponent(placeId)}?${new URLSearchParams({ ...(session ? { session } : {}), q, nom })}`),
-  createRide: (payload) => request("/rides", { method: "POST", body: payload }),
+  // La clé rend la création idempotente (double clic, réseau lent) : voir backend/src/lib/idempotence.js.
+  createRide: (payload, cle) => request("/rides", { method: "POST", body: payload, entetes: cle ? { "Idempotency-Key": cle } : {} }),
   getRide: (id) => request(`/rides/${id}`),
   updateRide: (id, payload) => request(`/rides/${id}`, { method: "PATCH", body: payload }),
   assignDriver: (rideId, driverId) => request(`/rides/${rideId}/assign`, { method: "POST", body: { driverId } }),
   broadcastRide: (rideId) => request(`/rides/${rideId}/broadcast`, { method: "POST" }),
   listDrivers: () => request("/drivers"),
+  // Liste minimale (nom, véhicule, en ligne) pour les sélecteurs de Courses, Cédule et Messagerie :
+  // accessible sans la permission Chauffeurs (audit du 7 octobre 2026, F04).
+  listDriverChoices: () => request("/drivers/choix"),
+  resetDriverPassword: (id) => request(`/drivers/${id}/reset-password`, { method: "POST" }),
+  resetClientPassword: (id) => request(`/clients/${id}/reset-password`, { method: "POST" }),
+  me: () => request("/auth/me"),
   driverLocations: () => request("/drivers/locations"),
   search: (q) => request(`/drivers/search?q=${encodeURIComponent(q)}`),
   createDriver: (payload) => request("/drivers", { method: "POST", body: payload }),
@@ -162,9 +207,11 @@ export const api = {
   refuseDeletion: (userId, raison) => request(`/admins/deletion-requests/${userId}/refuse`, { method: "POST", body: { raison } }),
   emailStatus: () => request("/admins/email-status"),
   sendTestEmail: (to) => request("/admins/email-test", { method: "POST", body: to ? { to } : {} }),
-  setToken: (t) => localStorage.setItem("ts_token", t),
+  setToken: (t) => { try { localStorage.setItem("ts_token", t); } catch { /* stockage indisponible */ } },
   logout: () => {
-    localStorage.removeItem("ts_token");
-    localStorage.removeItem("ts_user");
+    try {
+      localStorage.removeItem("ts_token");
+      localStorage.removeItem("ts_user");
+    } catch { /* stockage indisponible */ }
   },
 };

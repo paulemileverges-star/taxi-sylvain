@@ -26,6 +26,8 @@ function PermissionEditor({ admin, onSaved }) {
       await api.updateAdminPermissions(admin.id, permissions);
       playSound("action");
       onSaved();
+    } catch (e) {
+      alert(`Permissions non enregistrées : ${e.message}`);
     } finally {
       setSaving(false);
     }
@@ -90,9 +92,12 @@ function EmailSettings() {
         <div>
           <div>Courriels automatiques de course</div>
           <div style={{ color: "var(--muted)", fontSize: 13 }}>
-            {status.configured
-              ? `Actifs via ${status.provider}, expéditeur ${status.from}. Chaque course confirmée part par courriel avec l'invitation d'agenda.`
-              : "Inactifs : aucune clé de fournisseur n'est encore renseignée sur le serveur. Les courses ne partent pas par courriel."}
+            {/* Une panne de lecture n'est pas « aucune clé » (audit du 7 octobre 2026, F07). */}
+            {status.unavailable
+              ? "État des courriels indisponible pour le moment (serveur injoignable ou réponse en erreur). Réessayez plus tard ; cela ne dit rien de la configuration."
+              : status.configured
+                ? `Actifs via ${status.provider}, expéditeur ${status.from}. Chaque course confirmée part par courriel avec l'invitation d'agenda.`
+                : "Inactifs : aucune clé de fournisseur n'est encore renseignée sur le serveur. Les courses ne partent pas par courriel."}
           </div>
         </div>
         <button className="btn outline" disabled={sending || !status.configured} onClick={test}>
@@ -111,12 +116,17 @@ export default function Admins() {
   const [error, setError] = useState("");
   const [credentials, setCredentials] = useState(null);
 
-  const load = () => api.listAdmins().then(setAdmins);
+  const load = () => api.listAdmins().then(setAdmins).catch((e) => setError(`Liste des administrateurs indisponible : ${e.message}`));
   useEffect(() => { load(); }, []);
 
   const remove = async (admin) => {
     if (!window.confirm(`Supprimer le compte admin de ${admin.name} ?`)) return;
-    await api.deleteAdmin(admin.id);
+    try {
+      await api.deleteAdmin(admin.id);
+    } catch (e) {
+      alert(`Suppression impossible : ${e.message}`);
+      return;
+    }
     playSound("action");
     load();
   };

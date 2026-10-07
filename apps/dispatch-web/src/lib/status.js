@@ -1,3 +1,5 @@
+import { heureMontrealVersIso, isoVersSaisieMontreal } from "./semaines.js";
+
 // Libellés et couleurs des statuts de course, partagés par toutes les pages du Dispatch.
 export const STATUS_LABEL = {
   REQUESTED: "En attente",
@@ -16,16 +18,14 @@ export function statusClass(status) {
   return `status-${status || "REQUESTED"}`;
 }
 
-// Convertit une valeur de <input type="datetime-local"> (heure locale du navigateur, sans fuseau)
-// en instant UTC non ambigu pour le serveur — sinon le serveur (en UTC) la réinterprète et
-// l'heure affichée aux chauffeurs est décalée de 4 à 5 heures.
+// Convertit une valeur de <input type="datetime-local"> en instant UTC non ambigu pour le serveur.
+// La saisie est une heure DE MONTRÉAL, jamais celle de l'ordinateur (audit du 7 octobre 2026, F03) :
+// voir lib/semaines.js. Les deux noms restent ceux qu'utilisent déjà les pages.
 export function localInputToIso(value) {
-  return value ? new Date(value).toISOString() : null;
+  return heureMontrealVersIso(value);
 }
 
-// Inverse : instant UTC -> valeur locale pour pré-remplir un <input type="datetime-local">.
+// Inverse : instant UTC -> valeur d'un <input type="datetime-local">, à l'heure de Montréal.
 export function isoToLocalInput(iso) {
-  if (!iso) return "";
-  const d = new Date(iso);
-  return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+  return isoVersSaisieMontreal(iso);
 }

@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import "./App.css";
-import { api } from "./lib/api.js";
-import { getSocket, resetSocket } from "./lib/socket.js";
+import { api, quandSessionExpiree } from "./lib/api.js";
+import { getSocket, resetSocket, quandConnexionRefusee } from "./lib/socket.js";
 import { playSound } from "./lib/sound.js";
 import { notifyWeb, registerWebPush, unregisterWebPush } from "./lib/webNotify.js";
 import Login from "./pages/Login.jsx";
@@ -22,34 +22,55 @@ import ChangePasswordModal from "./components/ChangePasswordModal.jsx";
 import logo from "./assets/logo.png";
 import { statusClass } from "./lib/status.js";
 
+// Chaque page n'apparaît qu'avec l'une des permissions que le serveur exige pour elle (audit du
+// 7 octobre 2026, F04) : avant, Recherche, Carte et Messagerie s'affichaient à tous les comptes et
+// restaient vides faute de droit.
 const NAV = [
   { key: "dashboard", label: "Tableau de bord" },
-  { key: "search", label: "Recherche" },
-  { key: "map", label: "Carte" },
-  { key: "courses", label: "Courses", permission: "courses" },
-  { key: "pricing", label: "Tarifs", permission: "courses" },
-  { key: "schedule", label: "Cédule", permission: "schedule" },
-  { key: "drivers", label: "Chauffeurs", permission: "drivers" },
-  { key: "clients", label: "Clients", permission: "clients" },
-  { key: "reports", label: "Rapports", permission: "reports" },
-  { key: "messages", label: "Messagerie" },
-  { key: "groups", label: "Groupes", permission: "groups" },
+  { key: "search", label: "Recherche", permissions: ["drivers", "clients", "courses", "schedule"] },
+  { key: "map", label: "Carte", permissions: ["courses", "drivers"] },
+  { key: "courses", label: "Courses", permissions: ["courses"] },
+  { key: "pricing", label: "Tarifs", permissions: ["courses"] },
+  { key: "schedule", label: "Cédule", permissions: ["schedule"] },
+  { key: "drivers", label: "Chauffeurs", permissions: ["drivers"] },
+  { key: "clients", label: "Clients", permissions: ["clients"] },
+  { key: "reports", label: "Rapports", permissions: ["reports"] },
+  { key: "messages", label: "Messagerie", permissions: ["groups"] },
+  { key: "groups", label: "Groupes", permissions: ["groups"] },
   { key: "admins", label: "Administrateurs", dispatchOnly: true },
   { key: "suppressions", label: "Suppressions", dispatchOnly: true },
 ];
 
+/** Le compte a-t-il accès à cette entrée du menu ? Même règle que le serveur (lib/equipe.js). */
+export function accesPage(user, entree) {
+  if (!user) return false;
+  if (user.role === "DISPATCH") return true;
+  if (entree.dispatchOnly) return false;
+  if (!entree.permissions) return true;
+  return entree.permissions.some((p) => user.permissions?.includes(p));
+}
+
 // Session ouverte : jeton et profil gardés dans le navigateur.
 function ouvrirSession(data, setUser) {
   api.setToken(data.token);
-  localStorage.setItem("ts_user", JSON.stringify(data.user));
+  try { localStorage.setItem("ts_user", JSON.stringify(data.user)); } catch { /* stockage indisponible */ }
   setUser(data.user);
 }
 
-export default function App() {
-  const [user, setUser] = useState(() => {
+// Profil gardé dans le navigateur, lu prudemment : un stockage abîmé ne doit pas donner une page
+// blanche (audit du 7 octobre 2026, F14).
+function profilEnregistre() {
+  try {
     const raw = localStorage.getItem("ts_user");
-    return raw ? JSON.parse(raw) : null;
-  });
+    const user = raw ? JSON.parse(raw) : null;
+    return user && typeof user === "object" && user.id ? user : null;
+  } catch {
+    return null;
+  }
+}
+
+export default function App() {
+  const [user, setUser] = useState(profilEnregistre);
   const [screen, setScreen] = useState("dashboard");
   const [notifs, setNotifs] = useState([]);
   const [toasts, setToasts] = useState([]);
@@ -59,6 +80,47 @@ export default function App() {
   // Demandes de suppression de compte en attente (pastille du menu, compte Dispatch seulement).
   const [deletionCount, setDeletionCount] = useState(0);
   const refreshDeletions = () => api.listDeletionRequests().then((l) => setDeletionCount(l.length)).catch(() => null);
+
+  // Session expirée ou révoquée : retour à l'écran de connexion. À l'ouverture, le profil (rôle et
+  // permissions) est relu au serveur : la copie du navigateur peut dater (F08, F14).
+  useEffect(() => {
+    const sortir = () => {
+      resetSocket();
+      api.logout();
+      setUser(null);
+    };
+    quandSessionExpiree(sortir);
+    quandConnexionRefusee(sortir);
+  }, []);
+  useEffect(() => {
+    if (!user) return;
+    api.me().then((profil) => {
+      if (!profil?.id) return;
+      setUser((u) => (u && (JSON.stringify(u.permissions) !== JSON.stringify(profil.permissions) || u.role !== profil.role || u.name !== profil.name) ? { ...u, ...profil } : u));
+      try { localStorage.setItem("ts_user", JSON.stringify({ ...user, ...profil })); } catch { /* stockage indisponible */ }
+    }).catch(() => null);
+  }, [user?.id]);
+
+  // Clic sur une notification du navigateur (service worker, F17) : ouvre la page concernée.
+  useEffect(() => {
+    if (!user) return undefined;
+    const ouvrir = (donnees) => {
+      const type = String(donnees?.type || "");
+      const cible = type.startsWith("message:direct") ? "messages" : type.startsWith("message:group") ? "groups" : type.startsWith("ride") ? "courses" : type.startsWith("report") ? "reports" : null;
+      const entree = NAV.find((n) => n.key === cible);
+      if (entree && accesPage(user, entree)) setScreen(cible);
+    };
+    const surMessage = (e) => { if (e.data?.type === "notification-clic") ouvrir(e.data.data); };
+    navigator.serviceWorker?.addEventListener("message", surMessage);
+    try {
+      const brut = new URLSearchParams(window.location.search).get("notification");
+      if (brut) {
+        ouvrir(JSON.parse(brut));
+        window.history.replaceState(null, "", window.location.pathname);
+      }
+    } catch { /* adresse illisible : on reste sur l'accueil */ }
+    return () => navigator.serviceWorker?.removeEventListener("message", surMessage);
+  }, [user?.id]);
 
   useEffect(() => {
     if (!user || user.role !== "DISPATCH") return undefined;
@@ -82,26 +144,33 @@ export default function App() {
       setTimeout(() => setToasts((prev) => prev.filter((t) => t.id !== entry.id)), 9000);
       desktopNotify(n.text);
     };
-    socket.on("ride:notification", (n) => { push(n); playSound(n.status === "COMPLETED" ? "action" : "notify"); });
-    socket.on("ride:created", (ride) => { push({ text: `Nouvelle course créée : ${ride?.pickupAddress || ""} → ${ride?.destAddress || ""}`, status: ride?.status || "REQUESTED" }); playSound("notify"); });
-    socket.on("ride:refused", () => playSound("notify"));
-    socket.on("report:generated", () => playSound("notify"));
-    socket.on("message:direct", (m) => {
+    // Écouteurs nommés, retirés un par un : « off(évènement) » sans fonction retirait aussi ceux des
+    // pages ouvertes (audit du 7 octobre 2026, F02).
+    const surNotification = (n) => { push(n); playSound(n.status === "COMPLETED" ? "action" : "notify"); };
+    const surCreation = (ride) => { push({ text: `Nouvelle course créée : ${ride?.pickupAddress || ""} → ${ride?.destAddress || ""}`, status: ride?.status || "REQUESTED" }); playSound("notify"); };
+    const surSon = () => playSound("notify");
+    const surDirect = (m) => {
       if (m.sender.id === user.id) return;
       playSound("notify"); desktopNotify(`${m.sender.name} : ${m.text}`); refreshUnread();
-    });
-    socket.on("message:group", ({ message }) => {
+    };
+    const surGroupe = ({ message }) => {
       if (message.sender.id === user.id) return;
       playSound("notify"); desktopNotify(`${message.sender.name} (groupe) : ${message.text}`); refreshUnread();
-    });
+    };
+    socket.on("ride:notification", surNotification);
+    socket.on("ride:created", surCreation);
+    socket.on("ride:refused", surSon);
+    socket.on("report:generated", surSon);
+    socket.on("message:direct", surDirect);
+    socket.on("message:group", surGroupe);
     refreshUnread();
     return () => {
-      socket.off("ride:notification");
-      socket.off("ride:created");
-      socket.off("ride:refused");
-      socket.off("report:generated");
-      socket.off("message:direct");
-      socket.off("message:group");
+      socket.off("ride:notification", surNotification);
+      socket.off("ride:created", surCreation);
+      socket.off("ride:refused", surSon);
+      socket.off("report:generated", surSon);
+      socket.off("message:direct", surDirect);
+      socket.off("message:group", surGroupe);
     };
   }, [user]);
 
@@ -128,12 +197,7 @@ export default function App() {
       <div className="sidebar">
         <div className="brand"><img src={logo} alt="" />TAXI SYLVAIN</div>
         <div className="nav-list" style={{ flex: 1 }}>
-          {NAV.filter((n) => {
-            if (user.role === "DISPATCH") return true;
-            if (n.dispatchOnly) return false;
-            if (!n.permission) return true;
-            return user.permissions?.includes(n.permission);
-          }).map((n) => (
+          {NAV.filter((n) => accesPage(user, n)).map((n) => (
             <button
               key={n.key}
               className={`nav-item ${screen === n.key ? "active" : ""}`}
@@ -153,17 +217,18 @@ export default function App() {
         </div>
       </div>
       <div className="content">
+        {/* Une page n'est affichée que si le compte y a toujours accès (permissions relues à l'ouverture). */}
         {screen === "dashboard" && <Dashboard notifs={notifs} />}
-        {screen === "search" && <Search />}
-        {screen === "map" && <LiveMap />}
-        {screen === "courses" && <Courses />}
-        {screen === "pricing" && <Pricing />}
-        {screen === "schedule" && <Schedule />}
-        {screen === "drivers" && <Drivers />}
-        {screen === "clients" && <Clients />}
-        {screen === "reports" && <Reports />}
-        {screen === "messages" && <Messages unread={unread.direct.byDriver} onRead={refreshUnread} />}
-        {screen === "groups" && <Groups unread={unread.groups.byConversation} onRead={refreshUnread} />}
+        {screen === "search" && accesPage(user, NAV[1]) && <Search user={user} />}
+        {screen === "map" && accesPage(user, NAV[2]) && <LiveMap />}
+        {screen === "courses" && accesPage(user, NAV[3]) && <Courses user={user} />}
+        {screen === "pricing" && accesPage(user, NAV[4]) && <Pricing />}
+        {screen === "schedule" && accesPage(user, NAV[5]) && <Schedule user={user} />}
+        {screen === "drivers" && accesPage(user, NAV[6]) && <Drivers />}
+        {screen === "clients" && accesPage(user, NAV[7]) && <Clients />}
+        {screen === "reports" && accesPage(user, NAV[8]) && <Reports />}
+        {screen === "messages" && accesPage(user, NAV[9]) && <Messages unread={unread.direct.byDriver} onRead={refreshUnread} />}
+        {screen === "groups" && accesPage(user, NAV[10]) && <Groups user={user} unread={unread.groups.byConversation} onRead={refreshUnread} />}
         {screen === "admins" && user.role === "DISPATCH" && <Admins />}
         {screen === "suppressions" && user.role === "DISPATCH" && <Suppressions onChanged={setDeletionCount} />}
       </div>

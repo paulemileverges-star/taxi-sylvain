@@ -26,7 +26,7 @@ export default function RideEditModal({ rideId, onClose, onSaved, onDeleted }) {
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    Promise.all([api.getRide(rideId), api.listClients().catch(() => []), api.listDrivers().catch(() => []), api.listDestinations().catch(() => [])])
+    Promise.all([api.getRide(rideId), api.listClients().catch(() => []), api.listDriverChoices().catch(() => []), api.listDestinations().catch(() => [])])
       .then(([r, c, d, dest]) => {
         setRide(r); setClients(c); setDrivers(d); setDestinations(dest);
         const preset = dest.find((x) => x.address === r.destAddress);

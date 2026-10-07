@@ -26,13 +26,21 @@ self.addEventListener("push", (event) => {
   event.waitUntil(self.registration.showNotification(charge.title || "Taxi Sylvain", options));
 });
 
+// Audit du 7 octobre 2026 (F17) : le clic ramenait seulement l'application au premier plan, sans
+// ouvrir la course ou le message concerné. Le contenu de la notification (type, course, groupe) est
+// maintenant transmis à l'application, qui ouvre le bon écran ; une fenêtre neuve le reçoit dans
+// son adresse (?notification=...).
 self.addEventListener("notificationclick", (event) => {
   event.notification.close();
+  const donnees = event.notification.data || {};
   event.waitUntil(
     self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((fenetres) => {
       const ouverte = fenetres.find((f) => "focus" in f);
-      if (ouverte) return ouverte.focus();
-      return self.clients.openWindow("/");
+      if (ouverte) {
+        ouverte.postMessage({ type: "notification-clic", data: donnees });
+        return ouverte.focus();
+      }
+      return self.clients.openWindow("/?notification=" + encodeURIComponent(JSON.stringify(donnees)));
     })
   );
 });

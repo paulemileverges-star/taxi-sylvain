@@ -64,3 +64,30 @@ export function jourCivil(date) {
   const { y, m, d } = parties(new Date(date));
   return `${y}-${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
 }
+
+const deux = (n) => String(n).padStart(2, "0");
+
+/**
+ * Heure SAISIE dans la console (« 2026-10-10T10:00 », champ datetime-local) lue comme heure de
+ * Montréal, été comme hiver, quel que soit le fuseau de l'ordinateur (audit du 7 octobre 2026, F03 :
+ * saisie depuis un ordinateur réglé sur Paris, la course partait six heures trop tôt). Instant ISO,
+ * ou null si la saisie est vide ou illisible.
+ */
+export function heureMontrealVersIso(valeur) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/.exec(String(valeur || ""));
+  if (!m) return null;
+  const [y, mo, d, h, mi] = m.slice(1).map(Number);
+  const naif = Date.UTC(y, mo - 1, d, h, mi);
+  let r = new Date(naif - decalage(new Date(naif)) * 60000);
+  r = new Date(naif - decalage(r) * 60000);
+  return r.toISOString();
+}
+
+/** Inverse : instant -> valeur d'un champ datetime-local, à l'heure de Montréal. */
+export function isoVersSaisieMontreal(iso) {
+  if (!iso) return "";
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return "";
+  const { y, m, d, h, mi } = parties(date);
+  return `${y}-${deux(m)}-${deux(d)}T${deux(h)}:${deux(mi)}`;
+}

@@ -9,27 +9,34 @@ function conversationTitle(conv, meId) {
   return others.map((p) => p.name).join(", ") || "Groupe";
 }
 
-export default function Groups({ unread = {}, onRead }) {
+// Audit du 7 octobre 2026 : la liste des membres possibles n'exige plus les permissions Chauffeurs et
+// Clients (F04 : sans elles, la page ne s'ouvrait pas) ; chaque groupe garde son propre brouillon, les
+// messages sont vidés au changement de groupe et une réponse tardive d'un autre groupe est ignorée (F23).
+export default function Groups({ user, unread = {}, onRead }) {
   const [conversations, setConversations] = useState([]);
   const [drivers, setDrivers] = useState([]);
   const [clients, setClients] = useState([]);
   const [activeId, setActiveId] = useState(null);
   const [messages, setMessages] = useState([]);
-  const [draft, setDraft] = useState("");
+  const [brouillons, setBrouillons] = useState({});
+  const [envoi, setEnvoi] = useState(false);
+  const [erreur, setErreur] = useState("");
   const [showCreate, setShowCreate] = useState(false);
   const [newName, setNewName] = useState("");
   const [selectedIds, setSelectedIds] = useState([]);
-  const [me, setMe] = useState(null);
+  const me = user;
+  const accesClients = user?.role === "DISPATCH" || Boolean(user?.permissions?.includes("clients"));
   const bottomRef = useRef(null);
+  const groupeDemande = useRef(null);
 
   useEffect(() => {
-    const raw = localStorage.getItem("ts_user");
-    if (raw) setMe(JSON.parse(raw));
-    Promise.all([api.listConversations(), api.listDrivers(), api.listClients()]).then(([convs, d, c]) => {
-      setConversations(convs);
-      setDrivers(d);
-      setClients(c);
-      if (convs.length > 0) setActiveId(convs[0].id);
+    Promise.allSettled([api.listConversations(), api.listDriverChoices(), accesClients ? api.listClients() : Promise.resolve([])]).then(([convs, d, c]) => {
+      if (convs.status === "fulfilled") {
+        setConversations(convs.value);
+        if (convs.value.length > 0) setActiveId(convs.value[0].id);
+      } else setErreur(convs.reason?.message || "Groupes indisponibles.");
+      if (d.status === "fulfilled") setDrivers(d.value);
+      if (c.status === "fulfilled") setClients(c.value);
     });
   }, []);
 
@@ -37,8 +44,19 @@ export default function Groups({ unread = {}, onRead }) {
 
   useEffect(() => {
     if (!activeId) return;
-    api.listConversationMessages(activeId).then(setMessages).then(() => markRead(activeId));
+    groupeDemande.current = activeId;
+    setMessages([]);
+    api.listConversationMessages(activeId)
+      .then((liste) => {
+        if (groupeDemande.current !== activeId) return;
+        setMessages(liste);
+        markRead(activeId);
+      })
+      .catch((e) => { if (groupeDemande.current === activeId) setErreur(e.message || "Messages indisponibles."); });
   }, [activeId]);
+
+  const draft = (activeId && brouillons[activeId]) || "";
+  const setDraft = (texte) => setBrouillons((b) => ({ ...b, [activeId]: texte }));
 
   useEffect(() => {
     const socket = getSocket();
@@ -58,15 +76,29 @@ export default function Groups({ unread = {}, onRead }) {
   }, [messages]);
 
   const send = async () => {
-    if (!draft.trim() || !activeId) return;
-    await api.sendConversationMessage(activeId, draft);
-    setDraft("");
-    playSound("action");
+    const groupe = activeId;
+    const texte = (brouillons[groupe] || "").trim();
+    if (!texte || !groupe || envoi) return;
+    setEnvoi(true);
+    try {
+      await api.sendConversationMessage(groupe, texte);
+      setBrouillons((b) => ({ ...b, [groupe]: "" }));
+      playSound("action");
+    } catch (e) {
+      window.alert(e.message || "Message non envoyé.");
+    } finally {
+      setEnvoi(false);
+    }
   };
 
   const removeGroup = async (conversation) => {
     if (!window.confirm(`Supprimer le groupe « ${conversationTitle(conversation, me?.id)} » et tous ses messages ? Cette action est définitive.`)) return;
-    await api.deleteConversation(conversation.id);
+    try {
+      await api.deleteConversation(conversation.id);
+    } catch (e) {
+      window.alert(e.message || "Suppression impossible.");
+      return;
+    }
     playSound("action");
     const remaining = conversations.filter((c) => c.id !== conversation.id);
     setConversations(remaining);
@@ -81,7 +113,13 @@ export default function Groups({ unread = {}, onRead }) {
 
   const createGroup = async () => {
     if (selectedIds.length === 0) return;
-    const conv = await api.createConversation({ name: newName || undefined, participantIds: selectedIds });
+    let conv;
+    try {
+      conv = await api.createConversation({ name: newName || undefined, participantIds: selectedIds });
+    } catch (e) {
+      window.alert(e.message || "Création impossible.");
+      return;
+    }
     setConversations((prev) => [conv, ...prev]);
     setActiveId(conv.id);
     setShowCreate(false);
@@ -101,6 +139,7 @@ export default function Groups({ unread = {}, onRead }) {
           <button className="btn" onClick={() => setShowCreate(true)}>Nouveau groupe</button>
         </div>
       </div>
+      {erreur && <div className="card" role="alert" style={{ color: "#e85d4c" }}>{erreur}</div>}
       <div className="messages-layout">
         <div className="card messages-driverlist" style={{ padding: 8, overflowY: "auto" }}>
           {conversations.map((c) => (
@@ -152,12 +191,13 @@ export default function Groups({ unread = {}, onRead }) {
               <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
                 <input
                   className="input" style={{ marginTop: 0 }}
-                  placeholder="Écrire un message au groupe…"
+                  aria-label={`Message au groupe ${conversationTitle(active, me?.id)}`}
+                  placeholder={`Écrire au groupe « ${conversationTitle(active, me?.id)} »…`}
                   value={draft}
                   onChange={(e) => setDraft(e.target.value)}
                   onKeyDown={(e) => { if (e.key === "Enter") send(); }}
                 />
-                <button className="btn" onClick={send}>Envoyer</button>
+                <button className="btn" onClick={send} disabled={envoi || !draft.trim()}>{envoi ? "Envoi…" : "Envoyer"}</button>
               </div>
             </>
           ) : (
@@ -182,6 +222,7 @@ export default function Groups({ unread = {}, onRead }) {
             ))}
 
             <div style={{ marginTop: 12, fontSize: 12, color: "#8b99b5", textTransform: "uppercase" }}>Clients</div>
+            {!accesClients && <div style={{ fontSize: 12, color: "var(--muted)" }}>La liste des clients demande la permission Clients.</div>}
             {clients.map((c) => (
               <label key={c.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 0", cursor: "pointer" }}>
                 <input type="checkbox" checked={selectedIds.includes(c.id)} onChange={() => toggleSelected(c.id)} />

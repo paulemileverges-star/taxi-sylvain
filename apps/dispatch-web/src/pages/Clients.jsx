@@ -4,24 +4,36 @@ import { playSound } from "../lib/sound.js";
 import AddressInput from "../components/AddressInput.jsx";
 import { matchedFields } from "../lib/clientSearch.js";
 
-function ClientCard({ client, onDelete, onEdit, onConfirmEmail, masque, trouvePar }) {
+function ClientCard({ client, onDelete, onEdit, onConfirmEmail, onResetPassword, masque, trouvePar }) {
   const [notes, setNotes] = useState(client.notes || "");
+  // Dernière valeur enregistrée sur le serveur. Audit du 7 octobre 2026 (F22) : la comparaison se
+  // faisait avec l'ancienne valeur de la liste, et deux secondes après un enregistrement réussi la
+  // fiche affichait de nouveau « Modifications non enregistrées ».
+  const [reference, setReference] = useState(client.notes || "");
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
-  const dirty = notes !== (client.notes || "");
+  const [erreurMemo, setErreurMemo] = useState("");
+  const dirty = notes !== reference;
 
   // La fiche est recréée à chaque rechargement de la liste : on resynchronise le mémo avec la
   // valeur du serveur, sinon un ancien texte encore affiché pouvait écraser une modification faite
   // ailleurs (bouton Modifier, import). L'adresse, elle, ne se modifie plus que par « Modifier ».
-  useEffect(() => { setNotes(client.notes || ""); }, [client.notes]);
+  useEffect(() => { setNotes(client.notes || ""); setReference(client.notes || ""); }, [client.notes]);
 
   const save = async () => {
     setSaving(true);
+    setErreurMemo("");
     try {
-      await api.updateClientNotes(client.id, notes.trim() || null);
+      const r = await api.updateClientNotes(client.id, notes.trim() || null);
+      const enregistre = r?.notes ?? (notes.trim() || "");
+      setReference(enregistre || "");
+      setNotes(enregistre || "");
       playSound("action");
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
+    } catch (e) {
+      // Le texte saisi reste là, pour réessayer.
+      setErreurMemo(`Non enregistré : ${e.message}`);
     } finally {
       setSaving(false);
     }
@@ -51,8 +63,10 @@ function ClientCard({ client, onDelete, onEdit, onConfirmEmail, masque, trouvePa
           </div>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <span className="chip">★ {client.ratingAvg?.toFixed(1) ?? "5.0"}</span>
+          {/* Pas de note fictive : sans avis réel, la fiche le dit (audit du 7 octobre 2026, B17). */}
+          <span className="chip">{client.ratingAvg != null ? `★ ${client.ratingAvg.toFixed(1)}` : "Aucune note"}</span>
           <button className="btn outline" onClick={() => onEdit(client)}>Modifier</button>
+          <button className="btn outline" title="Donner un nouveau mot de passe temporaire (ferme ses sessions ouvertes)" onClick={() => onResetPassword(client)}>Mot de passe</button>
           <button className="btn red" onClick={() => onDelete(client)}>Supprimer</button>
         </div>
       </div>
@@ -98,8 +112,8 @@ function ClientCard({ client, onDelete, onEdit, onConfirmEmail, masque, trouvePa
         onChange={(e) => setNotes(e.target.value)}
       />
       <div className="row" style={{ marginTop: 6 }}>
-        <span style={{ fontSize: 12, color: saved ? "#3fa796" : "var(--muted)" }}>
-          {saved ? "Enregistré." : dirty ? "Modifications non enregistrées." : ""}
+        <span role="status" style={{ fontSize: 12, color: erreurMemo ? "#e85d4c" : saved ? "#3fa796" : "var(--muted)" }}>
+          {erreurMemo || (saved ? "Enregistré." : dirty ? "Modifications non enregistrées." : "")}
         </span>
         <button className="btn outline" disabled={!dirty || saving} onClick={save}>
           {saving ? "Enregistrement…" : "Enregistrer le mémo"}
@@ -176,14 +190,35 @@ export default function Clients() {
     }
   };
 
-  const load = () => api.listClients().then(setClients);
+  // Une panne ne s'affiche plus comme une liste vide (audit du 7 octobre 2026, F08).
+  const [erreurListe, setErreurListe] = useState("");
+  const load = () => api.listClients()
+    .then((liste) => { setClients(liste); setErreurListe(""); })
+    .catch((e) => setErreurListe(`Impossible de charger les clients : ${e.message}`));
   useEffect(() => { load(); }, []);
 
   const remove = async (client) => {
     if (!window.confirm(`Supprimer le compte de ${client.name} ? Cette action est définitive.`)) return;
-    await api.deleteClient(client.id);
-    playSound("action");
+    try {
+      await api.deleteClient(client.id);
+      playSound("action");
+    } catch (e) {
+      alert(`Suppression impossible : ${e.message}`);
+    }
     load();
+  };
+
+  // Nouveau mot de passe temporaire (client qui a perdu le sien, ou compte importé) : montré une
+  // seule fois, et ses sessions ouvertes sont fermées (audit du 7 octobre 2026, B05).
+  const reinitialiser = async (client) => {
+    if (!window.confirm(`Donner un nouveau mot de passe temporaire à ${client.name} ? Ses sessions ouvertes seront fermées.`)) return;
+    try {
+      const r = await api.resetClientPassword(client.id);
+      playSound("action");
+      setCredentials(r.tempPassword);
+    } catch (e) {
+      alert(`Réinitialisation impossible : ${e.message}`);
+    }
   };
 
   // Porte de secours : le client n’a pas reçu son code de confirmation. Le Dispatch confirme à
@@ -277,9 +312,15 @@ export default function Clients() {
         {query.trim() ? ` · les exports PDF et Excel contiennent toute la base, pas le résultat de la recherche` : ""}
       </div>
 
+      {erreurListe && (
+        <div className="card" role="alert" style={{ color: "#e85d4c", display: "flex", gap: 12, alignItems: "center" }}>
+          <span style={{ flex: 1 }}>{erreurListe}</span>
+          <button className="btn outline" onClick={load}>Réessayer</button>
+        </div>
+      )}
       {clients.map((c) => {
         const m = correspondances.get(c.id);
-        return <ClientCard key={c.id} client={c} onDelete={remove} onEdit={openEdit} onConfirmEmail={confirmerCourriel} masque={m === null} trouvePar={m} />;
+        return <ClientCard key={c.id} client={c} onDelete={remove} onEdit={openEdit} onConfirmEmail={confirmerCourriel} onResetPassword={reinitialiser} masque={m === null} trouvePar={m} />;
       })}
 
       {clients.length > 0 && nbVisibles === 0 && (
@@ -345,10 +386,26 @@ export default function Clients() {
             <div className="row"><h3>Résultat de l'import</h3><button onClick={() => setImportResult(null)}>✕</button></div>
             <div className="field-row"><span className="field-label">Clients créés :</span><span>{importResult.createdCount}</span></div>
             <div className="field-row"><span className="field-label">Lignes ignorées :</span><span>{importResult.skippedCount}</span></div>
+            {/* Mots de passe temporaires des comptes créés, montrés ici une seule fois (B05). */}
+            {importResult.created?.length > 0 && (
+              <>
+                <div style={{ marginTop: 10, fontSize: 12, color: "var(--amber)" }}>
+                  Mots de passe temporaires, montrés une seule fois : copiez-les maintenant pour les transmettre.
+                </div>
+                <div style={{ marginTop: 6, maxHeight: 200, overflowY: "auto", fontSize: 12 }}>
+                  {importResult.created.map((c) => (
+                    <div key={c.id} className="field-row"><span className="field-label">{c.name}{c.phone ? ` · ${c.phone}` : ""}</span><span style={{ fontFamily: "monospace" }}>{c.tempPassword}</span></div>
+                  ))}
+                </div>
+                <button className="btn outline" style={{ marginTop: 8, width: "100%" }} onClick={() => navigator.clipboard?.writeText(importResult.created.map((c) => `${c.name}\t${c.phone || ""}\t${c.email || ""}\t${c.tempPassword}`).join("\n"))}>
+                  Copier la liste (nom, téléphone, courriel, mot de passe)
+                </button>
+              </>
+            )}
             {importResult.skipped?.length > 0 && (
               <div style={{ marginTop: 10, maxHeight: 200, overflowY: "auto", fontSize: 12, color: "var(--muted)" }}>
                 {importResult.skipped.map((s, i) => (
-                  <div key={i} style={{ marginBottom: 4 }}>{s.row?.nom || s.row?.name || "(ligne sans nom)"} — {s.reason}</div>
+                  <div key={i} style={{ marginBottom: 4 }}>{s.row?._ligne ? `Ligne ${s.row._ligne} : ` : ""}{s.row?.nom || s.row?.name || "(ligne sans nom)"} — {s.reason}</div>
                 ))}
               </div>
             )}

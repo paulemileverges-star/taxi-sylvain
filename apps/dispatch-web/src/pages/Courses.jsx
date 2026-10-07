@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { api } from "../lib/api.js";
+import { api, nouvelleCle } from "../lib/api.js";
 import { getSocket } from "../lib/socket.js";
 import { playSound } from "../lib/sound.js";
 import AddressInput from "../components/AddressInput.jsx";
@@ -23,10 +23,19 @@ function Field({ label, value }) {
 
 const FILTRE_VIDE = { q: "", statut: "", periode: "all", driverId: "" };
 
-export default function Courses() {
+export default function Courses({ user }) {
   const [rides, setRides] = useState([]);
   const [drivers, setDrivers] = useState([]);
   const [clients, setClients] = useState([]);
+  // La liste complète des clients exige la permission Clients ; sans elle, un client se retrouve par
+  // la recherche (nom ou téléphone) du champ « Nouveau client » (audit du 7 octobre 2026, F04).
+  const accesClients = user?.role === "DISPATCH" || Boolean(user?.permissions?.includes("clients"));
+  const [erreurChargement, setErreurChargement] = useState("");
+  const [enCreation, setEnCreation] = useState(false);
+  const [cleSaisie, setCleSaisie] = useState(nouvelleCle);
+  // Montant tapé à la main : un tarif calculé ensuite ne l'écrase jamais (F16).
+  const [montantManuel, setMontantManuel] = useState(false);
+  const [tarifEnCours, setTarifEnCours] = useState(false);
   const [showCreate, setShowCreate] = useState(false);
   const EMPTY_FORM = {
     pickupAddress: "", pickupLat: null, pickupLng: null, pickupConfidence: null, pickupPlaceId: null,
@@ -78,18 +87,26 @@ export default function Courses() {
   useEffect(() => { api.listDestinations().then(setDestinations).catch(() => setDestinations([])); }, []);
 
   // Tarif du catalogue : dès qu'une destination prédéfinie et une adresse de départ sont connues,
-  // le montant est proposé (modifiable) et la municipalité reconnue est affichée.
+  // le montant est proposé (modifiable) et la municipalité reconnue est affichée. Audit du 7 octobre
+  // 2026 (F16) : un tarif calculé pour l'ANCIEN départ restait affiché, et une réponse tardive
+  // écrasait le montant tapé à la main. Désormais l'ancien tarif automatique est effacé dès que le
+  // départ, la destination ou le client change, et un montant tapé à la main n'est jamais remplacé.
   useEffect(() => {
-    if (!showCreate || !form.destinationCode || form.pickupAddress.trim().length < 3) { setQuoteInfo(null); return; }
+    if (!showCreate || !form.destinationCode || form.pickupAddress.trim().length < 3) { setQuoteInfo(null); setTarifEnCours(false); return; }
     let cancelled = false;
+    setQuoteInfo(null);
+    setTarifEnCours(true);
+    if (!montantManuel) setForm((f) => ({ ...f, fare: "" }));
     const t = setTimeout(async () => {
       try {
         const q = await api.priceQuote(form.pickupAddress, form.destinationCode, form.clientId || null);
         if (cancelled) return;
         setQuoteInfo(q);
-        if (q.price != null) setForm((f) => ({ ...f, fare: String(q.price) }));
+        if (q.price != null && !montantManuel) setForm((f) => ({ ...f, fare: String(q.price) }));
       } catch {
         if (!cancelled) setQuoteInfo(null);
+      } finally {
+        if (!cancelled) setTarifEnCours(false);
       }
     }, 400);
     return () => { cancelled = true; clearTimeout(t); };
@@ -124,14 +141,28 @@ export default function Courses() {
       destPlaceId: null,
       fare: preset ? "" : f.fare,
     }));
+    if (preset) setMontantManuel(false);
     setQuoteInfo(null);
   };
 
+  // Chargements indépendants : un refus sur une liste (droit manquant) ne vide plus toute la page
+  // (audit du 7 octobre 2026, F04 : un seul 403 rejetait tout, même les courses autorisées).
   const load = async () => {
-    const [r, d, c] = await Promise.all([api.listRides(), api.listDrivers(), api.listClients()]);
-    setRides(r);
-    setDrivers(d);
-    setClients(c);
+    const [r, d, c] = await Promise.allSettled([
+      api.listRides(),
+      api.listDriverChoices(),
+      accesClients ? api.listClients() : Promise.resolve([]),
+    ]);
+    if (r.status === "fulfilled") { setRides(r.value); setErreurChargement(""); }
+    else setErreurChargement(`Impossible de charger les courses : ${r.reason?.message || "erreur inconnue"}`);
+    if (d.status === "fulfilled") setDrivers(d.value);
+    if (c.status === "fulfilled") setClients(c.value);
+  };
+  const ouvrirCreation = () => {
+    setCleSaisie(nouvelleCle());
+    setMontantManuel(false);
+    setError("");
+    setShowCreate(true);
   };
 
   useEffect(() => { load(); }, []);
@@ -144,15 +175,26 @@ export default function Courses() {
     socket.on("ride:created", refresh);
     socket.on("ride:updated", refresh);
     socket.on("ride:refused", refresh);
+    socket.on("ride:deleted", refresh); // course supprimée ailleurs (B15)
     return () => {
       socket.off("ride:created", refresh);
       socket.off("ride:updated", refresh);
       socket.off("ride:refused", refresh);
+      socket.off("ride:deleted", refresh);
     };
   }, []);
 
+  // Audit du 7 octobre 2026 (F05) : le bouton restait actif pendant l'envoi, et deux clics créaient
+  // deux courses. Il est verrouillé pendant l'envoi, et la clé de saisie garantit au serveur qu'un
+  // réessai (réseau lent) ne crée pas de doublon.
   const create = async () => {
+    if (enCreation) return;
     setError("");
+    if (form.destinationCode && tarifEnCours && !montantManuel) {
+      setError("Le tarif est en cours de calcul : patientez une seconde.");
+      return;
+    }
+    setEnCreation(true);
     try {
       const ride = await api.createRide({
         pickupAddress: form.pickupAddress,
@@ -182,7 +224,7 @@ export default function Courses() {
         clientAddress: form.clientId === "__new__" ? form.clientAddress || undefined : undefined,
         clientNotes: form.clientId === "__new__" ? form.clientNotes || undefined : undefined,
         flightNumber: form.flightNumber || undefined,
-      });
+      }, cleSaisie);
       setForm(EMPTY_FORM);
       setRechercheClient("");
       setShowCreate(false);
@@ -195,26 +237,27 @@ export default function Courses() {
       if (ride.messagesAdresse?.length) window.alert(`Course créée, mais :\n\n${ride.messagesAdresse.join("\n")}`);
     } catch (e) {
       setError(e.message);
+    } finally {
+      setEnCreation(false);
     }
   };
 
-  const assign = async (rideId, driverId) => {
-    await api.assignDriver(rideId, driverId || null);
-    playSound("action");
-    load();
+  // Une action refusée ou en panne le dit, au lieu d'être ignorée sans un mot (F08).
+  const agir = async (action) => {
+    try {
+      await action();
+      playSound("action");
+    } catch (e) {
+      window.alert(e.message || "Action impossible pour le moment.");
+    } finally {
+      load();
+    }
   };
-
-  const broadcastToAll = async (rideId) => {
-    await api.broadcastRide(rideId);
-    playSound("action");
-    load();
-  };
-
-  const remove = async (ride) => {
+  const assign = (rideId, driverId) => agir(() => api.assignDriver(rideId, driverId || null));
+  const broadcastToAll = (rideId) => agir(() => api.broadcastRide(rideId));
+  const remove = (ride) => {
     if (!window.confirm("Supprimer cette course ? Cette action est définitive.")) return;
-    await api.deleteRide(ride.id);
-    playSound("action");
-    load();
+    agir(() => api.deleteRide(ride.id));
   };
 
   const filtreActif = filtre.q || filtre.statut || filtre.periode !== "all" || filtre.driverId;
@@ -223,8 +266,14 @@ export default function Courses() {
     <div>
       <div className="row">
         <h1>Courses</h1>
-        <button className="btn" onClick={() => setShowCreate(true)}>Nouvelle course</button>
+        <button className="btn" onClick={ouvrirCreation}>Nouvelle course</button>
       </div>
+      {erreurChargement && (
+        <div className="card" role="alert" style={{ color: "#e85d4c", display: "flex", gap: 12, alignItems: "center" }}>
+          <span style={{ flex: 1 }}>{erreurChargement}</span>
+          <button className="btn outline" onClick={load}>Réessayer</button>
+        </div>
+      )}
 
       <div className="card" style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", marginBottom: 12 }}>
         <input
@@ -289,7 +338,7 @@ export default function Courses() {
           </div>
         );
       })}
-      {rides.length === 0 && <div style={{ color: "#8b99b5", fontSize: 14 }}>Aucune course pour l'instant.</div>}
+      {rides.length === 0 && !erreurChargement && <div style={{ color: "#8b99b5", fontSize: 14 }}>Aucune course pour l'instant.</div>}
       {rides.length > 0 && pagination.total === 0 && <div style={{ color: "#8b99b5", fontSize: 14 }}>Aucune course ne correspond à ces filtres.</div>}
 
       {pagination.pages > 1 && (
@@ -303,8 +352,13 @@ export default function Courses() {
       {showCreate && (
         <div className="modal-backdrop">
           <div className="modal">
-            <div className="row"><h3>Nouvelle course</h3><button onClick={() => setShowCreate(false)}>✕</button></div>
+            <div className="row"><h3>Nouvelle course</h3><button onClick={() => setShowCreate(false)} aria-label="Fermer">✕</button></div>
             <label style={{ display: "block" }}>Client (optionnel)</label>
+            {!accesClients && (
+              <div style={{ color: "var(--muted)", fontSize: 12, marginBottom: 4 }}>
+                La liste des clients demande la permission Clients : choisissez « + Nouveau client… » et tapez le nom ou le téléphone, les clients connus sont proposés.
+              </div>
+            )}
             <input
               className="input"
               placeholder="Rechercher un client : nom, téléphone, courriel, adresse…"
@@ -375,10 +429,16 @@ export default function Courses() {
               placeholder="ex. AC1234"
               style={{ marginTop: 8 }}
             />
-            <label style={{ display: "block", marginTop: 8 }}>Heure de prise en charge du client (optionnel)</label>
-            <input className="input" type="datetime-local" value={form.scheduledFor} onChange={(e) => setForm({ ...form, scheduledFor: e.target.value })} />
-            <label style={{ display: "block", marginTop: 8 }}>Montant prévu ($)</label>
-            <input className="input" value={form.fare} onChange={(e) => setForm({ ...form, fare: e.target.value })} />
+            <label htmlFor="heure-course" style={{ display: "block", marginTop: 8 }}>Heure de prise en charge du client (optionnel), <strong>heure de Montréal</strong></label>
+            <input id="heure-course" className="input" type="datetime-local" value={form.scheduledFor} onChange={(e) => setForm({ ...form, scheduledFor: e.target.value })} />
+            <label htmlFor="montant-course" style={{ display: "block", marginTop: 8 }}>Montant prévu ($)</label>
+            <input id="montant-course" className="input" inputMode="decimal" value={form.fare} placeholder={tarifEnCours ? "Calcul du tarif…" : ""} onChange={(e) => { setMontantManuel(e.target.value !== ""); setForm({ ...form, fare: e.target.value }); }} />
+            {montantManuel && quoteInfo?.price != null && Number(form.fare) !== quoteInfo.price && (
+              <div style={{ fontSize: 12, marginTop: 4, color: "var(--amber)" }}>
+                Montant saisi à la main conservé ({form.fare} $). Tarif calculé : {quoteInfo.price.toFixed(2)} $.{" "}
+                <button type="button" className="btn outline" style={{ padding: "2px 8px", fontSize: 12 }} onClick={() => { setMontantManuel(false); setForm((f) => ({ ...f, fare: String(quoteInfo.price) })); }}>Appliquer le tarif calculé</button>
+              </div>
+            )}
             {form.destinationCode && (
               <div style={{ fontSize: 12, marginTop: 4, color: quoteInfo?.price != null ? "#3fa796" : "var(--muted)" }}>
                 {quoteInfo?.price != null
@@ -482,7 +542,7 @@ export default function Courses() {
               </div>
             )}
             {error && <div style={{ color: "#e85d4c", fontSize: 13, marginTop: 8 }}>{error}</div>}
-            <button className="btn" style={{ marginTop: 14, width: "100%" }} onClick={create}>Créer la course</button>
+            <button className="btn" style={{ marginTop: 14, width: "100%" }} onClick={create} disabled={enCreation}>{enCreation ? "Création en cours…" : "Créer la course"}</button>
           </div>
         </div>
       )}

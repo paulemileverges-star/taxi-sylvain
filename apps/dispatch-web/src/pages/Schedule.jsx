@@ -1,9 +1,11 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { api } from "../lib/api.js";
+import { getSocket } from "../lib/socket.js";
 import { playSound } from "../lib/sound.js";
 import RideEditModal from "../components/RideEditModal.jsx";
-import { startOfWeek, addDays, scheduleItemsForDay } from "../lib/scheduleOrder.js";
+import { startOfWeek, addDays, scheduleItemsForDay, jourMois } from "../lib/scheduleOrder.js";
 import { heure } from "../lib/heure.js";
+import { localInputToIso } from "../lib/status.js";
 
 const DAYS = ["Lun", "Mar", "Mer", "Jeu", "Ven", "Sam", "Dim"];
 const STATUS_LABEL = {
@@ -12,7 +14,10 @@ const STATUS_LABEL = {
   CANCELLED: "Annulée", REFUSED: "Refusée",
 };
 
-export default function Schedule() {
+export default function Schedule({ user }) {
+  // Modifier une course depuis la Cédule exige aussi la permission Courses (règle du serveur).
+  const peutModifierCourses = user?.role === "DISPATCH" || Boolean(user?.permissions?.includes("courses"));
+  const [erreurChargement, setErreurChargement] = useState("");
   const [weekStart, setWeekStart] = useState(() => startOfWeek(new Date()));
   const [entries, setEntries] = useState([]);
   const [rides, setRides] = useState([]);
@@ -22,14 +27,27 @@ export default function Schedule() {
   const [error, setError] = useState("");
   const [openRideId, setOpenRideId] = useState(null);
 
+  // Audit du 7 octobre 2026 : chargements indépendants (F04 : la liste des chauffeurs exigeait la
+  // permission Chauffeurs et bloquait toute la page) ; les courses immédiates, sans heure prévue,
+  // apparaissent le jour de leur création (B10 : elles n'apparaissaient jamais).
   const load = async () => {
-    const [e, d, r] = await Promise.all([api.listSchedule(), api.listDrivers(), api.listRides()]);
-    setEntries(e);
-    setDrivers(d);
-    setRides(r.filter((ride) => ride.scheduledFor));
+    const [e, d, r] = await Promise.allSettled([api.listSchedule(), api.listDriverChoices(), api.listRides()]);
+    if (e.status === "fulfilled") setEntries(e.value);
+    if (d.status === "fulfilled") setDrivers(d.value);
+    if (r.status === "fulfilled") setRides(r.value.filter((ride) => !["CANCELLED", "REFUSED"].includes(ride.status)));
+    const echec = [e, r].find((x) => x.status === "rejected");
+    setErreurChargement(echec ? `Chargement incomplet : ${echec.reason?.message || "erreur inconnue"}` : "");
   };
 
   useEffect(() => { load(); }, []);
+
+  // La Cédule suit les courses en direct, comme la page Courses (F17).
+  useEffect(() => {
+    const socket = getSocket();
+    const refresh = () => load();
+    for (const e of ["ride:created", "ride:updated", "ride:deleted"]) socket.on(e, refresh);
+    return () => { for (const e of ["ride:created", "ride:updated", "ride:deleted"]) socket.off(e, refresh); };
+  }, []);
 
   const create = async () => {
     setError("");
@@ -40,7 +58,10 @@ export default function Schedule() {
       // fuseau, décalant l'heure affichée ensuite. En construisant le Date ICI, c'est le fuseau du
       // navigateur (donc celui de la personne qui saisit l'heure) qui fait foi ; on envoie un
       // instant UTC non ambigu (.toISOString()) que le serveur n'a plus besoin d'interpréter.
-      await api.createScheduleEntry({ ...form, startsAt: new Date(form.startsAt).toISOString() });
+      // Heure saisie = heure de Montréal, quel que soit le fuseau de l'ordinateur (F03).
+      const startsAt = localInputToIso(form.startsAt);
+      if (!startsAt) { setError("Indiquez la date et l'heure du créneau."); return; }
+      await api.createScheduleEntry({ ...form, startsAt });
       setForm({ driverId: "", label: "", startsAt: "" });
       setShowAdd(false);
       playSound("action");
@@ -51,8 +72,12 @@ export default function Schedule() {
   };
 
   const remove = async (id) => {
-    await api.deleteScheduleEntry(id);
-    playSound("action");
+    try {
+      await api.deleteScheduleEntry(id);
+      playSound("action");
+    } catch (e) {
+      window.alert(e.message || "Suppression impossible pour le moment.");
+    }
     load();
   };
 
@@ -75,23 +100,33 @@ export default function Schedule() {
         </div>
       </div>
 
+      {erreurChargement && (
+        <div className="card" role="alert" style={{ color: "#e85d4c", display: "flex", gap: 12, alignItems: "center" }}>
+          <span style={{ flex: 1 }}>{erreurChargement}</span>
+          <button className="btn outline" onClick={load}>Réessayer</button>
+        </div>
+      )}
+      <div style={{ color: "var(--muted)", fontSize: 12, marginBottom: 6 }}>Jours et heures du Québec (heure de Montréal).</div>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(150px, 1fr))", gap: 8 }}>
         {DAYS.map((label, i) => {
           const date = addDays(weekStart, i);
           return (
             <div key={label} className="card" style={{ minHeight: 160 }}>
               <div style={{ fontSize: 12, color: "#8b99b5", marginBottom: 8 }}>
-                {label} {date.getDate()}/{date.getMonth() + 1}
+                {label} {jourMois(date)}
               </div>
               {jours[i].map((item) => (item.kind === "ride" ? (
                 <div
                   key={item.id}
-                  onClick={() => setOpenRideId(item.ride.id)}
-                  style={{ background: "rgba(245,166,35,0.12)", border: "1px solid var(--amber)", borderRadius: 8, padding: "6px 8px", marginBottom: 6, fontSize: 12, cursor: "pointer" }}
+                  role={peutModifierCourses ? "button" : undefined}
+                  tabIndex={peutModifierCourses ? 0 : undefined}
+                  onClick={() => peutModifierCourses && setOpenRideId(item.ride.id)}
+                  onKeyDown={(e) => { if (peutModifierCourses && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); setOpenRideId(item.ride.id); } }}
+                  style={{ background: "rgba(245,166,35,0.12)", border: "1px solid var(--amber)", borderRadius: 8, padding: "6px 8px", marginBottom: 6, fontSize: 12, cursor: peutModifierCourses ? "pointer" : "default" }}
                 >
                   <div className="row">
-                    <strong>{heure(item.ride.scheduledFor)}</strong>
-                    <span style={{ color: "var(--amber)", fontSize: 11 }}>{STATUS_LABEL[item.ride.status] || item.ride.status} · ✎ modifier</span>
+                    <strong>{item.ride.scheduledFor ? heure(item.ride.scheduledFor) : `${heure(item.ride.createdAt)} · immédiate`}</strong>
+                    <span style={{ color: "var(--amber)", fontSize: 11 }}>{STATUS_LABEL[item.ride.status] || item.ride.status}{peutModifierCourses ? " · ✎ modifier" : ""}</span>
                   </div>
                   <div>{item.ride.pickupAddress} → {item.ride.destAddress}{item.ride.stops?.length ? ` (+${item.ride.stops.length} arrêt${item.ride.stops.length > 1 ? "s" : ""})` : ""}</div>
                   <div style={{ color: "#8b99b5" }}>
@@ -105,6 +140,7 @@ export default function Schedule() {
                     <button
                       onClick={() => remove(item.entry.id)}
                       title="Supprimer ce créneau"
+                      aria-label="Supprimer ce créneau"
                       style={{ background: "rgba(232,93,76,0.12)", border: "1px solid #e85d4c", borderRadius: 6, color: "#e85d4c", cursor: "pointer", width: 20, height: 20, lineHeight: 1, fontSize: 12 }}
                     >
                       ✕
@@ -128,8 +164,8 @@ export default function Schedule() {
               <option value="">Choisir…</option>
               {drivers.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
             </select>
-            <label style={{ display: "block", marginTop: 8 }}>Date et heure</label>
-            <input type="datetime-local" className="input" value={form.startsAt} onChange={(e) => setForm({ ...form, startsAt: e.target.value })} />
+            <label htmlFor="creneau-heure" style={{ display: "block", marginTop: 8 }}>Date et heure (heure de Montréal)</label>
+            <input id="creneau-heure" type="datetime-local" className="input" value={form.startsAt} onChange={(e) => setForm({ ...form, startsAt: e.target.value })} />
             <label style={{ display: "block", marginTop: 8 }}>Description</label>
             <input className="input" placeholder="ex. Aéroport → Centre-ville" value={form.label} onChange={(e) => setForm({ ...form, label: e.target.value })} />
             {error && <div style={{ color: "#e85d4c", fontSize: 13, marginTop: 8 }}>{error}</div>}
