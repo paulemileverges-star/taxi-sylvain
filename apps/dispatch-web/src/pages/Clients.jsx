@@ -234,8 +234,17 @@ export default function Clients() {
     }
   };
 
+  // 8 octobre 2026 : verrouillée pendant l'envoi, comme la création d'une course (F05). Des appuis
+  // répétés envoyaient la même fiche plusieurs fois, et le serveur refusait les suivantes comme
+  // doublons alors que la première était créée. Le verrou est une référence : deux appuis arrivés
+  // avant le prochain affichage le voient tous les deux.
+  const [enCreation, setEnCreation] = useState(false);
+  const envoiEnCours = React.useRef(false);
   const createClient = async () => {
+    if (envoiEnCours.current) return;
+    envoiEnCours.current = true;
     setError("");
+    setEnCreation(true);
     try {
       const client = await api.createClient(form);
       setForm(EMPTY_FORM);
@@ -245,6 +254,9 @@ export default function Clients() {
       if (client.tempPassword) setCredentials(client.tempPassword);
     } catch (e) {
       setError(e.message);
+    } finally {
+      envoiEnCours.current = false;
+      setEnCreation(false);
     }
   };
 
@@ -293,7 +305,8 @@ export default function Clients() {
             {importing ? "Import en cours…" : "Importer (.xlsx / .csv)"}
           </button>
           <input ref={fileInputRef} type="file" accept=".xlsx,.csv" style={{ display: "none" }} onChange={(e) => importFile(e.target.files[0])} />
-          <button className="btn" onClick={() => setShowAdd(true)}>Nouveau client</button>
+          {/* Un refus d'une saisie précédente ne doit pas réapparaître dans une fiche vierge. */}
+          <button className="btn" onClick={() => { setError(""); setShowAdd(true); }}>Nouveau client</button>
         </div>
       </div>
 
@@ -375,7 +388,9 @@ export default function Clients() {
             <textarea className="input" style={{ minHeight: 60, fontFamily: "inherit" }} value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} />
             <ChampsTarifs form={form} setForm={setForm} />
             {error && <div style={{ color: "#e85d4c", fontSize: 13, marginTop: 8 }}>{error}</div>}
-            <button className="btn" style={{ marginTop: 14, width: "100%" }} onClick={createClient}>Créer le client</button>
+            <button className="btn" style={{ marginTop: 14, width: "100%" }} disabled={enCreation} onClick={createClient}>
+              {enCreation ? "Création…" : "Créer le client"}
+            </button>
           </div>
         </div>
       )}
